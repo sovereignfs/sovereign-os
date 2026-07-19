@@ -1,6 +1,6 @@
 # Docker Runtime and First-Boot Import Proof Report
 
-Status: **ARM64 image build and static integration passed; Pi 5 boot execution pending**
+Status: **Proof passed and superseded by the embedded Pi-hole image; Pi 5 boot execution pending**
 Build date: 2026-07-19
 
 ## Outcome
@@ -11,14 +11,11 @@ wait for the dedicated DATA filesystem and keep their persistent state under
 `/data`, so a future OS-root replacement does not discard images, containers,
 or volumes.
 
-At boot, `sovereign-oci-import.service` waits for the embedded-artifact
-verification and Docker daemon, loads the archive, resolves it by its recorded
-immutable manifest digest, and normalizes that digest to
-`sovereign/oci-proof:arm64`. It then confirms the `linux/arm64` platform and
-runs it with no network and a read-only root filesystem. It writes the
-validated image identity and artifact digests to
-`/data/sovereign/oci-import-ready`. Repeated boots skip the load when both the
-marker and image still exist.
+The proof implementation used `sovereign-oci-import.service` to wait for the
+embedded-artifact verification and Docker daemon, load the archive by immutable
+manifest digest, and run an isolated ARM64 smoke test. That synthetic service
+and artifact have since been removed from the current image and replaced by the
+equivalent Pi-hole-specific verification and import units.
 
 ## Pinned Runtime
 
@@ -95,5 +92,6 @@ real DATA partition. A Raspberry Pi 5 test must still verify:
 5. Removing only the marker causes safe revalidation, while removing only the
    image causes a safe reload.
 
-After those checks pass, the next implementation step is to replace the proof
-artifact with the exact pinned official Pi-hole ARM64 artifact.
+The synthetic proof artifact has now been replaced by the exact pinned official
+Pi-hole ARM64 artifact. The next implementation step is the idempotent Pi-hole
+configuration and container-start service.

@@ -1,14 +1,13 @@
 [Unit]
-Description=Verify the embedded Sovereign OCI proof artifact
+Description=Verify the embedded official Pi-hole ARM64 artifact
 RequiresMountsFor=/data
 After=local-fs.target sovereign-proof.service
 ConditionPathIsMountPoint=/data
 
 [Service]
 Type=oneshot
-ExecStart=/usr/lib/sovereign/verify-oci-proof
+ExecStart=/usr/lib/sovereign/verify-pihole-artifact
 RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
-

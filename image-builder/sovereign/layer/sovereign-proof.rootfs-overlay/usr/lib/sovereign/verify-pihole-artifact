@@ -1,0 +1,23 @@
+#!/bin/sh
+
+set -eu
+
+artifact_dir=/usr/lib/sovereign/artifacts
+archive=pihole-arm64.oci.tar
+. /usr/lib/sovereign/pihole-image.env
+
+cd "$artifact_dir"
+sha256sum -c "${archive}.sha256"
+
+manifest_digest=$(printf '%s' "$PIHOLE_IMAGE_DIGEST" | sed -n 's/^sha256://p')
+test -n "$manifest_digest"
+tar -tf "$archive" | grep -Fx "oci-layout"
+tar -tf "$archive" | grep -Fx "index.json"
+tar -tf "$archive" | grep -Fx "blobs/sha256/${manifest_digest}"
+
+install -d -m 0755 /data/sovereign
+{
+  printf 'image=%s@%s\n' "$PIHOLE_IMAGE_REPOSITORY" "$PIHOLE_IMAGE_DIGEST"
+  printf 'platform=%s\n' "$PIHOLE_IMAGE_PLATFORM"
+  printf 'archive_sha256=%s\n' "$(awk '{print $1}' "${archive}.sha256")"
+} > /data/sovereign/pihole-artifact-ready
