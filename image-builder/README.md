@@ -39,3 +39,16 @@ A successful container build proves ARM64 dependency resolution, layer
 assembly, root-filesystem generation, and image generation. It does not prove
 Pi 5 boot, networking, console behavior, or release-host support. Those checks
 must be completed on a physical Pi 5 and a supported native ARM64 build host.
+
+## Sovereign layer and storage image
+
+Build the external Sovereign layer and its boot/root/DATA layout with:
+
+```bash
+./scripts/build-sovereign-image.sh
+```
+
+The flash artifact is written to the ignored path
+`build/sovereign-image/deploy/sovereign-proof.img.zst`. Product-owned inputs
+live under `image-builder/sovereign/`; the pinned upstream checkout is not
+modified beyond the documented proof-container compatibility patch.

@@ -1,0 +1,19 @@
+#!/bin/sh
+
+set -eu
+
+BOOT_LABEL=$(uuidgen | sed 's/-.*//' | tr 'a-f' 'A-F')
+BOOT_UUID=$(echo "$BOOT_LABEL" | sed 's/^\(....\)\(....\)$/\1-\2/')
+ROOT_UUID=$(uuidgen)
+
+rm -f "${IGconf_image_outputdir}/img_uuids"
+for variable in BOOT_LABEL BOOT_UUID ROOT_UUID; do
+    eval "value=\$$variable"
+    echo "$variable=$value" >> "${IGconf_image_outputdir}/img_uuids"
+done
+
+pmap="${IGconf_image_assetdir}/device/provisionmap-${IGconf_image_pmap}.json"
+if [ -f "$pmap" ]; then
+    cp "$pmap" "${IGconf_image_outputdir}/provisionmap.json"
+fi
+

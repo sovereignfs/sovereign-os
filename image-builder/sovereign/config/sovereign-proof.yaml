@@ -1,0 +1,15 @@
+device:
+  layer: rpi5
+  hostname: sovereign
+
+image:
+  layer: image-sovereign-data
+  boot_part_size: 200%
+  root_part_size: 300%
+  data_part_size: 512M
+  name: sovereign-proof
+
+layer:
+  base: trixie-minbase
+  sovereign: sovereign-proof
+
