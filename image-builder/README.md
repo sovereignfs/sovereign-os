@@ -52,3 +52,9 @@ The flash artifact is written to the ignored path
 `build/sovereign-image/deploy/sovereign-proof.img.zst`. Product-owned inputs
 live under `image-builder/sovereign/`; the pinned upstream checkout is not
 modified beyond the documented proof-container compatibility patch.
+
+The same build creates a deterministic ARM64 OCI proof archive, embeds it under
+`/usr/lib/sovereign/artifacts/`, and exports a copy to
+`build/sovereign-image/evidence/oci/`. The appliance verifies its checksum and
+layout on first boot. Runtime import into the appliance is intentionally left
+for the Docker installation milestone.

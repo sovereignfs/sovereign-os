@@ -38,8 +38,10 @@ fi
 docker cp \
   "${container}:/opt/rpi-image-gen/work/bootstrap/." \
   "${output_dir}/evidence/bootstrap/" 2>/dev/null || true
+docker cp \
+  "${container}:/opt/rpi-image-gen/work/chroot-${patched_version}/filesystem/usr/lib/sovereign/artifacts/." \
+  "${output_dir}/evidence/oci/" 2>/dev/null || true
 
 echo "Build evidence exported to ${output_dir}"
 echo "Retained container: ${container}"
 exit "${build_status}"
-
