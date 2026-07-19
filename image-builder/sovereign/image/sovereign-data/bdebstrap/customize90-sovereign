@@ -5,4 +5,10 @@ set -eu
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-pihole-artifact.service
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-pihole-import.service
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-pihole.service
+"$BDEBSTRAP_HOOKS/enable-units" "$1" nginx.service
+"$BDEBSTRAP_HOOKS/enable-units" "$1" avahi-daemon.service
+"$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-local-access.service
+"$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-credentials-console.service
+unlink "$1/etc/nginx/sites-enabled/default" 2>/dev/null || true
+ln -s ../sites-available/sovereign "$1/etc/nginx/sites-enabled/sovereign"
 ln -sf /run/systemd/resolve/resolv.conf "$1/etc/resolv.conf"
