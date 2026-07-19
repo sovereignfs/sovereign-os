@@ -1,0 +1,24 @@
+diff --git a/bin/ns b/bin/ns
+index c0d7451..f2017bf 100755
+--- a/bin/ns
++++ b/bin/ns
+@@ -1,4 +1,4 @@
+-#!/bin/sh
++#!/bin/bash
+ 
+ # Used to run a command inside a linux user namespace, remapping uid/gid
+ # so that permissions may be elevated (eg like inside a container).
+diff --git a/rpi-image-gen b/rpi-image-gen
+index 3dd6677..c22360e 100755
+--- a/rpi-image-gen
++++ b/rpi-image-gen
+@@ -29,7 +29,8 @@ readonly IGTOP=$(rootpath)
+ # Namespace setup (see bin/ns)
+ _ns_setup() {
+    # unmount cache (defensive - cleanup hook should handle)
+-   [[ -n "${_NS_APT_ARCHIVES:-}" ]] && \
++   if [[ -n "${_NS_APT_ARCHIVES:-}" ]]; then
+       trap "umount -q \"$_NS_APT_ARCHIVES\" 2>/dev/null || true" EXIT
++   fi
+ }
+ export NS_SETUP="$(declare -f _ns_setup)"
