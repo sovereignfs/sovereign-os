@@ -200,6 +200,12 @@ Do not build releases from an unpinned `master` checkout.
 - Boot on the target Pi 5.
 - Record build time, artifact size, first boot, network, and console behavior.
 
+Engineering update (2026-07-19): v2.7.0 at commit
+`a7b6d4806183195f3efadb533f58c8e46393d057` produced the minimal ARM64 image in
+an ARM64 Linux Docker environment. See the
+[proof-build report](rpi-image-gen-proof-build-report.md). Physical Pi 5 boot
+and a supported native ARM64 host run remain required before Proof 1 passes.
+
 ### Proof 2: Sovereign Layer
 
 - Add an external Sovereign config and layer.
@@ -242,4 +248,3 @@ The future OTA framework assessment should reuse `rpi-image-gen`'s A/B/user-data
 - [rpi-image-gen image layouts](https://github.com/raspberrypi/rpi-image-gen/tree/master/image)
 - [pi-gen repository and build model](https://github.com/RPi-Distro/pi-gen)
 - [Raspberry Pi Imager custom-image distribution](https://www.raspberrypi.com/news/how-to-add-your-own-images-to-imager/)
-

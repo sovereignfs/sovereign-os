@@ -5,6 +5,7 @@ Research documents establish evidence before the project commits to an implement
 ## Preview Research Backlog
 
 - [Image build system assessment](image-build-system-assessment.md) - Concluded; `rpi-image-gen` recommended pending proof build
+- [rpi-image-gen proof build report](rpi-image-gen-proof-build-report.md) - ARM64 engineering build passed; native-host and Pi 5 boot qualification pending
 - [Raspberry Pi 5 platform assessment](rpi5-platform-assessment.md)
 - [Deployment model comparison](deployment-model-comparison.md)
 - [Local network discovery](local-network-discovery.md)

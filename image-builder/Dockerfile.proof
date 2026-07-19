@@ -1,0 +1,32 @@
+FROM debian:trixie-slim
+
+ARG RPI_IMAGE_GEN_TAG=v2.7.0
+ARG RPI_IMAGE_GEN_COMMIT=a7b6d4806183195f3efadb533f58c8e46393d057
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       autoconf automake autopoint bash build-essential btrfs-progs \
+       ca-certificates cryptsetup curl dbus-user-session dctrl-tools \
+       debian-archive-keyring dosfstools dpkg-dev e2fsprogs fdisk flex \
+       gettext git libtool make mmdebstrap mtools pkgconf podman \
+       python3 python3-debian python3-jsonschema python3-pip python3-yaml \
+       rsync sudo uidmap uuid-runtime pv zip \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone --branch "${RPI_IMAGE_GEN_TAG}" --depth 1 \
+      https://github.com/raspberrypi/rpi-image-gen.git /opt/rpi-image-gen \
+    && test "$(git -C /opt/rpi-image-gen rev-parse HEAD)" = "${RPI_IMAGE_GEN_COMMIT}"
+
+# v2.7.0 exports a Bash function to bin/ns. Root execution bypasses the
+# podman/Bash path, so use Bash explicitly in this privileged proof container.
+COPY image-builder/patches/v2.7.0-bin-ns-bash.patch /tmp/bin-ns.patch
+RUN git -C /opt/rpi-image-gen apply --check /tmp/bin-ns.patch \
+    && git -C /opt/rpi-image-gen apply /tmp/bin-ns.patch \
+    && rm /tmp/bin-ns.patch
+
+WORKDIR /opt/rpi-image-gen
+
+CMD ["./rpi-image-gen", "build", "-c", "./config/trixie-minbase.yaml"]
+

@@ -275,7 +275,7 @@ Phase 01 is complete when:
 ## 14. Open Questions
 
 - Which exact Raspberry Pi OS Lite release will be pinned?
-- Which exact released `rpi-image-gen` tag and commit will be pinned after the proof build?
+- Confirm whether `rpi-image-gen` v2.7.0 at commit `a7b6d4806183195f3efadb533f58c8e46393d057` remains the release pin after native-host and Pi 5 qualification.
 - Which Docker Engine and Compose versions will be pinned?
 - Which exact Pi-hole v6 release and ARM64 digest will be used?
 - Should Nginx or another minimal reverse proxy be selected?
@@ -287,7 +287,7 @@ Phase 01 is complete when:
 
 ## 15. Immediate Next Actions
 
-1. Execute the documented `rpi-image-gen` proof build on a supported native ARM64 host.
+1. Repeat the successful ARM64 engineering proof on a supported native ARM64 host, then flash and boot it on the target Pi 5.
 2. Select the exact builder release and Raspberry Pi OS-compatible base inputs.
 3. Resolve the remaining password-delivery questions.
 4. Review and accept the deployment RFC.
