@@ -7,8 +7,11 @@
 ---
 mmdebstrap:
   packages:
+    - avahi-daemon
     - ca-certificates
     - curl
     - dnsutils
+    - libnss-mdns
+    - nginx
   customize-hooks:
     - test -d "$1"

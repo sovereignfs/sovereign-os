@@ -1,0 +1,35 @@
+#!/bin/sh
+
+set -eu
+
+state_dir=/data/sovereign
+marker=${state_dir}/local-access-ready
+
+nginx -t
+
+root_headers=$(mktemp)
+trap 'rm -f "$root_headers"' EXIT
+curl --silent --show-error --max-time 10 \
+  --output /dev/null --dump-header "$root_headers" \
+  http://127.0.0.1/
+grep -Eiq '^location: /dns/admin/\r?$' "$root_headers"
+
+curl --fail --silent --show-error --max-time 10 \
+  --output /dev/null http://127.0.0.1/dns/admin/
+
+test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --max-time 10 http://127.0.0.1/admin/)" = 404
+test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --max-time 10 http://127.0.0.1/api/)" = 404
+test "$(curl --path-as-is --silent --output /dev/null --write-out '%{http_code}' \
+  --max-time 10 http://127.0.0.1/dns/../admin/)" = 404
+
+install -d -m 0755 "$state_dir"
+{
+  printf 'nginx=pass\n'
+  printf 'root_redirect=pass\n'
+  printf 'pihole_ui=pass\n'
+  printf 'reserved_paths=pass\n'
+  printf 'path_escape=pass\n'
+} > "${marker}.tmp"
+mv "${marker}.tmp" "$marker"

@@ -147,7 +147,9 @@ Proposed host paths:
 
 The device generates a unique Pi-hole administrator password on first boot and passes it using Pi-hole's supported password-file mechanism.
 
-The means of delivering that initial password to the user remains unresolved. Acceptable POC candidates include local console display, a boot-partition handoff with strict lifecycle, or a minimal one-time claim mechanism. The final choice must not expose the secret to unauthenticated LAN clients or permanent logs.
+For the Phase 01 POC, the device displays that password on the attached physical console after Pi-hole and the local HTTP entry point pass their health checks. The service writes directly to `/dev/tty1`, not to the system journal. This avoids exposing the secret to unauthenticated LAN clients, the boot partition, or permanent ordinary logs.
+
+This choice requires temporary physical display access for initial login. A later one-time claim mechanism may replace it without changing the persistent password-file model.
 
 ## Security and Privacy
 
@@ -227,11 +229,7 @@ Simpler initially but consumes future Sovereign namespaces and prevents central 
 
 - Completion of the `rpi-image-gen` proof build and selection of the exact pinned release
 - Exact Raspberry Pi OS release
-- Docker package source and version policy
-- Pi-hole release and digest
-- Exact loopback backend port
-- Initial password delivery
-- Upstream DNS default
+- Requalification of pinned Docker and Pi-hole inputs at release review
 - Firewall implementation
 - Release stability duration
 - Minimum supported storage

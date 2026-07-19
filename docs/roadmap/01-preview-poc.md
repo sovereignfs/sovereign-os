@@ -278,8 +278,6 @@ Phase 01 is complete when:
 - Confirm whether `rpi-image-gen` v2.7.0 at commit `a7b6d4806183195f3efadb533f58c8e46393d057` remains the release pin after native-host and Pi 5 qualification.
 - Which Docker Engine and Compose versions will be pinned?
 - Revalidate the selected Pi-hole `2026.04.1` ARM64 digest at release review.
-- Should Nginx or another minimal reverse proxy be selected?
-- How is the generated Pi-hole password securely delivered to the POC user?
 - Which upstream DNS provider is the default?
 - Which client operating systems form the supported mDNS test matrix?
 - What minimum storage size will be advertised?
@@ -289,8 +287,7 @@ Phase 01 is complete when:
 
 1. Repeat the successful ARM64 engineering proof on a supported native ARM64 host, then flash and boot it on the target Pi 5.
 2. Flash the generated Sovereign layer/storage image and complete the physical Proof 1-3 checklist on a Pi 5.
-3. Resolve the remaining password-delivery questions.
-4. Review and accept the deployment RFC.
-5. Create the implementation plan for M2 only.
-6. Add Nginx `/dns/*` routing, Avahi discovery, and a safe administrator-credential delivery flow around the running Pi-hole service.
-7. Add one milestone at a time and test the exact exported artifact on real hardware.
+3. Build and inspect the image containing Nginx `/dns/*` routing, Avahi discovery, and physical-console credential delivery.
+4. Test the exact exported artifact on real hardware, including direct-IP fallback and the supported mDNS client matrix.
+5. Review and accept the deployment RFC.
+6. Create the implementation plan for the next incomplete milestone only.

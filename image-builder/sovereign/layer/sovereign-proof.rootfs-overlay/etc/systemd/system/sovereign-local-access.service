@@ -1,0 +1,17 @@
+[Unit]
+Description=Verify Sovereign local HTTP access
+Requires=sovereign-pihole.service nginx.service
+After=sovereign-pihole.service nginx.service
+Wants=avahi-daemon.service
+RequiresMountsFor=/data
+ConditionPathIsMountPoint=/data
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/sovereign/verify-local-access
+RemainAfterExit=yes
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target
