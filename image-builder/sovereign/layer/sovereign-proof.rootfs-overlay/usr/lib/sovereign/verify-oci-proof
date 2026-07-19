@@ -1,0 +1,23 @@
+#!/bin/sh
+
+set -eu
+
+artifact_dir=/usr/lib/sovereign/artifacts
+archive=sovereign-oci-proof.oci.tar
+
+cd "$artifact_dir"
+sha256sum -c "${archive}.sha256"
+
+manifest_digest=$(sed -n 's/^sha256://p' sovereign-oci-proof.manifest-digest)
+test -n "$manifest_digest"
+tar -tf "$archive" | grep -Fx "oci-layout"
+tar -tf "$archive" | grep -Fx "index.json"
+tar -tf "$archive" | grep -Fx "blobs/sha256/${manifest_digest}"
+
+install -d -m 0755 /data/sovereign
+{
+  printf 'archive_sha256='
+  awk '{print $1}' "${archive}.sha256"
+  printf 'manifest_digest=sha256:%s\n' "$manifest_digest"
+} > /data/sovereign/oci-proof-ready
+

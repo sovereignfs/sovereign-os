@@ -1,0 +1,14 @@
+[Unit]
+Description=Verify the embedded Sovereign OCI proof artifact
+RequiresMountsFor=/data
+After=local-fs.target sovereign-proof.service
+ConditionPathIsMountPoint=/data
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/sovereign/verify-oci-proof
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+

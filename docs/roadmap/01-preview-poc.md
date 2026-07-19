@@ -292,5 +292,5 @@ Phase 01 is complete when:
 3. Resolve the remaining password-delivery questions.
 4. Review and accept the deployment RFC.
 5. Create the implementation plan for M2 only.
-6. Add the OCI artifact proof before installing Docker and Pi-hole.
+6. Install the selected Docker runtime and import the verified embedded OCI proof artifact on first boot.
 7. Add one milestone at a time and test the exact exported artifact on real hardware.

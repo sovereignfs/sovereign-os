@@ -237,6 +237,13 @@ persistence tests remain to be verified.
 - Verify its digest.
 - Replace it with the pinned Pi-hole artifact only after the mechanism passes.
 
+Engineering update (2026-07-19): a deterministic static ARM64 OCI test image
+is embedded in the appliance, verified at first boot, and was successfully
+imported and executed using the build host's ARM64 Docker runtime. See the
+[embedded OCI artifact proof report](embedded-oci-artifact-proof-report.md).
+On-device import remains assigned to the Docker installation milestone so the
+base image does not acquire a throwaway Podman dependency.
+
 ### Proof 5: Repeatability
 
 - Build twice in clean equivalent environments.
