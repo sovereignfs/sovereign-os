@@ -292,5 +292,5 @@ Phase 01 is complete when:
 3. Resolve the remaining password-delivery questions.
 4. Review and accept the deployment RFC.
 5. Create the implementation plan for M2 only.
-6. Materialize the persistent Pi-hole configuration, generate its device-local administrator credential, and start the imported container on first boot.
+6. Add Nginx `/dns/*` routing, Avahi discovery, and a safe administrator-credential delivery flow around the running Pi-hole service.
 7. Add one milestone at a time and test the exact exported artifact on real hardware.
