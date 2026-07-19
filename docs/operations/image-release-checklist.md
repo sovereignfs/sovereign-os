@@ -94,7 +94,7 @@
 
 ## Published Artifacts
 
-- [ ] `.img.xz` image published.
+- [ ] `.img.zst` image published.
 - [ ] SHA-256 checksum published.
 - [ ] Release manifest published.
 - [ ] Build provenance published at the agreed level.
@@ -104,6 +104,7 @@
 - [ ] Credential retrieval/reset procedure published.
 - [ ] Recovery/reflash procedure published.
 - [ ] Known limitations published.
+- [ ] Published files are byte-for-byte identical to the hardware-qualified candidate.
 
 ## Approval
 

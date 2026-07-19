@@ -287,7 +287,7 @@ Phase 01 is complete when:
 
 1. Repeat the successful ARM64 engineering proof on a supported native ARM64 host, then flash and boot it on the target Pi 5.
 2. Flash the generated Sovereign layer/storage image and complete the physical Proof 1-3 checklist on a Pi 5.
-3. Build and inspect the image containing Nginx `/dns/*` routing, Avahi discovery, and physical-console credential delivery.
-4. Test the exact exported artifact on real hardware, including direct-IP fallback and the supported mDNS client matrix.
-5. Review and accept the deployment RFC.
+3. Test the exact exported artifact on real hardware, including direct-IP fallback and the supported mDNS client matrix.
+4. Run the versioned release-candidate pipeline and qualify the downloaded bundle rather than an intermediate local image.
+5. Review and accept the deployment RFC after recording hardware evidence.
 6. Create the implementation plan for the next incomplete milestone only.
