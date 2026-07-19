@@ -1,0 +1,80 @@
+# macOS and editor metadata
+.DS_Store
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+
+# Logs and runtime state
+*.log
+logs/
+run/
+
+# Temporary files and caches
+tmp/
+temp/
+.cache/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Dependency directories
+node_modules/
+.venv/
+venv/
+
+# Image-builder working directories
+work/
+deploy/
+build/
+dist/
+
+# Generated disk, filesystem, container, and update artifacts
+*.img
+*.img.*
+*.iso
+*.raw
+*.qcow2
+*.vhd
+*.vhdx
+*.ext2
+*.ext3
+*.ext4
+*.squashfs
+*.tar
+*.tar.gz
+*.tar.xz
+*.tar.zst
+*.oci
+*.raucb
+*.mender
+
+# Generated checksums, signatures, SBOMs, and reports
+SHA256SUMS
+SHA256SUMS.sig
+*.sig
+*.asc
+*.sbom.json
+*.spdx.json
+*.cdx.json
+reports/
+
+# Local build configuration overrides
+config.local.*
+*.local.yaml
+*.local.yml
+*.local.toml
+
