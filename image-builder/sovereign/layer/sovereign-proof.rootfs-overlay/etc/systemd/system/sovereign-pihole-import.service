@@ -1,0 +1,14 @@
+[Unit]
+Description=Import the embedded official Pi-hole ARM64 image
+Requires=docker.service sovereign-pihole-artifact.service
+After=docker.service sovereign-pihole-artifact.service
+RequiresMountsFor=/data
+ConditionPathIsMountPoint=/data
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/sovereign/import-pihole-image
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

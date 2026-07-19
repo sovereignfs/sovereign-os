@@ -9,6 +9,7 @@ Research documents establish evidence before the project commits to an implement
 - [Sovereign layer and storage proof report](sovereign-layer-storage-proof-report.md) - External product layer and `/data` image structure passed; hardware persistence test pending
 - [Embedded OCI artifact proof report](embedded-oci-artifact-proof-report.md) - Deterministic ARM64 OCI embedding and Docker import passed
 - [Docker runtime and first-boot import proof report](docker-runtime-import-proof-report.md) - Pinned ARM64 runtime build and import integration passed; Pi 5 boot execution pending
+- [Pi-hole image embedding report](pihole-image-embedding-report.md) - Official Pi-hole 2026.04.1 ARM64 artifact pinned, embedded, and import-validated
 - [Raspberry Pi 5 platform assessment](rpi5-platform-assessment.md)
 - [Deployment model comparison](deployment-model-comparison.md)
 - [Local network discovery](local-network-discovery.md)

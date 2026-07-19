@@ -277,7 +277,7 @@ Phase 01 is complete when:
 - Which exact Raspberry Pi OS Lite release will be pinned?
 - Confirm whether `rpi-image-gen` v2.7.0 at commit `a7b6d4806183195f3efadb533f58c8e46393d057` remains the release pin after native-host and Pi 5 qualification.
 - Which Docker Engine and Compose versions will be pinned?
-- Which exact Pi-hole v6 release and ARM64 digest will be used?
+- Revalidate the selected Pi-hole `2026.04.1` ARM64 digest at release review.
 - Should Nginx or another minimal reverse proxy be selected?
 - How is the generated Pi-hole password securely delivered to the POC user?
 - Which upstream DNS provider is the default?
@@ -292,5 +292,5 @@ Phase 01 is complete when:
 3. Resolve the remaining password-delivery questions.
 4. Review and accept the deployment RFC.
 5. Create the implementation plan for M2 only.
-6. Install the selected Docker runtime and import the verified embedded OCI proof artifact on first boot.
+6. Materialize the persistent Pi-hole configuration, generate its device-local administrator credential, and start the imported container on first boot.
 7. Add one milestone at a time and test the exact exported artifact on real hardware.

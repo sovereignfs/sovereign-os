@@ -1,6 +1,6 @@
 # Embedded OCI Artifact Proof Report
 
-Status: **Embedding and ARM64 runtime compatibility passed; appliance import implemented, Pi 5 execution pending**
+Status: **Proof passed and superseded by the pinned Pi-hole ARM64 artifact**
 Build date: 2026-07-19
 
 ## Outcome

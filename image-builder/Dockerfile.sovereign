@@ -12,7 +12,7 @@ RUN apt-get update \
        debian-archive-keyring dosfstools dpkg-dev e2fsprogs fdisk flex \
        gettext git libtool make mmdebstrap mtools pkgconf podman \
        python3 python3-debian python3-jsonschema python3-pip python3-yaml \
-       rsync sudo uidmap uuid-runtime pv zip \
+       rsync skopeo sudo uidmap uuid-runtime pv zip \
     && rm -rf /var/lib/apt/lists/*
 
 RUN git clone --branch "${RPI_IMAGE_GEN_TAG}" --depth 1 \
@@ -29,4 +29,3 @@ COPY image-builder/sovereign /opt/sovereign-image
 WORKDIR /opt/rpi-image-gen
 
 CMD ["./rpi-image-gen", "build", "-S", "/opt/sovereign-image", "-c", "sovereign-proof.yaml"]
-

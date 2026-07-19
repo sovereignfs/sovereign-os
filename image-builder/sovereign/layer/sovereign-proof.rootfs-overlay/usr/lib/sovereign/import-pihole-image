@@ -1,0 +1,33 @@
+#!/bin/sh
+
+set -eu
+
+artifact_dir=/usr/lib/sovereign/artifacts
+archive=${artifact_dir}/pihole-arm64.oci.tar
+state_dir=/data/sovereign
+marker=${state_dir}/pihole-import-ready
+. /usr/lib/sovereign/pihole-image.env
+
+image=${PIHOLE_IMAGE_REPOSITORY#docker.io/}:${PIHOLE_IMAGE_TAG}
+
+if [ -f "$marker" ] && docker image inspect "$PIHOLE_IMAGE_DIGEST" >/dev/null 2>&1; then
+  docker image tag "$PIHOLE_IMAGE_DIGEST" "$image"
+  exit 0
+fi
+
+docker load --input "$archive"
+docker image inspect "$PIHOLE_IMAGE_DIGEST" >/dev/null
+docker image tag "$PIHOLE_IMAGE_DIGEST" "$image"
+
+platform=$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image")
+test "$platform" = "$PIHOLE_IMAGE_PLATFORM"
+
+install -d -m 0755 "$state_dir"
+{
+  printf 'image=%s\n' "$image"
+  printf 'platform=%s\n' "$platform"
+  printf 'image_id=%s\n' "$(docker image inspect --format '{{.Id}}' "$image")"
+  printf 'archive_sha256=%s\n' "$(awk '{print $1}' "${archive}.sha256")"
+  printf 'manifest_digest=%s\n' "$PIHOLE_IMAGE_DIGEST"
+} > "${marker}.tmp"
+mv "${marker}.tmp" "$marker"

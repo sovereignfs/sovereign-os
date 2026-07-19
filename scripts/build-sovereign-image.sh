@@ -24,6 +24,8 @@ if docker container inspect "${container}" >/dev/null 2>&1; then
 fi
 
 mkdir -p "${output_dir}/deploy" "${output_dir}/evidence"
+find "${output_dir}/deploy" -mindepth 1 -delete
+find "${output_dir}/evidence" -mindepth 1 -delete
 
 set +e
 docker run --name "${container}" --privileged --platform linux/arm64 "${image}"
