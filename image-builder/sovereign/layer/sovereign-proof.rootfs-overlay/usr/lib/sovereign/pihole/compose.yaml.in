@@ -1,0 +1,29 @@
+services:
+  pihole:
+    image: @PIHOLE_IMAGE_REFERENCE@
+    container_name: pihole
+    restart: unless-stopped
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "127.0.0.1:8080:80/tcp"
+    environment:
+      TZ: UTC
+      WEBPASSWORD_FILE: /run/secrets/pihole_webpasswd
+      FTLCONF_dns_listeningMode: all
+      FTLCONF_dns_upstreams: "1.1.1.1;1.0.0.1"
+      FTLCONF_dhcp_active: "false"
+      FTLCONF_ntp_ipv4_active: "false"
+      FTLCONF_ntp_ipv6_active: "false"
+      FTLCONF_ntp_sync_active: "false"
+      FTLCONF_webserver_paths_prefix: /dns
+    volumes:
+      - /data/sovereign/apps/pihole/etc-pihole:/etc/pihole
+    secrets:
+      - pihole_webpasswd
+    cap_drop:
+      - NET_RAW
+
+secrets:
+  pihole_webpasswd:
+    file: /data/sovereign/secrets/pihole-admin-password

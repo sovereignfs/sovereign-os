@@ -1,0 +1,55 @@
+#!/bin/sh
+
+set -eu
+
+state_dir=/data/sovereign
+app_dir=${state_dir}/apps/pihole
+secret_dir=${state_dir}/secrets
+password_file=${secret_dir}/pihole-admin-password
+compose_file=${app_dir}/compose.yaml
+template=/usr/lib/sovereign/pihole/compose.yaml.in
+marker=${state_dir}/pihole-ready
+. /usr/lib/sovereign/pihole-image.env
+image_reference="${PIHOLE_IMAGE_REPOSITORY#docker.io/}@${PIHOLE_IMAGE_DIGEST}"
+
+install -d -m 0755 "$state_dir" "$app_dir" "${app_dir}/etc-pihole"
+install -d -m 0700 "$secret_dir"
+
+if [ ! -s "$password_file" ]; then
+  umask 077
+  od -An -N18 -tx1 /dev/urandom | tr -d ' \n' > "${password_file}.tmp"
+  printf '\n' >> "${password_file}.tmp"
+  mv "${password_file}.tmp" "$password_file"
+fi
+chmod 0600 "$password_file"
+
+sed "s|@PIHOLE_IMAGE_REFERENCE@|${image_reference}|g" \
+  "$template" > "${compose_file}.tmp"
+chmod 0644 "${compose_file}.tmp"
+mv "${compose_file}.tmp" "$compose_file"
+
+docker compose \
+  --project-name sovereign-pihole \
+  --file "$compose_file" \
+  up --detach --no-build --pull never
+
+attempt=0
+while [ "$attempt" -lt 90 ]; do
+  health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' pihole 2>/dev/null || true)
+  [ "$health" = healthy ] && break
+  attempt=$((attempt + 1))
+  sleep 2
+done
+
+test "${health:-}" = healthy
+dig +short +time=3 +tries=1 @127.0.0.1 pi.hole | grep -q .
+curl --fail --silent --show-error --max-time 10 \
+  --output /dev/null http://127.0.0.1:8080/admin/
+
+{
+  printf 'image=%s\n' "$(docker inspect --format '{{.Image}}' pihole)"
+  printf 'health=%s\n' "$health"
+  printf 'dns=pass\n'
+  printf 'http=pass\n'
+} > "${marker}.tmp"
+mv "${marker}.tmp" "$marker"

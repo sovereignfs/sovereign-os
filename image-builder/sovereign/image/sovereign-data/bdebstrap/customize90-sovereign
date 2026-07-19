@@ -4,3 +4,5 @@ set -eu
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-proof.service
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-pihole-artifact.service
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-pihole-import.service
+"$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-pihole.service
+ln -sf /run/systemd/resolve/resolv.conf "$1/etc/resolv.conf"

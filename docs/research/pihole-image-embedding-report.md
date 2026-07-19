@@ -1,6 +1,6 @@
 # Pi-hole Image Embedding Report
 
-Status: **ARM64 artifact pin, embedding, and local import passed; Pi 5 boot import pending**
+Status: **Artifact proof passed; first-boot runtime implemented, Pi 5 boot pending**
 Build date: 2026-07-19
 
 ## Outcome
@@ -84,8 +84,9 @@ being mistaken for current evidence.
 ## Acceptance Boundary
 
 This milestone proves artifact selection, supply-chain pinning, deterministic
-packaging, offline embedding, and Docker import compatibility. It deliberately
-does not start Pi-hole yet.
+packaging, offline embedding, and Docker import compatibility. The following
+milestone now configures and starts Pi-hole; the list below records the boundary
+that existed when this artifact proof was accepted.
 
 The next milestone must:
 

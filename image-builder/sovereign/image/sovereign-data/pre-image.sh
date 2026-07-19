@@ -8,6 +8,8 @@ genimage_input=$2
 source "${IGconf_image_outputdir}/img_uuids"
 
 install -d -m 0755 "${filesystem}/data/sovereign"
+install -d -m 0755 "${filesystem}/data/sovereign/apps/pihole/etc-pihole"
+install -d -m 0700 "${filesystem}/data/sovereign/secrets"
 install -d -m 0711 "${filesystem}/data/docker" "${filesystem}/data/containerd"
 
 MKE2FS_ROOT="-U $ROOT_UUID ${IGconf_fs_ext4_mkfs_args:-}"

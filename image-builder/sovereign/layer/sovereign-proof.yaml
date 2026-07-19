@@ -9,5 +9,6 @@ mmdebstrap:
   packages:
     - ca-certificates
     - curl
+    - dnsutils
   customize-hooks:
     - test -d "$1"
