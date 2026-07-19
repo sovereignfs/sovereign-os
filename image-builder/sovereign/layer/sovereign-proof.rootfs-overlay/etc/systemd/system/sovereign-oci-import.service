@@ -1,0 +1,14 @@
+[Unit]
+Description=Import and validate the embedded Sovereign OCI proof image
+Requires=docker.service sovereign-oci-proof.service
+After=docker.service sovereign-oci-proof.service
+RequiresMountsFor=/data
+ConditionPathIsMountPoint=/data
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/sovereign/import-oci-proof
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

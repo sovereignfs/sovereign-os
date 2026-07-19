@@ -8,6 +8,7 @@ genimage_input=$2
 source "${IGconf_image_outputdir}/img_uuids"
 
 install -d -m 0755 "${filesystem}/data/sovereign"
+install -d -m 0711 "${filesystem}/data/docker" "${filesystem}/data/containerd"
 
 MKE2FS_ROOT="-U $ROOT_UUID ${IGconf_fs_ext4_mkfs_args:-}"
 MKE2FS_DATA="${IGconf_fs_ext4_mkfs_args:-}"
@@ -25,4 +26,3 @@ sed \
   -e "s|<MKE2FS_DATA>|$MKE2FS_DATA|g" \
   -e "s|<VFAT_ARGS>|$VFAT_ARGS|g" \
   genimage.cfg.in > "${genimage_input}/genimage.cfg"
-
