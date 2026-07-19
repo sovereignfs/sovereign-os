@@ -1,6 +1,6 @@
 # Embedded OCI Artifact Proof Report
 
-Status: **Embedding and ARM64 runtime compatibility passed; on-device import pending Docker milestone**  
+Status: **Embedding and ARM64 runtime compatibility passed; appliance import implemented, Pi 5 execution pending**
 Build date: 2026-07-19
 
 ## Outcome
@@ -90,10 +90,9 @@ dependency, so the acceptance is split:
 
 - completed here: deterministic creation, embedding, checksum verification,
   Docker import compatibility, and ARM64 execution;
-- next Docker milestone: install the selected runtime in the appliance, import
-  this exact archive on first boot, verify its runtime digest, and persist the
-  result under `/data`.
+- completed in the following Docker milestone: install the selected runtime in
+  the appliance, import this exact archive on first boot, verify its platform
+  and execution, and persist the result under `/data`.
 
 The test archive should be replaced with the pinned Pi-hole OCI artifact only
 after on-device runtime import passes.
-

@@ -6,5 +6,8 @@
 # METAEND
 ---
 mmdebstrap:
+  packages:
+    - ca-certificates
+    - curl
   customize-hooks:
     - test -d "$1"

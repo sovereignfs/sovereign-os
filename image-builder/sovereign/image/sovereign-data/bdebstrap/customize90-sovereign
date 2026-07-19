@@ -3,3 +3,4 @@
 set -eu
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-proof.service
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-oci-proof.service
+"$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-oci-import.service
