@@ -5,6 +5,7 @@ Operational guides will be written alongside the preview implementation and veri
 ## Phase 01 Deliverables
 
 - [Image release checklist](image-release-checklist.md)
+- [Image build and release process](image-build-and-release.md)
 - [Appliance update release checklist](appliance-update-checklist.md)
 - Development and image-build environment
 - Raspberry Pi flashing and first-boot guide

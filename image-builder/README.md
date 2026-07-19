@@ -58,3 +58,12 @@ The same build creates a deterministic ARM64 OCI proof archive, embeds it under
 `build/sovereign-image/evidence/oci/`. The appliance verifies its checksum and
 layout on first boot. Runtime import into the appliance is intentionally left
 for the Docker installation milestone.
+
+## Release candidate bundle
+
+After a successful Sovereign image build, package the flash image and its build
+evidence with `scripts/create-release-bundle.py`. The script creates versioned
+payload names, a machine-readable release manifest, and `SHA256SUMS` in an
+empty output directory. The complete operator flow and the distinction between
+an engineering candidate and a hardware-qualified release are documented in
+`docs/operations/image-build-and-release.md`.
