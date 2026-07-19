@@ -1,0 +1,26 @@
+[
+  {
+    "attributes": {
+      "PMAPversion": "1.2.0",
+      "system_type": "flat"
+    }
+  },
+  {
+    "partitions": [
+      {
+        "image": "boot",
+        "comment": "kernel + device tree + initramfs"
+      },
+      {
+        "image": "root",
+        "comment": "root filesystem"
+      },
+      {
+        "image": "data",
+        "comment": "persistent Sovereign application data",
+        "expand-to-fit": true
+      }
+    ]
+  }
+]
+

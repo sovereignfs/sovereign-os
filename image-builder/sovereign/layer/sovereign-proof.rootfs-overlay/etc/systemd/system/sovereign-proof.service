@@ -1,0 +1,14 @@
+[Unit]
+Description=Initialize the Sovereign proof data directory
+RequiresMountsFor=/data
+After=local-fs.target
+ConditionPathIsMountPoint=/data
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/sovereign/proof-init
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+

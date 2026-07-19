@@ -1,0 +1,83 @@
+image <IMAGE_NAME>.<IMAGE_SUFFIX>.sparse {
+  android-sparse {
+    image = <IMAGE_NAME>.<IMAGE_SUFFIX>
+  }
+}
+
+image boot.vfat.sparse {
+  android-sparse {
+    image = boot.vfat
+  }
+}
+
+image root.ext4.sparse {
+  android-sparse {
+    image = root.ext4
+  }
+}
+
+image data.ext4.sparse {
+  android-sparse {
+    image = data.ext4
+  }
+}
+
+image <IMAGE_NAME>.<IMAGE_SUFFIX> {
+  hdimage {
+    align = 8M
+    partition-table-type = "mbr"
+    fill = true
+  }
+
+  partition boot {
+    in-partition-table = true
+    partition-type = 0xC
+    image = boot.vfat
+    bootable = true
+  }
+
+  partition root {
+    in-partition-table = true
+    partition-type = 0x83
+    image = root.ext4
+  }
+
+  partition data {
+    in-partition-table = true
+    partition-type = 0x83
+    image = data.ext4
+  }
+}
+
+image boot.vfat {
+  vfat {
+    label = "BOOT"
+    extraargs = "<VFAT_ARGS>"
+  }
+  size = <BOOT_SIZE>
+  mountpoint = "/boot/firmware"
+  exec-pre = "<SETUP> BOOT"
+}
+
+image root.ext4 {
+  ext4 {
+    label = "ROOT"
+    use-mke2fs = true
+    mke2fs-conf = <MKE2FS_CONF>
+    extraargs = "<MKE2FS_ROOT>"
+  }
+  size = <ROOT_SIZE>
+  mountpoint = "/"
+  exec-pre = "<SETUP> ROOT"
+}
+
+image data.ext4 {
+  ext4 {
+    label = "DATA"
+    use-mke2fs = true
+    mke2fs-conf = <MKE2FS_CONF>
+    extraargs = "<MKE2FS_DATA>"
+  }
+  size = <DATA_SIZE>
+  mountpoint = "/data"
+}

@@ -288,9 +288,9 @@ Phase 01 is complete when:
 ## 15. Immediate Next Actions
 
 1. Repeat the successful ARM64 engineering proof on a supported native ARM64 host, then flash and boot it on the target Pi 5.
-2. Select the exact builder release and Raspberry Pi OS-compatible base inputs.
+2. Flash the generated Sovereign layer/storage image and complete the physical Proof 1-3 checklist on a Pi 5.
 3. Resolve the remaining password-delivery questions.
 4. Review and accept the deployment RFC.
 5. Create the implementation plan for M2 only.
-6. Build the base image before adding Pi-hole.
+6. Add the OCI artifact proof before installing Docker and Pi-hole.
 7. Add one milestone at a time and test the exact exported artifact on real hardware.

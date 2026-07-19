@@ -1,0 +1,5 @@
+#!/bin/bash
+
+set -eu
+"$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-proof.service
+

@@ -213,12 +213,22 @@ and a supported native ARM64 host run remain required before Proof 1 passes.
 - Add one file and one systemd oneshot service.
 - Verify the upstream repository remains unmodified.
 
+Engineering update (2026-07-19): the external layer builds with hostname
+`sovereign`, a release marker, and an enabled systemd oneshot service. See the
+[Sovereign layer and storage proof report](sovereign-layer-storage-proof-report.md).
+Physical boot and first-boot execution remain to be verified.
+
 ### Proof 3: Storage Layout
 
 - Define boot, root, and persistent data partitions.
 - Mount data at `/data`.
 - Verify data persistence across reboot.
 - Verify the root filesystem does not become authoritative for `/data/sovereign`.
+
+Engineering update (2026-07-19): the generated image contains separate boot,
+root, and DATA partitions; DATA is mounted at `/data`, seeded with
+`/data/sovereign`, and marked expand-to-fit. Physical reboot and update
+persistence tests remain to be verified.
 
 ### Proof 4: OCI Artifact
 

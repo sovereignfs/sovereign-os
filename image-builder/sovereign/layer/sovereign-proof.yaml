@@ -1,0 +1,10 @@
+# METABEGIN
+# X-Env-Layer-Name: sovereign-proof
+# X-Env-Layer-Category: product
+# X-Env-Layer-Desc: Minimal Sovereign OS proof layer.
+# X-Env-Layer-Version: 1.0.0
+# METAEND
+---
+mmdebstrap:
+  customize-hooks:
+    - test -d "$1"
