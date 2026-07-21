@@ -16,6 +16,11 @@ partition.
 
 ## Flash with Customization
 
+This workflow requires Raspberry Pi Imager 2.0.11 or later. Earlier Imager 2.x
+releases reject `rpi-preseed` manifests and silently omit the Sovereign OS entry
+from the operating-system list. While 2.0.11 is available only as a release
+candidate, use the official 2.0.11-rc1 build for POC qualification.
+
 Download the complete release bundle and verify it from inside its directory:
 
 ```bash
@@ -42,7 +47,7 @@ Keep the hostname as `sovereign`. The appliance owns that hostname so its local
 address remains `sovereign.local`. Write the image, insert the storage into the
 Pi, and power it on.
 
-On Raspberry Pi Imager 2, selecting the `.img.zst` through **Use custom** does
+On a compatible Raspberry Pi Imager, selecting the `.img.zst` through **Use custom** does
 not advertise an initialization format and therefore does not present OS
 customization. Open the supplied `.rpi-imager-manifest` instead.
 
