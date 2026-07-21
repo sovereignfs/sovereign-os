@@ -27,4 +27,6 @@ sed \
   -e "s|<MKE2FS_ROOT>|$MKE2FS_ROOT|g" \
   -e "s|<MKE2FS_DATA>|$MKE2FS_DATA|g" \
   -e "s|<VFAT_ARGS>|$VFAT_ARGS|g" \
+  -e "s|<ROOT_UUID>|$ROOT_UUID|g" \
+  -e "s|<BOOT_UUID>|$BOOT_UUID|g" \
   genimage.cfg.in > "${genimage_input}/genimage.cfg"
