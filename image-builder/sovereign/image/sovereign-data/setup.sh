@@ -4,14 +4,17 @@ set -eu
 
 case "$1" in
   ROOT)
-    cat > "$IMAGEMOUNTPATH/etc/fstab" <<'EOF'
-/dev/disk/by-slot/system / ext4 rw,relatime,errors=remount-ro,commit=30 0 1
-/dev/disk/by-slot/boot /boot/firmware vfat defaults,rw,noatime,errors=remount-ro 0 2
+    root_uuid=$2
+    boot_uuid=$3
+    cat > "$IMAGEMOUNTPATH/etc/fstab" <<EOF
+UUID=$root_uuid / ext4 rw,relatime,errors=remount-ro,commit=30 0 1
+UUID=$boot_uuid /boot/firmware vfat defaults,rw,noatime,errors=remount-ro 0 2
 /dev/disk/by-label/DATA /data ext4 defaults,rw,noatime 0 2
 EOF
     ;;
   BOOT)
-    sed -i 's|root=\([^ ]*\)|root=/dev/disk/by-slot/system|' "$IMAGEMOUNTPATH/cmdline.txt"
+    root_uuid=$2
+    sed -i.bak "s|root=[^ ]*|root=UUID=$root_uuid|" "$IMAGEMOUNTPATH/cmdline.txt"
+    rm -f "$IMAGEMOUNTPATH/cmdline.txt.bak"
     ;;
 esac
-
