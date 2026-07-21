@@ -40,7 +40,12 @@ def create_manifest(image_path, output_path, version):
     if not image_path.is_file():
         raise FileNotFoundError(image_path)
     download_size, download_digest = digest_file(image_path)
-    extract_size, extract_digest = digest_extracted_zstd(image_path)
+    if image_path.name.endswith(".zst"):
+        extract_size, extract_digest = digest_extracted_zstd(image_path)
+    elif image_path.name.endswith(".img"):
+        extract_size, extract_digest = download_size, download_digest
+    else:
+        raise ValueError("image must end in .img or .img.zst")
     manifest = {
         "imager": {
             "devices": [
