@@ -1,9 +1,9 @@
 # First Login and Network Setup
 
-**Status:** Approved process; image implementation pending
+**Status:** Implemented; physical image verification pending
 
-This guide defines the Phase 01 preview onboarding flow. It does not describe
-the behavior of images released before the bootstrap-account implementation.
+This guide defines the Phase 01 preview onboarding flow. Images released before
+the bootstrap-account implementation do not provide this behavior.
 
 ## 1. Boot on a Trusted Ethernet Network
 
@@ -128,4 +128,3 @@ the regulatory setting and reboot instead.
   disconnect it from untrusted networks.
 - Do not disable password authentication until key authentication has been
   tested in a separate session.
-

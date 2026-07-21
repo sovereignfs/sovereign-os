@@ -8,6 +8,7 @@ import pwd
 import re
 import subprocess
 import tomllib
+import time
 from pathlib import Path
 
 
@@ -52,6 +53,24 @@ def run_account_command(root, *arguments):
     subprocess.run(command, check=True)
 
 
+def clear_password_expiry(root, username):
+    shadow_path = rooted(root, "/etc/shadow")
+    updated = []
+    found = False
+    for line in shadow_path.read_text().splitlines():
+        fields = line.split(":")
+        if fields[0] == username:
+            if len(fields) < 3:
+                raise ValueError("operator shadow entry is malformed")
+            fields[2] = str(int(time.time() // 86400))
+            line = ":".join(fields)
+            found = True
+        updated.append(line)
+    if not found:
+        raise ValueError("operator has no shadow entry")
+    atomic_write(shadow_path, "\n".join(updated) + "\n", 0o600)
+
+
 def apply_user(root, config, report):
     user_config = config.get("user", {})
     operator = get_first_user(root)
@@ -81,6 +100,13 @@ def apply_user(root, config, report):
             raise ValueError("operator password must be an encrypted hash from Imager")
         run_account_command(root, "usermod", "--password", password, operator["name"])
         report["operator_password"] = "configured"
+
+    # The stock preview account is expired to force replacement of its public
+    # bootstrap password. A user-supplied password or authorized key is an
+    # explicit Imager provisioning path, so it must not inherit that expiry.
+    if password or config.get("ssh", {}).get("authorized_keys"):
+        clear_password_expiry(root, operator["name"])
+        report["bootstrap_password_expiry"] = "cleared-by-provisioning"
 
     for group_name in user_config.get("groups", []):
         if not re.fullmatch(r"[a-z_][a-z0-9_-]*", group_name):

@@ -1,0 +1,28 @@
+#!/bin/bash
+
+set -eu
+
+root=$1
+username=sovereign
+# Public preview-only credential from ADR-0003. SHA-512 crypt with a fixed salt
+# keeps the image input reproducible; first login must replace it.
+password_hash='$6$sovereign-previe$FOftgfpqBw/vATnm.blBylK9Pvm.fo1dCpytODrnB3WN4WoBaL0hyhDnAF.B89ZMgPBL2i3OxAG2X/WIm93Rg0'
+
+if chroot "$root" getent passwd 1000 >/dev/null; then
+  echo "UID 1000 already exists; refusing to create the preview bootstrap account" >&2
+  exit 1
+fi
+
+chroot "$root" useradd \
+  --create-home \
+  --uid 1000 \
+  --user-group \
+  --groups sudo \
+  --shell /bin/bash \
+  --password "$password_hash" \
+  "$username"
+
+# A last-change value of zero makes PAM require a replacement before granting
+# an interactive shell.
+chroot "$root" chage --lastday 0 "$username"
+

@@ -14,5 +14,6 @@ mmdebstrap:
     - libnss-mdns
     - nginx
     - python3-minimal
+    - sudo
   customize-hooks:
     - test -d "$1"

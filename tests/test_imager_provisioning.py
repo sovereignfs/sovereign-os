@@ -34,6 +34,9 @@ class ImagerProvisioningTests(unittest.TestCase):
         (self.root / "etc/passwd").write_text(
             "root:x:0:0:root:/root:/bin/bash\npi:x:1000:1000:pi:/home/pi:/bin/bash\n"
         )
+        (self.root / "etc/shadow").write_text(
+            "root:*:0:0:99999:7:::\npi:$6$test$hash:0:0:99999:7:::\n"
+        )
         (self.root / "etc/group").write_text("root:x:0:\npi:x:1000:\nsudo:x:27:\n")
         (self.root / "usr/share/zoneinfo/Europe/Berlin").write_bytes(b"TZif")
         self.config = self.root / "boot/firmware/rpi-preseed.toml"
@@ -66,6 +69,9 @@ class ImagerProvisioningTests(unittest.TestCase):
         self.assertEqual(report["hostname_override"], "ignored")
         self.assertEqual(report["wifi"], "configured")
         self.assertEqual(report["ssh_keys"], 1)
+        self.assertEqual(report["bootstrap_password_expiry"], "cleared-by-provisioning")
+        shadow = (self.root / "etc/shadow").read_text()
+        self.assertNotIn("pi:$6$test$hash:0:", shadow)
 
     def test_encodes_unsafe_ssid_and_accepts_raw_psk(self):
         raw_psk = "a" * 64
