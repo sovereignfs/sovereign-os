@@ -1,0 +1,245 @@
+#!/usr/bin/python3
+
+import argparse
+import grp
+import json
+import os
+import pwd
+import re
+import subprocess
+import tomllib
+from pathlib import Path
+
+
+SAFE_SSID = re.compile(rb"^[A-Za-z0-9 _-]+$")
+SAFE_USER = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
+COUNTRY = re.compile(r"^[A-Z]{2}$")
+
+
+def rooted(root, absolute_path):
+    return root / absolute_path.lstrip("/")
+
+
+def atomic_write(path, content, mode=0o600):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp")
+    with temporary.open("w", encoding="utf-8") as stream:
+        stream.write(content)
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.chmod(temporary, mode)
+    os.replace(temporary, path)
+
+
+def get_first_user(root):
+    passwd_path = rooted(root, "/etc/passwd")
+    for line in passwd_path.read_text().splitlines():
+        fields = line.split(":")
+        if len(fields) >= 7 and fields[2] == "1000":
+            return {
+                "name": fields[0],
+                "gid": int(fields[3]),
+                "home": fields[5],
+            }
+    raise ValueError("image has no UID 1000 operator account")
+
+
+def run_account_command(root, *arguments):
+    command = [arguments[0]]
+    if root != Path("/"):
+        command.extend(["--root", str(root)])
+    command.extend(arguments[1:])
+    subprocess.run(command, check=True)
+
+
+def apply_user(root, config, report):
+    user_config = config.get("user", {})
+    operator = get_first_user(root)
+    requested_name = user_config.get("name", operator["name"])
+    if not SAFE_USER.fullmatch(requested_name):
+        raise ValueError("operator username is invalid")
+
+    if requested_name != operator["name"]:
+        old_name = operator["name"]
+        old_home = operator["home"]
+        new_home = f"/home/{requested_name}"
+        run_account_command(root, "usermod", "--login", requested_name, old_name)
+        try:
+            group_name = grp.getgrgid(operator["gid"]).gr_name if root == Path("/") else old_name
+            if group_name == old_name:
+                run_account_command(root, "groupmod", "--new-name", requested_name, old_name)
+        except KeyError:
+            pass
+        run_account_command(root, "usermod", "--home", new_home, "--move-home", requested_name)
+        operator.update(name=requested_name, home=new_home)
+        report["operator_renamed"] = True
+        report["previous_home"] = old_home
+
+    password = user_config.get("password")
+    if password:
+        if not user_config.get("password_encrypted", False) or not password.startswith("$"):
+            raise ValueError("operator password must be an encrypted hash from Imager")
+        run_account_command(root, "usermod", "--password", password, operator["name"])
+        report["operator_password"] = "configured"
+
+    for group_name in user_config.get("groups", []):
+        if not re.fullmatch(r"[a-z_][a-z0-9_-]*", group_name):
+            raise ValueError("operator group name is invalid")
+        group_file = rooted(root, "/etc/group").read_text()
+        if re.search(rf"^{re.escape(group_name)}:", group_file, re.MULTILINE):
+            run_account_command(root, "usermod", "--append", "--groups", group_name, operator["name"])
+
+    if user_config.get("passwordless_sudo", False):
+        atomic_write(
+            rooted(root, f"/etc/sudoers.d/010_{operator['name']}-nopasswd"),
+            f"{operator['name']} ALL=(ALL) NOPASSWD:ALL\n",
+            0o440,
+        )
+        report["passwordless_sudo"] = True
+    return operator
+
+
+def apply_ssh(root, config, operator, report):
+    ssh = config.get("ssh", {})
+    enabled = ssh.get("enabled", bool(ssh.get("authorized_keys")))
+    keys = ssh.get("authorized_keys", [])
+    if not isinstance(keys, list):
+        raise ValueError("ssh.authorized_keys must be an array")
+    for key in keys:
+        if not isinstance(key, str) or "\n" in key or "\x00" in key or len(key) > 16384:
+            raise ValueError("SSH authorized key is invalid")
+
+    if keys:
+        ssh_directory = rooted(root, operator["home"] + "/.ssh")
+        ssh_directory.mkdir(parents=True, exist_ok=True)
+        os.chmod(ssh_directory, 0o700)
+        atomic_write(ssh_directory / "authorized_keys", "\n".join(keys) + "\n", 0o600)
+        if root == Path("/"):
+            os.chown(ssh_directory, 1000, operator["gid"])
+            os.chown(ssh_directory / "authorized_keys", 1000, operator["gid"])
+
+    password_authentication = bool(ssh.get("password_authentication", False))
+    atomic_write(
+        rooted(root, "/etc/ssh/sshd_config.d/20-imager-provisioning.conf"),
+        "PermitRootLogin no\n"
+        f"PasswordAuthentication {'yes' if password_authentication else 'no'}\n"
+        f"KbdInteractiveAuthentication {'yes' if password_authentication else 'no'}\n",
+        0o600,
+    )
+    report["ssh"] = "enabled" if enabled else "disabled"
+    report["ssh_keys"] = len(keys)
+
+
+def ssid_filename(ssid):
+    if SAFE_SSID.fullmatch(ssid):
+        return ssid.decode("ascii")
+    return "=" + ssid.hex()
+
+
+def apply_wifi(root, config, report):
+    wlan = config.get("wlan")
+    if not wlan:
+        report["wifi"] = "not-configured"
+        return
+    if "ssid_hex" in wlan:
+        try:
+            ssid = bytes.fromhex(wlan["ssid_hex"])
+        except (TypeError, ValueError) as error:
+            raise ValueError("wlan.ssid_hex is invalid") from error
+    else:
+        ssid_text = wlan.get("ssid", "")
+        if not isinstance(ssid_text, str):
+            raise ValueError("wlan.ssid must be a string")
+        ssid = ssid_text.encode("utf-8")
+    if not 1 <= len(ssid) <= 32:
+        raise ValueError("Wi-Fi SSID must contain 1 to 32 octets")
+
+    password = wlan.get("password", "")
+    if not isinstance(password, str) or "\n" in password or "\x00" in password:
+        raise ValueError("Wi-Fi password is invalid")
+    key_management = wlan.get("key_mgmt", "wpa-psk" if password else "none")
+    if key_management not in {"none", "wpa-psk", "sae"}:
+        raise ValueError(f"unsupported Wi-Fi key management: {key_management}")
+    if key_management == "none" and password:
+        raise ValueError("open Wi-Fi configuration must not contain a password")
+    if key_management != "none" and not password:
+        raise ValueError("secured Wi-Fi configuration requires a password")
+
+    suffix = "open" if key_management == "none" else "psk"
+    lines = []
+    if password:
+        if wlan.get("password_encrypted", False):
+            if not re.fullmatch(r"[0-9a-fA-F]{64}", password):
+                raise ValueError("encrypted Wi-Fi password must be a 64-hex PSK")
+            lines.extend(("[Security]", f"PreSharedKey={password.lower()}", ""))
+        else:
+            if not 8 <= len(password.encode("utf-8")) <= 63:
+                raise ValueError("Wi-Fi passphrase must contain 8 to 63 octets")
+            lines.extend(("[Security]", f"Passphrase={password}", ""))
+    if wlan.get("hidden", False):
+        lines.extend(("[Settings]", "Hidden=true", ""))
+
+    profile = rooted(root, f"/var/lib/iwd/{ssid_filename(ssid)}.{suffix}")
+    atomic_write(profile, "\n".join(lines), 0o600)
+    country = wlan.get("country", "")
+    if country:
+        if not COUNTRY.fullmatch(country):
+            raise ValueError("Wi-Fi country must be a two-letter uppercase code")
+        atomic_write(
+            rooted(root, "/etc/modprobe.d/cfg80211_regdomain.conf"),
+            f"options cfg80211 ieee80211_regdom={country}\n",
+            0o644,
+        )
+    report["wifi"] = "configured"
+    report["wifi_hidden"] = bool(wlan.get("hidden", False))
+
+
+def apply_locale(root, config, report):
+    locale = config.get("locale", {})
+    timezone = locale.get("timezone")
+    if timezone:
+        zone = rooted(root, f"/usr/share/zoneinfo/{timezone}")
+        if not zone.is_file() or ".." in Path(timezone).parts:
+            raise ValueError("requested timezone is unavailable")
+        localtime = rooted(root, "/etc/localtime")
+        localtime.unlink(missing_ok=True)
+        localtime.symlink_to(f"/usr/share/zoneinfo/{timezone}")
+        atomic_write(rooted(root, "/etc/timezone"), timezone + "\n", 0o644)
+        report["timezone"] = timezone
+
+
+def apply_configuration(root, config_path):
+    raw = config_path.read_bytes()
+    try:
+        config = tomllib.loads(raw.decode("utf-8"))
+    finally:
+        config_path.unlink(missing_ok=True)
+    if config.get("config_version", "1.0") != "1.0":
+        raise ValueError("unsupported Imager provisioning version")
+
+    report = {"schema": 1, "hostname": "sovereign"}
+    requested_hostname = config.get("system", {}).get("hostname")
+    if requested_hostname and requested_hostname != "sovereign":
+        report["hostname_override"] = "ignored"
+    operator = apply_user(root, config, report)
+    apply_ssh(root, config, operator, report)
+    apply_wifi(root, config, report)
+    apply_locale(root, config, report)
+
+    state_directory = rooted(root, "/data/sovereign")
+    atomic_write(state_directory / "imager-provisioning.json", json.dumps(report, sort_keys=True) + "\n", 0o600)
+    atomic_write(state_directory / "imager-provisioned", "complete\n", 0o600)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--root", type=Path, default=Path("/"))
+    parser.add_argument("--config", type=Path)
+    arguments = parser.parse_args()
+    root = arguments.root.resolve()
+    config_path = arguments.config or rooted(root, "/boot/firmware/rpi-preseed.toml")
+    apply_configuration(root, config_path)
+
+
+if __name__ == "__main__":
+    main()

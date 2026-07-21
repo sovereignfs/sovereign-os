@@ -6,9 +6,10 @@ Operational guides will be written alongside the preview implementation and veri
 
 - [Image release checklist](image-release-checklist.md)
 - [Image build and release process](image-build-and-release.md)
+- [Raspberry Pi Imager provisioning and flashing](raspberry-pi-imager-provisioning.md)
 - [Appliance update release checklist](appliance-update-checklist.md)
 - Development and image-build environment
-- Raspberry Pi flashing and first-boot guide
+- Raspberry Pi first-boot guide
 - Initial credential retrieval and reset
 - Stable-IP and router DNS configuration
 - Service lifecycle and reboot behavior

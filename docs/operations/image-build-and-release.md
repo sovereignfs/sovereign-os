@@ -40,12 +40,18 @@ The output directory must be empty. The command fails rather than mixing files f
 
 ```text
 SHA256SUMS
+create-imager-manifest.py
 release-manifest.json
 sovereign-os-<version>-rpi5-arm64.img.zst
 sovereign-os-<version>-rpi5-arm64.packages.tsv.zst
 sovereign-os-<version>-rpi5-arm64.provenance.json
 sovereign-os-<version>-rpi5-arm64.sbom.zst
 ```
+
+The helper creates a local Raspberry Pi Imager catalog that enables Wi-Fi and
+SSH customization for this third-party image. Follow the
+[Imager provisioning guide](raspberry-pi-imager-provisioning.md); loading only
+the raw image through **Use custom** does not enable customization in Imager 2.
 
 `release-manifest.json` records:
 

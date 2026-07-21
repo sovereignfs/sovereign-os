@@ -1,0 +1,17 @@
+[Unit]
+Description=Apply Raspberry Pi Imager provisioning
+Documentation=https://github.com/sovereignfs/sovereign-os
+After=local-fs.target
+Before=network-pre.target iwd.service ssh.service sovereign-pihole.service
+Wants=network-pre.target
+RequiresMountsFor=/boot/firmware /data
+ConditionPathExists=/boot/firmware/rpi-preseed.toml
+ConditionPathExists=!/data/sovereign/imager-provisioned
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/sovereign/apply-imager-provisioning
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

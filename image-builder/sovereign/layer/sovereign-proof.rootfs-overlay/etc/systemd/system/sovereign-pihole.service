@@ -1,8 +1,8 @@
 [Unit]
 Description=Configure and start the Sovereign Pi-hole appliance
 Requires=sovereign-pihole-import.service docker.service
-After=sovereign-pihole-import.service docker.service network-online.target
-Wants=network-online.target
+After=sovereign-imager-provision.service sovereign-pihole-import.service docker.service network-online.target
+Wants=sovereign-imager-provision.service network-online.target
 RequiresMountsFor=/data
 ConditionPathIsMountPoint=/data
 
