@@ -31,6 +31,8 @@ class ImagerManifestTests(unittest.TestCase):
             MODULE.create_manifest(compressed_image, output, "0.1.0-preview.2")
 
             entry = json.loads(output.read_text())["os_list"][0]
+            self.assertIn("icon", entry)
+            self.assertIn("release_date", entry)
             self.assertEqual(entry["init_format"], "rpi-preseed")
             self.assertEqual(entry["devices"], ["pi5-64bit"])
             self.assertEqual(entry["architecture"], "arm64")

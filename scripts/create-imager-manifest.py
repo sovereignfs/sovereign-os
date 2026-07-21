@@ -46,7 +46,9 @@ def create_manifest(image_path, output_path, version):
             {
                 "name": "Sovereign OS",
                 "description": "Local-first operating system for private, self-hosted services",
+                "icon": "",
                 "url": image_path.as_uri(),
+                "release_date": "",
                 "extract_size": extract_size,
                 "extract_sha256": extract_digest,
                 "image_download_size": download_size,
