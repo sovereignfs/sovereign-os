@@ -28,3 +28,16 @@ links, and ownership or modes outside the update contract.
 
 The example hashes and sizes are illustrative and must never be published as a
 real release manifest.
+
+## Backup and Journal v1
+
+The [backup and transaction journal contract](BACKUP_AND_JOURNAL.md) defines
+the initial quiesced Pi-hole backup, safe restore boundary, retention floor,
+atomic state snapshot, append-only diagnostic events, and restart decisions.
+Its machine-readable contracts are:
+
+- [`schema/backup-manifest-v1.schema.json`](schema/backup-manifest-v1.schema.json);
+- [`schema/transaction-state-v1.schema.json`](schema/transaction-state-v1.schema.json).
+
+The corresponding files under [`examples/`](examples/) are test fixtures, not
+real backup or transaction metadata.

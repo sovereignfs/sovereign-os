@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "backup_id": "backup-20260721t220000z-a1b2c3d4",
+  "transaction_id": "update-20260721t215500z-a1b2c3d4",
+  "created_at": "2026-07-21T22:00:00Z",
+  "source": {
+    "appliance_version": "0.1.0-preview.4",
+    "pihole_digest": "sha256:0b26b891bddc2af2cea282201d47ad92e54a53d4dd45d52e377600434d3ebb47",
+    "data_schema": 1
+  },
+  "consistency": {
+    "method": "quiesced",
+    "services_stopped": ["sovereign-pihole"],
+    "restarted_and_healthy": true
+  },
+  "artifacts": [
+    {
+      "role": "pihole_state",
+      "file": "pihole-state.tar.zst",
+      "size": 1048576,
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    {
+      "role": "sovereign_configuration",
+      "file": "sovereign-configuration.tar.zst",
+      "size": 4096,
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    {
+      "role": "secrets",
+      "file": "secrets.tar.zst",
+      "size": 4096,
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    {
+      "role": "release_pointer",
+      "file": "release-pointer.tar.zst",
+      "size": 512,
+      "sha256": "4444444444444444444444444444444444444444444444444444444444444444"
+    }
+  ]
+}

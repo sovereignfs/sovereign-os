@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sovereign.local/schemas/backup-manifest-v1.json",
+  "title": "Sovereign OS pre-update backup manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "backup_id",
+    "transaction_id",
+    "created_at",
+    "source",
+    "consistency",
+    "artifacts"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "backup_id": { "$ref": "#/$defs/id" },
+    "transaction_id": { "$ref": "#/$defs/id" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["appliance_version", "pihole_digest", "data_schema"],
+      "properties": {
+        "appliance_version": { "type": "string", "minLength": 1 },
+        "pihole_digest": { "$ref": "#/$defs/sha256_digest" },
+        "data_schema": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "consistency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "services_stopped", "restarted_and_healthy"],
+      "properties": {
+        "method": { "const": "quiesced" },
+        "services_stopped": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["sovereign-pihole"] }
+        },
+        "restarted_and_healthy": { "type": "boolean" }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": { "$ref": "#/$defs/artifact" },
+      "allOf": [
+        { "contains": { "properties": { "role": { "const": "pihole_state" } }, "required": ["role"] } },
+        { "contains": { "properties": { "role": { "const": "sovereign_configuration" } }, "required": ["role"] } },
+        { "contains": { "properties": { "role": { "const": "secrets" } }, "required": ["role"] } },
+        { "contains": { "properties": { "role": { "const": "release_pointer" } }, "required": ["role"] } }
+      ]
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "sha256_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "file", "size", "sha256"],
+      "properties": {
+        "role": {
+          "enum": ["pihole_state", "sovereign_configuration", "secrets", "release_pointer"]
+        },
+        "file": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*\\.tar\\.zst$" },
+        "size": { "type": "integer", "minimum": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  }
+}

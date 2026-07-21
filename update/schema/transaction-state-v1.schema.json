@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sovereign.local/schemas/transaction-state-v1.json",
+  "title": "Sovereign OS update transaction state v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "transaction_id",
+    "sequence",
+    "state",
+    "source_version",
+    "target_version",
+    "created_at",
+    "updated_at",
+    "backup_id",
+    "failure",
+    "recovery_action"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "transaction_id": { "$ref": "#/$defs/id" },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "state": {
+      "enum": [
+        "available",
+        "downloading",
+        "verified",
+        "backing_up",
+        "backed_up",
+        "staged",
+        "activating",
+        "validating",
+        "committed",
+        "rolling_back",
+        "rolled_back",
+        "recovery_required"
+      ]
+    },
+    "source_version": { "type": "string", "minLength": 1 },
+    "target_version": { "type": "string", "minLength": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "backup_id": {
+      "oneOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }]
+    },
+    "failure": {
+      "oneOf": [{ "$ref": "#/$defs/failure" }, { "type": "null" }]
+    },
+    "recovery_action": {
+      "enum": ["none", "resume", "rollback", "manual"]
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "retryable"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,63}$" },
+        "message": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "retryable": { "type": "boolean" }
+      }
+    }
+  }
+}

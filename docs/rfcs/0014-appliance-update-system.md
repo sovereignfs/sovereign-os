@@ -149,6 +149,13 @@ available
 
 Transitions are recorded durably. An interrupted updater examines the journal and continues, rolls back, or stops with an actionable recovery state. It must never infer success solely because a process exited.
 
+The normative snapshot schema is
+[`update/schema/transaction-state-v1.schema.json`](../../update/schema/transaction-state-v1.schema.json).
+Each transition atomically replaces and fsyncs `state.json`, increments its
+sequence, and appends a non-secret event to `events.jsonl`. The complete
+durability and restart rules are defined in the
+[backup and journal contract](../../update/BACKUP_AND_JOURNAL.md).
+
 ## Installation Sequence
 
 1. Acquire a single update lock.
@@ -157,7 +164,8 @@ Transitions are recorded durably. An interrupted updater examines the journal an
 4. Confirm disk space and system health.
 5. Download payloads into a staging directory.
 6. Verify all digests before privileged mutation.
-7. Create and validate a pre-update backup.
+7. Briefly quiesce Pi-hole, create and validate a pre-update backup, restart
+   Pi-hole, and require DNS/HTTP health before continuing.
 8. Install appliance files into a new version directory.
 9. Import the pinned Pi-hole OCI image and verify its digest.
 10. Validate Compose, Nginx, and systemd content offline.
@@ -179,6 +187,21 @@ Before activation, the updater backs up:
 - previous appliance release reference.
 
 Backups must be validated enough to detect missing or unreadable content. Migration scripts declare whether they are reversible. If a migration is irreversible, the updater must clearly state that application rollback may require restoring the backup and must test that path before supporting the release.
+
+The normative backup metadata schema is
+[`update/schema/backup-manifest-v1.schema.json`](../../update/schema/backup-manifest-v1.schema.json).
+The initial consistency method stops Pi-hole while its authoritative state is
+archived, then restarts and health-checks it before the update proceeds. Four
+separate, mandatory payloads cover Pi-hole state, Sovereign configuration,
+secrets, and the previous release pointer. Runtime container storage, logs,
+staging data, and earlier backups are excluded.
+
+Backup archives and manifests are root-only. Digests, sizes, role completeness,
+permissions, and safe archive listings must validate before `backed_up` can be
+recorded. Restore extracts into staging, validates again, preserves the old
+copy until health checks pass, and never deletes both the old and candidate
+trees on failure. See the
+[backup and journal contract](../../update/BACKUP_AND_JOURNAL.md).
 
 ## Health and Commit
 
@@ -280,11 +303,10 @@ Preferred long-term direction for base-OS updates but deferred until the applica
 
 ## Acceptance Criteria
 
-The v1 manifest schema, detached Ed25519 format, and verifier trust ordering are
-now concrete. The RFC may become Proposed when the backup contract,
-transaction journal, production key-custody workflow, and rollback
-compatibility rules are concrete enough for independent security and
-failure-mode review.
+The v1 manifest schema, detached Ed25519 format, verifier trust ordering,
+backup contract, and transaction journal are now concrete. The RFC may become
+Proposed when the production key-custody workflow and rollback compatibility
+rules are concrete enough for independent security and failure-mode review.
 
 ## Decision
 

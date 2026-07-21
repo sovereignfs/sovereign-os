@@ -170,6 +170,9 @@ Commands that mutate state require appropriate administrator privilege. The upda
 - Compatibility and version rules defined
 - Test signing key workflow established without exposing production keys
 
+The backup manifest and durable transaction-state schemas are also defined.
+Implementation and real-device restore validation remain part of U2-U5.
+
 ### U2 - Persistent Data and Versioned Releases
 
 - Pi-hole state confirmed under `/data`
