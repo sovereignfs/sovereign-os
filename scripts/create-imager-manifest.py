@@ -51,7 +51,7 @@ def create_manifest(image_path, output_path, version):
                 "extract_sha256": extract_digest,
                 "image_download_size": download_size,
                 "image_download_sha256": download_digest,
-                "devices": ["pi5"],
+                "devices": ["pi5-64bit"],
                 "init_format": "rpi-preseed",
                 "architecture": "arm64",
                 "version": version,

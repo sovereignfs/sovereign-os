@@ -32,7 +32,7 @@ class ImagerManifestTests(unittest.TestCase):
 
             entry = json.loads(output.read_text())["os_list"][0]
             self.assertEqual(entry["init_format"], "rpi-preseed")
-            self.assertEqual(entry["devices"], ["pi5"])
+            self.assertEqual(entry["devices"], ["pi5-64bit"])
             self.assertEqual(entry["architecture"], "arm64")
             self.assertEqual(entry["extract_size"], raw_image.stat().st_size)
             self.assertEqual(entry["url"], compressed_image.resolve().as_uri())
