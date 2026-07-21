@@ -62,11 +62,11 @@
       "additionalProperties": false,
       "required": ["appliance", "image_base", "pihole"],
       "properties": {
-        "appliance": { "$ref": "#/$defs/versioned_component" },
-        "image_base": { "$ref": "#/$defs/versioned_component" },
+        "appliance": { "$ref": "#/$defs/sovereign_component" },
+        "image_base": { "$ref": "#/$defs/sovereign_component" },
         "pihole": {
           "allOf": [
-            { "$ref": "#/$defs/versioned_component" },
+            { "$ref": "#/$defs/external_component" },
             {
               "type": "object",
               "required": ["repository", "digest"],
@@ -135,10 +135,20 @@
         "media_type": { "const": "application/vnd.sovereign.update.v1+tar+zstd" }
       }
     },
-    "versioned_component": {
+    "sovereign_component": {
       "type": "object",
       "required": ["version"],
       "properties": { "version": { "$ref": "#/$defs/version" } }
+    },
+    "external_component": {
+      "type": "object",
+      "required": ["version"],
+      "properties": {
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9A-Za-z][0-9A-Za-z._+-]{0,127}$"
+        }
+      }
     },
     "migration": {
       "type": "object",

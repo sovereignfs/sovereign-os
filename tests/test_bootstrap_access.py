@@ -23,6 +23,8 @@ class BootstrapAccessTests(unittest.TestCase):
         self.assertIn("username=sovereign", hook)
         self.assertIn("--uid 1000", hook)
         self.assertIn("--groups sudo", hook)
+        self.assertIn('usermod --login "$username" "$existing_user"', hook)
+        self.assertIn('--home "/home/$username"', hook)
         self.assertIn("chage --lastday 0", hook)
 
         match = re.search(r"password_hash='([^']+)'", hook)

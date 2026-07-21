@@ -8,15 +8,28 @@ username=sovereign
 # keeps the image input reproducible; first login must replace it.
 password_hash='$6$sovereign-previe$FOftgfpqBw/vATnm.blBylK9Pvm.fo1dCpytODrnB3WN4WoBaL0hyhDnAF.B89ZMgPBL2i3OxAG2X/WIm93Rg0'
 
-if chroot "$root" getent passwd 1000 >/dev/null; then
-  echo "UID 1000 already exists; refusing to create the preview bootstrap account" >&2
-  exit 1
+existing_user=$(chroot "$root" getent passwd 1000 | cut -d: -f1 || true)
+
+if [ -n "$existing_user" ] && [ "$existing_user" != "$username" ]; then
+  chroot "$root" usermod --login "$username" "$existing_user"
+  if chroot "$root" getent group "$existing_user" >/dev/null && \
+      ! chroot "$root" getent group "$username" >/dev/null; then
+    chroot "$root" groupmod --new-name "$username" "$existing_user"
+  fi
+  chroot "$root" usermod \
+    --home "/home/$username" \
+    --move-home \
+    "$username"
+elif [ -z "$existing_user" ]; then
+  chroot "$root" useradd \
+    --create-home \
+    --uid 1000 \
+    --user-group \
+    "$username"
 fi
 
-chroot "$root" useradd \
-  --create-home \
-  --uid 1000 \
-  --user-group \
+chroot "$root" usermod \
+  --append \
   --groups sudo \
   --shell /bin/bash \
   --password "$password_hash" \
@@ -25,4 +38,3 @@ chroot "$root" useradd \
 # A last-change value of zero makes PAM require a replacement before granting
 # an interactive shell.
 chroot "$root" chage --lastday 0 "$username"
-
