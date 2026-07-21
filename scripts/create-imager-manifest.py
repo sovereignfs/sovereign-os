@@ -42,6 +42,19 @@ def create_manifest(image_path, output_path, version):
     download_size, download_digest = digest_file(image_path)
     extract_size, extract_digest = digest_extracted_zstd(image_path)
     manifest = {
+        "imager": {
+            "devices": [
+                {
+                    "name": "Raspberry Pi 5",
+                    "description": "Raspberry Pi 5, 500 / 500+, and Compute Module 5",
+                    "icon": "https://downloads.raspberrypi.com/imager/icons/RPi_5.png",
+                    "tags": ["pi5-64bit"],
+                    "matching_type": "exclusive",
+                    "capabilities": [],
+                    "default": True,
+                }
+            ]
+        },
         "os_list": [
             {
                 "name": "Sovereign OS",

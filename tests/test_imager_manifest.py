@@ -30,7 +30,11 @@ class ImagerManifestTests(unittest.TestCase):
 
             MODULE.create_manifest(compressed_image, output, "0.1.0-preview.2")
 
-            entry = json.loads(output.read_text())["os_list"][0]
+            manifest = json.loads(output.read_text())
+            device = manifest["imager"]["devices"][0]
+            self.assertEqual(device["tags"], ["pi5-64bit"])
+            self.assertTrue(device["default"])
+            entry = manifest["os_list"][0]
             self.assertIn("icon", entry)
             self.assertIn("release_date", entry)
             self.assertEqual(entry["init_format"], "rpi-preseed")
