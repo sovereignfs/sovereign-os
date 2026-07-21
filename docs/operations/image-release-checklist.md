@@ -43,6 +43,7 @@
 
 ## Flash and First Boot
 
+- [ ] Raspberry Pi Imager 2.0.11 or later is used and its exact version is recorded.
 - [ ] The local `.rpi-imager-manifest` is generated from the published image.
 - [ ] Imager presents Wi-Fi and SSH customization for the Sovereign OS entry.
 - [ ] The compressed artifact is written using Raspberry Pi Imager with a test SSH public key and Wi-Fi configuration.
