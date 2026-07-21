@@ -21,7 +21,36 @@ The current phase is proving the appliance foundation on Raspberry Pi 5: a repro
 
 Current engineering images still require physical Raspberry Pi 5 qualification before they should be treated as releases.
 
+## Preview First Login
+
+Preview images built after the bootstrap-access change support a headless first
+login over a trusted Ethernet network:
+
+```text
+Address:  sovereign.local
+Username: sovereign
+Password: sovereign
+```
+
+The password is public and temporary. SSH requires it to be replaced before
+opening the first shell. Do not connect a preview device directly to the
+internet or forward its SSH port from a router.
+
+```bash
+ssh sovereign@sovereign.local
+```
+
+Pi-hole is available over HTTP on the trusted local network at
+`http://sovereign.local/dns/admin/`. HTTPS with automatic browser trust is not
+part of the POC because public certificate authorities cannot issue for the
+private `.local` name.
+
+See the [first-login and network setup guide](docs/operations/first-login-and-network-setup.md)
+for the mandatory password change, Pi-hole credentials, SSH-key hardening,
+Wi-Fi setup, and recovery procedure.
+
 ## Repository
+
 ```text
 .github/workflows/   validation and ARM64 image-build automation
 docs/                product, architecture, research, security, and operations
@@ -31,6 +60,7 @@ tests/               automated tooling tests
 ```
 
 Start with:
+
 - [Project concept](CONCEPT.md)
 - [Public roadmap](ROADMAP.md)
 - [Documentation index](docs/README.md)

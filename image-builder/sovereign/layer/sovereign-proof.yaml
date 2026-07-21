@@ -11,6 +11,7 @@ mmdebstrap:
     - ca-certificates
     - curl
     - dnsutils
+    - iwd
     - libnss-mdns
     - nginx
     - python3-minimal

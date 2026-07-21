@@ -1,14 +1,18 @@
 # Phase 01 - Flashable Pi-hole Image POC
 
-**Status:** Draft  
-**Version:** 0.2  
+**Status:** Physical release-candidate qualification
+**Version:** 0.3
 **Target:** Raspberry Pi 5 with 16 GB RAM  
 **Owner:** Project creator  
 **Related decision:** [ADR-0001](../adrs/0001-phase-01-appliance-architecture.md)
 
 ## 1. Objective
 
-Produce a reproducible disk image that a user can write with Raspberry Pi Imager, boot on a Raspberry Pi 5, and use as an operational Pi-hole appliance without installing packages or running commands.
+Produce a reproducible disk image that a user can write with Raspberry Pi
+Imager, boot on a Raspberry Pi 5, and use as an operational Pi-hole appliance
+without installing packages. The preview uses one documented SSH onboarding
+session to replace its temporary bootstrap password, retrieve the Pi-hole
+credential, and optionally configure keys or Wi-Fi.
 
 Pi-hole must be reachable at:
 
@@ -16,7 +20,7 @@ Pi-hole must be reachable at:
 http://sovereign.local/dns/admin/
 ```
 
-The image establishes the distribution foundation for Sovereign Home OS. It does not yet implement the broader Sovereign platform.
+The image establishes the distribution foundation for Sovereign OS. It does not yet implement the broader Sovereign platform.
 
 ## 2. User Promise
 
@@ -25,6 +29,7 @@ Download image
     -> flash storage
     -> boot Raspberry Pi
     -> wait for first-boot initialization
+    -> SSH once and replace the temporary password
     -> open sovereign.local
     -> use Pi-hole
 ```
@@ -92,6 +97,8 @@ The root `/admin/*` and `/api/*` namespaces remain reserved for future Sovereign
 - Idempotent first-boot initialization service
 - Dedicated `/data` partition and persistent data/secret directory structure
 - Health-check and diagnostic commands
+- Preview bootstrap account with mandatory first-login password replacement
+- Post-login SSH-key, Wi-Fi, and Pi-hole password management tools
 - Log rotation
 - Release manifest, checksums, and build metadata
 
@@ -166,6 +173,7 @@ Enabling DHCP automatically is explicitly prohibited because an existing router 
 - Direct-IP fallback
 - `/dns/admin/` and `/dns/api/` proxy routing
 - Unique first-boot identity and credentials
+- Headless Ethernet onboarding and mandatory bootstrap password replacement
 - Automatic service startup after reboot
 - Fresh-flash, DNS, HTTP, persistence, and recovery testing
 - Checksums, build manifest, release notes, and known limitations
@@ -236,7 +244,9 @@ Phase 01 is complete when:
 
 - Raspberry Pi Imager can write the compressed artifact successfully.
 - A Raspberry Pi 5 boots from a clean supported storage device.
-- First boot completes without shell commands or package installation by the user.
+- Appliance initialization completes without shell commands or package
+  installation by the user; the documented preview onboarding session remains
+  required for headless credential retrieval.
 - Pi-hole starts automatically and answers DNS queries on port 53.
 - `http://sovereign.local/` redirects to `/dns/admin/` on tested mDNS clients.
 - `http://sovereign.local/dns/admin/` provides the complete Pi-hole UI.
@@ -260,6 +270,10 @@ Phase 01 is complete when:
 - Image build reproducibility comparison
 - Image decompression and size verification
 - Fresh microSD flash and boot
+- Bootstrap SSH login and forced password replacement
+- Pi-hole password retrieval and persistent replacement
+- SSH-key migration, password-authentication disablement, and recovery
+- Post-login Wi-Fi configuration with Ethernet removal
 - First boot with and without internet
 - First boot power interruption at multiple steps
 - Duplicate hostname behavior
@@ -287,7 +301,17 @@ Phase 01 is complete when:
 
 ## 15. Immediate Next Actions
 
-1. Repeat the successful ARM64 engineering proof on a supported native ARM64 host, then flash and boot it on the target Pi 5.
+1. Build a versioned preview containing the bootstrap-access implementation.
+2. Flash the published artifact through Raspberry Pi Imager's ordinary custom
+   image flow and boot it on the target Raspberry Pi 5.
+3. Verify forced password replacement, Pi-hole credential retrieval and reset,
+   SSH-key installation, password-authentication hardening, and recovery.
+4. Configure Wi-Fi after first login, remove Ethernet, and verify reconnect and
+   reboot behavior.
+5. Complete DNS, HTTP namespace, persistence, interruption, repeated-reboot,
+   resource, and release-artifact checks from M5.
+6. Publish the qualified Phase 01 preview and then begin Milestone 01.1, the
+   appliance update foundation.
 2. Flash the generated Sovereign layer/storage image and complete the physical Proof 1-3 checklist on a Pi 5.
 3. Test the exact exported artifact on real hardware, including direct-IP fallback and the supported mDNS client matrix.
 4. Run the versioned release-candidate pipeline and qualify the downloaded bundle rather than an intermediate local image.

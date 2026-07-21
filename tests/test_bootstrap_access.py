@@ -11,6 +11,10 @@ SSH_CONFIG = (
     / "image-builder/sovereign/layer/sovereign-proof.rootfs-overlay/etc/ssh/sshd_config.d/10-sovereign.conf"
 )
 LAYER_CONFIG = ROOT / "image-builder/sovereign/layer/sovereign-proof.yaml"
+PIHOLE_PASSWORD_COMMAND = (
+    ROOT
+    / "image-builder/sovereign/layer/sovereign-proof.rootfs-overlay/usr/sbin/sovereign-pihole-password"
+)
 
 
 class BootstrapAccessTests(unittest.TestCase):
@@ -38,6 +42,16 @@ class BootstrapAccessTests(unittest.TestCase):
 
     def test_operator_can_use_documented_sudo_flow(self):
         self.assertRegex(LAYER_CONFIG.read_text(), r"(?m)^    - sudo$")
+
+    def test_post_login_wifi_tool_is_in_image(self):
+        self.assertRegex(LAYER_CONFIG.read_text(), r"(?m)^    - iwd$")
+
+    def test_pihole_password_command_updates_runtime_and_secret(self):
+        command = PIHOLE_PASSWORD_COMMAND.read_text()
+        self.assertIn('docker exec pihole pihole setpassword "$password"', command)
+        self.assertIn('mv "$temporary_file" "$password_file"', command)
+        self.assertIn('chmod 0600 "$password_file"', command)
+        self.assertIn('if [ "${#password}" -lt 12 ]', command)
 
 
 if __name__ == "__main__":
