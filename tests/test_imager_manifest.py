@@ -42,3 +42,17 @@ class ImagerManifestTests(unittest.TestCase):
             self.assertEqual(entry["architecture"], "arm64")
             self.assertEqual(entry["extract_size"], raw_image.stat().st_size)
             self.assertEqual(entry["url"], compressed_image.resolve().as_uri())
+
+    def test_creates_manifest_for_decompressed_image(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            raw_image = root / "sovereign.img"
+            output = root / "sovereign.rpi-imager-manifest"
+            raw_image.write_bytes(b"sovereign-image" * 128)
+
+            MODULE.create_manifest(raw_image, output, "0.1.0-preview.2")
+
+            entry = json.loads(output.read_text())["os_list"][0]
+            self.assertEqual(entry["extract_size"], entry["image_download_size"])
+            self.assertEqual(entry["extract_sha256"], entry["image_download_sha256"])
+            self.assertEqual(entry["url"], raw_image.resolve().as_uri())

@@ -35,6 +35,21 @@ python3 create-imager-manifest.py \
   --version 0.1.0-preview.1
 ```
 
+If Imager 2.0.11-rc1 reports the compressed-file SHA-256 as the "Actual"
+uncompressed hash, decompress the local image and generate the manifest from
+the raw file instead:
+
+```bash
+zstd --decompress sovereign-os-0.1.0-preview.1-rpi5-arm64.img.zst \
+  --output sovereign-os-0.1.0-preview.1-rpi5-arm64.img
+python3 create-imager-manifest.py \
+  sovereign-os-0.1.0-preview.1-rpi5-arm64.img \
+  --version 0.1.0-preview.1
+```
+
+This preserves full SHA-256 verification but requires approximately 3.2 GB of
+additional local disk space for the current image.
+
 Open `sovereign-os.rpi-imager-manifest` with Raspberry Pi Imager. Select the
 Sovereign OS entry, select the target storage, and configure:
 
