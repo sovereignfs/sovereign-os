@@ -1,8 +1,11 @@
 # Milestone 01.2 - Local Conversation and Capabilities
 
-**Status:** Planned  
-**Priority:** After the appliance update foundation; research and RFC work may proceed in parallel  
-**Depends on:** A qualified Phase 01 image and a stable appliance update boundary  
+**Status:** Planned
+
+**Priority:** After the appliance update foundation; research and RFC work may proceed in parallel
+
+**Depends on:** A qualified Phase 01 image and a stable appliance update boundary
+
 **Target:** Raspberry Pi 5 with 16 GB RAM
 
 ## 1. Objective
