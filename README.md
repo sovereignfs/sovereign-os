@@ -22,7 +22,6 @@ The current phase is proving the appliance foundation on Raspberry Pi 5: a repro
 Current engineering images still require physical Raspberry Pi 5 qualification before they should be treated as releases.
 
 ## Repository
-
 ```text
 .github/workflows/   validation and ARM64 image-build automation
 docs/                product, architecture, research, security, and operations
@@ -32,7 +31,6 @@ tests/               automated tooling tests
 ```
 
 Start with:
-
 - [Project concept](CONCEPT.md)
 - [Public roadmap](ROADMAP.md)
 - [Documentation index](docs/README.md)
