@@ -164,8 +164,9 @@ Commands that mutate state require appropriate administrator privilege. The upda
 
 ### U1 - Update Format and Trust
 
-- Manifest schema defined
-- Signing and verification model approved
+- Manifest schema defined: v1 JSON Schema and example committed
+- Signing and verification format defined: detached Ed25519 over exact bytes;
+  production key custody remains pending
 - Compatibility and version rules defined
 - Test signing key workflow established without exposing production keys
 
@@ -233,7 +234,7 @@ This milestone designs the application/appliance updater so it does not prevent 
 ## 14. Open Questions
 
 - Exact update artifact format
-- Signing algorithm, key custody, rotation, and revocation
+- Signing-key custody, rotation, and revocation publication
 - Release distribution host
 - Stable and preview channel semantics
 - Backup format and retention
@@ -251,4 +252,3 @@ This milestone designs the application/appliance updater so it does not prevent 
 3. Implement signed manifest verification before download/install automation.
 4. Deliver a Pi-hole-only update transaction.
 5. Add appliance-file updates only after Pi-hole update rollback is reliable.
-

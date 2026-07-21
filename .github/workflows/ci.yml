@@ -19,7 +19,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install validation tools
-        run: sudo apt-get update && sudo apt-get install --yes shellcheck zstd
+        run: sudo apt-get update && sudo apt-get install --yes python3-jsonschema shellcheck zstd
 
       - name: Check shell scripts
         run: |

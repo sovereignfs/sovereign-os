@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sovereign.local/schemas/update-manifest-v1.json",
+  "title": "Sovereign OS update manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "release",
+    "compatibility",
+    "artifacts",
+    "components",
+    "requirements",
+    "migrations",
+    "rollback",
+    "signing"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "published_at", "channel", "notes_url"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" },
+        "version": { "$ref": "#/$defs/version" },
+        "published_at": { "type": "string", "format": "date-time" },
+        "channel": { "enum": ["preview", "stable"] },
+        "notes_url": { "$ref": "#/$defs/https_url" }
+      }
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["devices", "source_versions", "allow_downgrade"],
+      "properties": {
+        "devices": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["rpi5-arm64"] }
+        },
+        "source_versions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["minimum", "maximum_exclusive"],
+          "properties": {
+            "minimum": { "$ref": "#/$defs/version" },
+            "maximum_exclusive": { "$ref": "#/$defs/version" }
+          }
+        },
+        "allow_downgrade": { "const": false }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/artifact" }
+    },
+    "components": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["appliance", "image_base", "pihole"],
+      "properties": {
+        "appliance": { "$ref": "#/$defs/versioned_component" },
+        "image_base": { "$ref": "#/$defs/versioned_component" },
+        "pihole": {
+          "allOf": [
+            { "$ref": "#/$defs/versioned_component" },
+            {
+              "type": "object",
+              "required": ["repository", "digest"],
+              "properties": {
+                "repository": { "type": "string", "minLength": 1 },
+                "digest": { "$ref": "#/$defs/sha256_digest" }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["free_bytes", "reboot"],
+      "properties": {
+        "free_bytes": { "type": "integer", "minimum": 1 },
+        "reboot": { "type": "boolean" }
+      }
+    },
+    "migrations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/migration" }
+    },
+    "rollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["supported", "requires_data_restore", "limitations"],
+      "properties": {
+        "supported": { "type": "boolean" },
+        "requires_data_restore": { "type": "boolean" },
+        "limitations": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "signing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "key_id"],
+      "properties": {
+        "algorithm": { "const": "Ed25519" },
+        "key_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" }
+      }
+    }
+  },
+  "$defs": {
+    "version": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$"
+    },
+    "https_url": { "type": "string", "pattern": "^https://" },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "sha256_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "url", "size", "sha256", "media_type"],
+      "properties": {
+        "role": { "enum": ["update_bundle"] },
+        "url": { "$ref": "#/$defs/https_url" },
+        "size": { "type": "integer", "minimum": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "media_type": { "const": "application/vnd.sovereign.update.v1+tar+zstd" }
+      }
+    },
+    "versioned_component": {
+      "type": "object",
+      "required": ["version"],
+      "properties": { "version": { "$ref": "#/$defs/version" } }
+    },
+    "migration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "from_schema", "to_schema", "reversible"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" },
+        "from_schema": { "type": "integer", "minimum": 0 },
+        "to_schema": { "type": "integer", "minimum": 1 },
+        "reversible": { "type": "boolean" }
+      }
+    }
+  }
+}

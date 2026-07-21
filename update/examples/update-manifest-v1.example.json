@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "release": {
+    "id": "sovereign-os-0.2.0-preview.1",
+    "version": "0.2.0-preview.1",
+    "published_at": "2026-07-21T20:00:00Z",
+    "channel": "preview",
+    "notes_url": "https://github.com/sovereignfs/sovereign-os/releases/tag/v0.2.0-preview.1"
+  },
+  "compatibility": {
+    "devices": ["rpi5-arm64"],
+    "source_versions": {
+      "minimum": "0.1.0-preview.4",
+      "maximum_exclusive": "0.3.0"
+    },
+    "allow_downgrade": false
+  },
+  "artifacts": [
+    {
+      "role": "update_bundle",
+      "url": "https://github.com/sovereignfs/sovereign-os/releases/download/v0.2.0-preview.1/sovereign-update-0.2.0-preview.1.tar.zst",
+      "size": 536870912,
+      "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "media_type": "application/vnd.sovereign.update.v1+tar+zstd"
+    }
+  ],
+  "components": {
+    "appliance": { "version": "0.2.0-preview.1" },
+    "image_base": { "version": "0.1.0-preview.4" },
+    "pihole": {
+      "version": "2026.04.1",
+      "repository": "docker.io/pihole/pihole",
+      "digest": "sha256:0b26b891bddc2af2cea282201d47ad92e54a53d4dd45d52e377600434d3ebb47"
+    }
+  },
+  "requirements": {
+    "free_bytes": 2147483648,
+    "reboot": false
+  },
+  "migrations": [],
+  "rollback": {
+    "supported": true,
+    "requires_data_restore": false,
+    "limitations": []
+  },
+  "signing": {
+    "algorithm": "Ed25519",
+    "key_id": "preview-2026-01"
+  }
+}

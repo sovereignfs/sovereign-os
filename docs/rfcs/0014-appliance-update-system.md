@@ -43,7 +43,8 @@ Publishing a new disk image does not provide a safe update path for an installed
 One source release may produce:
 
 ```text
-sovereign-pi5-<version>.img.xz       clean install and recovery
+sovereign-os-<version>-rpi5-arm64.img.zst
+                                        clean install and recovery
 sovereign-update-<version>.tar.zst   installed device update
 release-manifest.json                published release metadata
 release-manifest.sig                 signature
@@ -68,6 +69,11 @@ The device records:
 
 ## Manifest Requirements
 
+The normative v1 contract is the JSON Schema at
+[`update/schema/sovereign-update-manifest-v1.schema.json`](../../update/schema/sovereign-update-manifest-v1.schema.json),
+with a complete non-release fixture in
+[`update/examples/update-manifest-v1.example.json`](../../update/examples/update-manifest-v1.example.json).
+
 The signed manifest must include:
 
 - release identifier and semantic/project version;
@@ -86,7 +92,17 @@ The signed manifest must include:
 
 Signatures establish publisher authenticity. Per-file cryptographic digests establish payload integrity.
 
-## Key Management
+## Signature Format and Key Management
+
+Manifest v1 uses Ed25519. The publisher signs the exact UTF-8 bytes of
+`release-manifest.json`, including its final newline. There is no JSON
+reserialization or canonicalization during verification. The detached
+`release-manifest.sig` is the base64 encoding of the raw 64-byte signature.
+
+The untrusted manifest's `signing.key_id` selects a public key from the
+device's preinstalled trust store. Selection does not confer trust. The client
+must reject an unknown, wrong-channel, expired, or revoked key before using any
+manifest URL or compatibility claim.
 
 - The device image contains only trusted public verification keys.
 - Private release keys are stored outside source control and build images.
@@ -94,7 +110,7 @@ Signatures establish publisher authenticity. Per-file cryptographic digests esta
 - The format must support key rotation and revocation.
 - Development/test keys must not be trusted by production-channel devices.
 
-The exact algorithm and custody mechanism remain unresolved.
+Production private-key custody and CI signing integration remain unresolved.
 
 ## Persistent and Replaceable State
 
@@ -253,9 +269,7 @@ Preferred long-term direction for base-OS updates but deferred until the applica
 
 ## Unresolved Questions
 
-- Artifact archive format
-- Manifest schema versioning
-- Signing algorithm and key custody
+- Production signing-key custody, rotation publication, and CI integration
 - Release hosting
 - Backup format and validation depth
 - Pi-hole data compatibility matrix
@@ -266,7 +280,11 @@ Preferred long-term direction for base-OS updates but deferred until the applica
 
 ## Acceptance Criteria
 
-The RFC may become Proposed when the manifest schema, signing model, backup contract, transaction journal, and rollback compatibility rules are concrete enough for independent security and failure-mode review.
+The v1 manifest schema, detached Ed25519 format, and verifier trust ordering are
+now concrete. The RFC may become Proposed when the backup contract,
+transaction journal, production key-custody workflow, and rollback
+compatibility rules are concrete enough for independent security and
+failure-mode review.
 
 ## Decision
 
