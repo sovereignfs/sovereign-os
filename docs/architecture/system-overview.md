@@ -2,13 +2,13 @@
 
 **Status:** Draft  
 **Version:** 0.1  
-**Scope:** Long-term platform direction; not the active Phase 01 image architecture
+**Scope:** Long-term platform direction and Milestone 01.2 boundaries; not the active Phase 01 image architecture
 
 > The active Phase 01 architecture is defined by [ADR-0001](../adrs/0001-phase-01-appliance-architecture.md) and [RFC-0010](../rfcs/0010-raspberry-pi-image-deployment.md). Phase 01 does not implement the platform components described below.
 
 ## Purpose
 
-Sovereign Home OS is a local application platform that presents independently managed home services through a coherent user experience. AI is one interface to this platform, not a privileged replacement for platform controls.
+Sovereign OS is a local application platform that presents independently managed home services through a coherent user experience. AI is one interface to this platform, not a privileged replacement for platform controls.
 
 This document records known system boundaries and constraints. Exact technology, process, packaging, and protocol decisions require research and RFC approval.
 
@@ -24,13 +24,11 @@ Web interface and local API
 Core runtime
     +--> health and configuration
     +--> AI orchestration
+    +--> inference provider adapter --> local model runner
     +--> capability registry and executor
-                 |
-                 v
-          Pi-hole adapter
-                 |
-                 v
-          Pi-hole v6 API
+                 +--> Pi-hole adapter --> Pi-hole v6 API
+                 +--> web.search --> local SearXNG --> upstream engines
+                 +--> web.fetch --> allowlisted external page
 ```
 
 The preview may package some boundaries together in one process. Logical boundaries should still be explicit so they can be tested and separated later if evidence requires it.
@@ -63,7 +61,28 @@ Maps Pi-hole API operations into stable platform capabilities and error types. P
 
 ### AI Provider
 
-Supplies language-model inference. It may be local or explicitly configured as remote; that decision is unresolved. Provider choice must not change capability safety boundaries.
+Supplies language-model inference through a provider-neutral contract owned by
+Sovereign. The initial direction is local inference, with llama.cpp and Ollama
+benchmarked behind the same adapter. Provider choice must not change
+conversation, model-management, or capability safety boundaries. The runner API
+binds only to a private host/container interface and is not a LAN API.
+
+### Model Manager
+
+Owns model manifests, license/source metadata, digest verification, import,
+activation, compatibility, and storage under persistent Sovereign data. A
+runner-specific model catalog is an implementation convenience, not the source
+of product truth.
+
+### Web Search Adapter
+
+Maps the stable `web.search` capability to a locally operated SearXNG service.
+SearXNG is a replaceable provider, not a capability contract. Search queries
+still travel to configured upstream engines, so external communication must be
+explicit and private household context must not be silently added to queries.
+
+Fetched pages are handled by a separate constrained `web.fetch` capability.
+Search does not grant the model general network access.
 
 ## Request Flow
 
@@ -72,8 +91,8 @@ Supplies language-model inference. It may be local or explicitly configured as r
 3. The model either proposes a registered capability invocation or produces a non-tool response.
 4. The executor treats the proposal as untrusted data.
 5. The executor validates name, schema, permissions, limits, and preview side-effect policy.
-6. The Pi-hole adapter invokes an allowlisted API operation.
-7. The adapter returns typed data or a typed error.
+6. The selected adapter invokes an allowlisted service operation.
+7. The adapter returns bounded typed data, citations, or a typed error.
 8. The system produces a user-facing explanation grounded in that result.
 9. Diagnostics record the event without credentials or sensitive DNS details by default.
 
@@ -91,6 +110,10 @@ Core platform
 Pi-hole
 
 Core platform
+    | external-query and untrusted-content boundary
+SearXNG, upstream search engines, and fetched websites
+
+Core platform
     | package and lifecycle boundary (future)
 Plugins
 ```
@@ -98,6 +121,8 @@ Plugins
 - The browser is not trusted merely because it is on the local network.
 - Model output is always untrusted.
 - Pi-hole data may reveal household browsing patterns and is sensitive.
+- Search terms and fetched content cross an explicit external trust boundary;
+  self-hosting SearXNG does not eliminate upstream disclosure.
 - Plugins will eventually be less trusted than the core platform; the preview must avoid designing implicit unlimited plugin authority.
 
 ## Data Categories
@@ -107,6 +132,8 @@ Plugins
 - Pi-hole connection secret
 - Optional AI-provider secret
 - Conversation content
+- Search queries, result URLs, and fetched excerpts
+- Model artifacts, licenses, manifests, and activation state
 - Capability request and result metadata
 - Pi-hole statistics and client identifiers
 - Logs, metrics, and diagnostic data
@@ -121,6 +148,8 @@ Handling details belong in the [data inventory](../security/data-inventory.md).
 - No public binding or remote access by default.
 - No secrets in source control, browser payloads, or normal logs.
 - No model call bypassing the capability executor.
+- No model runner exposed directly to the LAN.
+- No general network tool presented to the model.
 - No unsupported operation represented as successful.
 - No mandatory telemetry.
 
@@ -129,7 +158,7 @@ Handling details belong in the [data inventory](../security/data-inventory.md).
 - Runtime language and web framework
 - Process and package boundaries
 - Native versus container deployment
-- AI-provider default and model abstraction
+- Initial local runner and model, pending Raspberry Pi benchmark
 - Authentication mechanism
 - Capability schema format and naming convention
 - Configuration and secret storage
@@ -137,5 +166,6 @@ Handling details belong in the [data inventory](../security/data-inventory.md).
 - Local hostname mechanism
 - Pi-hole API compatibility boundary
 - Log and diagnostic retention
+- Search-provider configuration, safe-fetch policy, and query retention
 
 These unknowns should be resolved through research, RFC review, experiments, and ADRs rather than silently in implementation.

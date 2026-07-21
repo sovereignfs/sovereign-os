@@ -2,7 +2,7 @@
 
 **Status:** Draft  
 **Version:** 0.1  
-**Phase:** Deferred AI-enabled preview; not Phase 01
+**Phase:** Milestone 01.2; not Phase 01
 
 > These use cases remain valid for the later AI and capability milestone. Phase 01 is now limited to the [flashable Pi-hole image POC](../roadmap/01-preview-poc.md).
 
@@ -10,7 +10,7 @@
 
 **User intent:** Determine whether DNS filtering is operating normally.  
 **Successful outcome:** The system reports what it can verify about Pi-hole connectivity and health, with a timestamp and clear limits.  
-**Failure behavior:** Distinguish Pi-hole unavailable, authentication failed, incompatible API, and Sovereign Home OS integration failure.  
+**Failure behavior:** Distinguish Pi-hole unavailable, authentication failed, incompatible API, and Sovereign OS integration failure.
 **Permissions:** Read-only Pi-hole health access.  
 **Internet dependency:** None when Pi-hole and the selected AI path are local; otherwise only the AI response generation may require internet.
 
@@ -39,7 +39,7 @@
 **Permissions:** Read-only Pi-hole query and list inspection.  
 **Safety:** The preview must not automatically allowlist the domain.
 
-## UC-05: Check Sovereign Home OS Health
+## UC-05: Check Sovereign OS Health
 
 **User intent:** Determine whether the local platform and its required dependencies are operating.  
 **Successful outcome:** Show core runtime, AI provider, Pi-hole integration, and relevant resource status.  
@@ -51,6 +51,26 @@
 **User intent:** Ask something outside the preview's capability set.  
 **Successful outcome:** Explain that the action is unsupported, avoid pretending it occurred, and identify supported alternatives where helpful.  
 **Safety:** The AI must not improvise shell commands, generic network requests, or unregistered tool calls.
+
+## UC-07: Answer a Current Question with Web Search
+
+**User intent:** Ask a question that cannot be answered reliably from local
+knowledge or registered household capabilities.
+
+**Successful outcome:** After explicit search authorization, the system sends a
+minimal visible query through the local SearXNG provider, returns an answer with
+inspectable source links, and distinguishes retrieved evidence from model
+knowledge.
+
+**Failure behavior:** Explain when search is disabled, offline, blocked by an
+upstream engine, or insufficient to support an answer. Do not fabricate sources.
+
+**Permissions:** `web.search`, followed by constrained `web.fetch` only when
+required.
+
+**Privacy:** Search terms leave the device for configured upstream engines. The
+system must not silently add conversation history, DNS data, device names, or
+other household context to the query.
 
 ## Evaluation Rules
 

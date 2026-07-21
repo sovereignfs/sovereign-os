@@ -13,3 +13,9 @@ RFCs are proposals, not decisions. Start with the [RFC template](../templates/rf
 - [RFC-0014: Appliance update system](0014-appliance-update-system.md) - Draft; immediate post-POC priority
 
 RFC-0001 through RFC-0004 and RFC-0006 refer to the later platform and AI capability work. They are deferred until the Phase 01 image foundation is complete. Later proposals for authentication, configuration, logging, backup, updates, general plugin lifecycle, and voice should be created only when their problem and evidence are mature enough for a concrete proposal.
+
+RFC-0002 through RFC-0004 and RFC-0006 are the proposal set required for
+[Milestone 01.2](../roadmap/01-2-local-conversation-capabilities.md). They may be
+written and reviewed while physical image qualification and update-foundation
+work continue, but implementation must preserve the accepted appliance and
+update boundaries.

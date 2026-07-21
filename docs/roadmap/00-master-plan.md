@@ -1,4 +1,4 @@
-# Sovereign Home OS
+# Sovereign OS
 
 ## Master Plan
 
@@ -270,11 +270,15 @@ Converts an approved proposal into concrete engineering tasks.
 
 # 4. Roadmap Overview
 
-The proposed development path consists of eight phases.
+The proposed development path consists of eight phases. Two bounded milestones
+bridge the appliance proof and the broader core-platform phase so the project
+continues delivering complete vertical slices.
 
 ```text
 Phase 00 — Project Foundation
 Phase 01 — Flashable Pi-hole Image POC
+Milestone 01.1 — Appliance Update Foundation
+Milestone 01.2 — Local Conversation and Capabilities
 Phase 02 — Core Platform
 Phase 03 — Personal Daily Driver
 Phase 04 — Voice Interface
@@ -431,6 +435,14 @@ Phase 00 is complete when:
 
 > **Immediate next priority:** After the POC release, deliver the [Appliance Update Foundation](01-1-update-foundation.md) so installed devices can receive signed Pi-hole and appliance updates without reflashing. Phase 01 must create the dedicated persistent data partition required by that milestone. See [ADR-0002](../adrs/0002-install-images-and-update-artifacts.md).
 
+> **Following vertical slice:** After the update boundary is reliable, deliver
+> [Local Conversation and Capabilities](01-2-local-conversation-capabilities.md).
+> Architecture, privacy design, and Raspberry Pi inference benchmarks may
+> proceed in parallel. This slice introduces a Sovereign-owned conversation UI,
+> provider-neutral local inference, deterministic capability execution,
+> read-only Pi-hole operations, and opt-in SearXNG-backed web search. Home
+> Assistant follows through the same capability boundary; voice remains later.
+
 ## Objective
 
 Build the smallest compelling version of Sovereign Home OS and install it on a Raspberry Pi 5 with 16 GB of memory.
@@ -532,14 +544,19 @@ Example questions:
   - Offline services
   - Unsupported requests
   - Failed capability calls
+- Own the conversation, citations, privacy indicators, confirmation, and
+  capability-result experience within Sovereign. Open WebUI may be used for
+  development evaluation but is not the product shell.
 
 ### AI Integration
 
-- Establish one supported model path.
-- Decide whether the preview defaults to:
-  - Fully local inference
-  - A user-configured remote provider
-  - Both
+- Establish a provider-neutral inference boundary owned by Sovereign.
+- Benchmark llama.cpp and Ollama on the Raspberry Pi 5 and select one initial
+  local runner/model pair using resource, latency, reliability, and structured
+  capability-call evidence.
+- Keep remote providers explicit, optional, and replaceable.
+- Keep model manifests, verification, activation, and storage independent of
+  the selected runner.
 - Implement tool or capability invocation.
 - Restrict the AI to explicitly registered operations.
 - Log tool calls without exposing secrets.
@@ -553,6 +570,10 @@ Example questions:
 - Implement typed input and output validation.
 - Implement error responses.
 - Create one example capability.
+- Implement web retrieval as explicit `web.search` and constrained `web.fetch`
+  capabilities rather than giving the model general network access.
+- Use a locally operated SearXNG instance as the initial replaceable search
+  provider and disclose upstream query transmission.
 
 ### Pi-hole Integration
 

@@ -18,10 +18,10 @@ Research documents establish evidence before the project commits to an implement
 ## Immediate Post-POC Research
 
 - [OTA update framework assessment](ota-update-framework-assessment.md)
+- [Local AI options](local-ai-options.md) - Direction selected; Raspberry Pi 5 runner and model benchmark pending
 
 ## Deferred Platform Research
 
-- [Local AI options](local-ai-options.md)
 - [Pi-hole API assessment](pihole-api-assessment.md)
 
 Use the [research-note template](../templates/research-note.md). Conclusions should identify which RFC or decision they inform.
