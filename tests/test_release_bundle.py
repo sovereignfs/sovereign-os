@@ -31,6 +31,8 @@ class ReleaseBundleTests(unittest.TestCase):
             "PIHOLE_IMAGE_TAG=2026.04.1\n"
             f"PIHOLE_IMAGE_DIGEST=sha256:{'0' * 64}\n"
         )
+        (self.repo / "scripts").mkdir()
+        (self.repo / "scripts/create-imager-manifest.py").write_text("# helper\n")
         package_manifest = self.root / "manifest"
         package_manifest.write_text(
             "".join(f"{package}\t1.0\n" for package in MODULE.REQUIRED_PACKAGES)
@@ -75,7 +77,8 @@ class ReleaseBundleTests(unittest.TestCase):
         self.assertEqual(manifest["components"]["packages"]["nginx"], "1.0")
         self.assertEqual(manifest["qualification"]["status"], "engineering-candidate")
         self.assertTrue((self.output / "sovereign-os-0.1.0-rpi5-arm64.img.zst").is_file())
-        self.assertEqual(len((self.output / "SHA256SUMS").read_text().splitlines()), 5)
+        self.assertTrue((self.output / "create-imager-manifest.py").is_file())
+        self.assertEqual(len((self.output / "SHA256SUMS").read_text().splitlines()), 6)
 
     def test_rejects_invalid_version(self):
         with self.assertRaisesRegex(ValueError, "SemVer"):

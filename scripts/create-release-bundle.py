@@ -123,6 +123,7 @@ def create_bundle(args):
         f"{prefix}.packages.tsv.zst": deploy_dir / "manifest.zst",
         f"{prefix}.sbom.zst": sbom_paths[0],
         f"{prefix}.provenance.json": deploy_dir / "deployed.json",
+        "create-imager-manifest.py": repo_root / "scripts/create-imager-manifest.py",
     }
     for name, source in payload.items():
         copy_payload(source, output_dir / name)

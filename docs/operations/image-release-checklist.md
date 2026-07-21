@@ -43,12 +43,17 @@
 
 ## Flash and First Boot
 
-- [ ] The compressed artifact is written using Raspberry Pi Imager.
+- [ ] The local `.rpi-imager-manifest` is generated from the published image.
+- [ ] Imager presents Wi-Fi and SSH customization for the Sovereign OS entry.
+- [ ] The compressed artifact is written using Raspberry Pi Imager with a test SSH public key and Wi-Fi configuration.
 - [ ] Test uses the downloaded release artifact, not an intermediate image.
 - [ ] Raspberry Pi 5 boots successfully.
 - [ ] Root filesystem expands or otherwise exposes expected storage.
 - [ ] Unique machine identity is generated.
 - [ ] Unique SSH host keys are generated if SSH is enabled.
+- [ ] The configured SSH key permits login and no shared default password exists.
+- [ ] Wi-Fi connects without Ethernet using the settings supplied while flashing.
+- [ ] `/boot/firmware/rpi-preseed.toml` is removed after it is consumed.
 - [ ] Unique Pi-hole administrator credential is generated.
 - [ ] Embedded Pi-hole artifact imports without internet access.
 - [ ] First-boot completion is recorded only after health checks pass.

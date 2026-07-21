@@ -67,3 +67,9 @@ payload names, a machine-readable release manifest, and `SHA256SUMS` in an
 empty output directory. The complete operator flow and the distinction between
 an engineering candidate and a hardware-qualified release are documented in
 `docs/operations/image-build-and-release.md`.
+
+The release bundle also includes `create-imager-manifest.py`. It produces a
+local Raspberry Pi Imager catalog for the versioned `.img.zst`, enabling the
+user to supply Wi-Fi and SSH settings before flashing. See
+`docs/operations/raspberry-pi-imager-provisioning.md` for the complete flow and
+the supported first-boot configuration subset.

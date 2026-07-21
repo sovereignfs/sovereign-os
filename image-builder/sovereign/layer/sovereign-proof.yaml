@@ -13,5 +13,6 @@ mmdebstrap:
     - dnsutils
     - libnss-mdns
     - nginx
+    - python3-minimal
   customize-hooks:
     - test -d "$1"

@@ -2,6 +2,7 @@
 
 set -eu
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-proof.service
+"$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-imager-provision.service
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-pihole-artifact.service
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-pihole-import.service
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-pihole.service
