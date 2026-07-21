@@ -8,6 +8,7 @@
 | Base appliance configuration | Image/project owner | Runtime defaults | `/etc/sovereign/` | No | Low/Medium | No device secrets |
 | Machine identity | First boot | Unique host identity | Base-OS locations | mDNS/network protocols as required | Medium | Must not originate from build host |
 | SSH host keys | First boot | SSH server identity if enabled | `/etc/ssh/` | During SSH | High | Unique per device; absent from image |
+| Preview bootstrap password hash | Release image | First headless login | `/etc/shadow` | SSH authentication on LAN | High | Public temporary credential; expired before release; prohibited in production |
 | Pi-hole admin password | First boot | UI/API authentication | `/data/sovereign/secrets/` | To local Pi-hole login/API | High | Root-owned; never in image, YAML, or logs |
 | Pi-hole configuration | Pi-hole/user | DNS and UI behavior | Persistent Pi-hole volume | No by default | Medium/High | Survives container recreation |
 | DNS query data | LAN clients/Pi-hole | Resolution, blocking, statistics | Persistent Pi-hole volume/logs | To configured upstream DNS as required | High | Household metadata; document retention/privacy defaults |
@@ -26,7 +27,7 @@
 
 - Exact persistent paths and ownership
 - Initial password delivery and reset mechanism
-- Whether SSH is enabled by default
+- Production replacement for the preview bootstrap credential
 - Pi-hole privacy level and query retention default
 - Nginx and Pi-hole log retention
 - Diagnostic bundle contents

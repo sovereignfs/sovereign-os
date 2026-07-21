@@ -244,7 +244,9 @@ Phase 01 is complete when:
 - Root `/admin/*` and `/api/*` remain unassigned to Pi-hole.
 - Direct-IP access works when mDNS is unavailable.
 - Every device receives unique identity, SSH host keys, and Pi-hole credentials.
-- No credential or build-host identity is present in the downloadable image.
+- No application credential or build-host identity is present in the
+  downloadable image. Preview builds may contain only the expired bootstrap
+  password defined by ADR-0003.
 - Pi-hole configuration and data survive reboot.
 - Pi-hole data and device secrets reside on the dedicated persistent data partition.
 - A failed or interrupted first boot can resume safely.

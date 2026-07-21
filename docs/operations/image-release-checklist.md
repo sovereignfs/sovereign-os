@@ -52,7 +52,11 @@
 - [ ] Root filesystem expands or otherwise exposes expected storage.
 - [ ] Unique machine identity is generated.
 - [ ] Unique SSH host keys are generated if SSH is enabled.
-- [ ] The configured SSH key permits login and no shared default password exists.
+- [ ] A configured SSH key permits login.
+- [ ] Preview bootstrap login forces password replacement before granting a
+      shell, and the initial password fails afterward.
+- [ ] Release notes identify the bootstrap credential as a preview-only LAN
+      risk and link to the first-login hardening procedure.
 - [ ] Wi-Fi connects without Ethernet using the settings supplied while flashing.
 - [ ] `/boot/firmware/rpi-preseed.toml` is removed after it is consumed.
 - [ ] Unique Pi-hole administrator credential is generated.

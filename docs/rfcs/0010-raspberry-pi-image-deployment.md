@@ -18,7 +18,7 @@ The solution must:
 
 - be writable using Raspberry Pi Imager;
 - boot without user shell work;
-- avoid shared credentials and build-machine identity;
+- avoid build-machine identity and minimize the lifetime of preview bootstrap credentials;
 - operate without downloading Pi-hole on first boot;
 - persist configuration across reboot and container replacement;
 - reserve root `/admin` and `/api` paths for future Sovereign services;
@@ -151,9 +151,17 @@ For the Phase 01 POC, the device displays that password on the attached physical
 
 This choice requires temporary physical display access for initial login. A later one-time claim mechanism may replace it without changing the persistent password-file model.
 
+For headless preview onboarding, [ADR-0003](../adrs/0003-preview-bootstrap-access.md)
+adds the temporary `sovereign`/`sovereign` Linux account. Its password is
+expired in the shipped image and must be replaced during the first interactive
+SSH login. Once logged in, the user retrieves the separate, device-unique
+Pi-hole password from the root-owned secret file. This is an explicit preview
+exception, not the intended production credential model.
+
 ## Security and Privacy
 
-- No default shared password.
+- No production release may ship a shared password. Phase 01 preview images use
+  the constrained bootstrap exception in ADR-0003.
 - No secret in source, image build configuration, Compose YAML, or ordinary logs.
 - No Pi-hole web port directly exposed to the LAN.
 - No public network binding beyond documented DNS and HTTP ports.

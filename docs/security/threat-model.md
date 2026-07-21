@@ -7,7 +7,8 @@
 ## Security Goals
 
 - Publish an image free of build-machine identity and secrets.
-- Give every flashed device unique identity and credentials.
+- Give every flashed device unique identity and application credentials, and
+  limit the accepted preview bootstrap exception.
 - Expose only the network services required for DNS and local administration.
 - Prevent Pi-hole from occupying future Sovereign `/admin` and `/api` namespaces.
 - Keep Pi-hole data and credentials on user-owned storage.
@@ -41,8 +42,8 @@ The local network reduces exposure but is not fully trusted. Physical compromise
 ### T-01: Shared or Leaked Image Credentials
 
 **Threat:** Every flashed device inherits the same password, SSH keys, machine ID, token, or build-host secret.  
-**Controls:** Generate identity and credentials on first boot; sanitize the final filesystem; scan the exported image; prohibit credentials in build configuration and Compose YAML.  
-**Verification:** Mount and scan the exact compressed release artifact after decompression.
+**Controls:** Generate identity and Pi-hole credentials on first boot; sanitize the final filesystem; scan the exported image; prohibit application credentials in build configuration and Compose YAML. ADR-0003 permits a public, expired bootstrap password only in preview images, requires immediate replacement, and prohibits public-network exposure.
+**Verification:** Mount and scan the exact compressed release artifact after decompression; verify that SSH forces replacement before granting a shell and rejects the initial password afterward.
 
 ### T-02: Malicious or Mutable Build Input
 
@@ -125,4 +126,3 @@ The local network reduces exposure but is not fully trusted. Physical compromise
 - Anyone with physical storage access may read unencrypted Pi-hole data and secrets.
 - Automatic security update and rollback infrastructure is not yet implemented.
 - Router security and configuration remain outside the image's control.
-

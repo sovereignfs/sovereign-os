@@ -9,10 +9,11 @@ first boot. This lets a user put Wi-Fi and an SSH public key into a freshly
 flashed device without modifying the Linux filesystems by hand or connecting a
 keyboard and display.
 
-The downloadable image itself contains no user credential. Imager writes the
-per-device settings to the boot partition during flashing. Sovereign consumes
-that file before networking and SSH start, then deletes it from the boot
-partition.
+Preview images covered by ADR-0003 include a temporary bootstrap account for
+the ordinary custom-image workflow. Imager provisioning can replace that
+onboarding path with per-device settings written to the boot partition.
+Sovereign consumes that file before networking and SSH start, then deletes it
+from the boot partition.
 
 ## Flash with Customization
 
@@ -78,8 +79,10 @@ appliance services. It supports the following `rpi-preseed` settings:
 - timezone.
 
 Wi-Fi is translated to a root-only IWD network profile. SSH remains configured
-with root login disabled. Key authentication is recommended; the base image
-does not ship a shared login password.
+with root login disabled. Key authentication is recommended. Preview images
+temporarily ship the bootstrap access described in
+[ADR-0003](../adrs/0003-preview-bootstrap-access.md); it must be replaced on
+first login and is not the production credential model.
 
 The hostname is intentionally fixed to `sovereign`; a different Imager value is
 ignored. Raspberry Pi Connect and custom network-interface definitions are not
