@@ -58,6 +58,8 @@ VERSION = re.compile(
 )
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 OCI_DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
+QUALIFICATION_BOUNDARIES = {"backing_up", "activating", "validating"}
+QUALIFICATION_EXIT = 75
 
 
 class UpdateError(Exception):
@@ -69,6 +71,30 @@ class UpdateError(Exception):
 def fail(condition, code, message):
     if not condition:
         raise UpdateError(code, message)
+
+
+def validate_qualification_interrupt():
+    boundary = os.environ.get("SOVEREIGN_UPDATE_QUALIFICATION_INTERRUPT")
+    if boundary is None:
+        return
+    fail(
+        os.environ.get("SOVEREIGN_UPDATE_QUALIFICATION") == "1",
+        "QUALIFICATION_NOT_ARMED",
+        "Qualification interruption requires explicit arming",
+    )
+    fail(
+        boundary in QUALIFICATION_BOUNDARIES,
+        "INVALID_QUALIFICATION_BOUNDARY",
+        "Unknown qualification interruption boundary",
+    )
+
+
+def qualification_interrupt(boundary):
+    if os.environ.get("SOVEREIGN_UPDATE_QUALIFICATION_INTERRUPT") == boundary:
+        # Deliberately bypass normal exception handling and buffered I/O. The
+        # preceding transition has already atomically persisted and fsynced its
+        # state and event, which is exactly what reboot recovery must inspect.
+        os._exit(QUALIFICATION_EXIT)
 
 
 def read_json(path, code="INVALID_JSON"):
@@ -651,6 +677,7 @@ def create_backup(args):
             "Installed Pi-hole digest is unavailable",
         )
         snapshot = transition(snapshot, "backing_up", "BACKUP_STARTED")
+        qualification_interrupt("backing_up")
         now = timestamp()
         compact = now.replace("-", "").replace(":", "").lower()
         backup_id = f"backup-{compact}-{secrets.token_hex(4)}"
@@ -890,11 +917,13 @@ def activate_release(args):
         run_checked([DOCKER, "load", "--input", str(directory / "release-candidate/pihole-arm64.oci.tar")], "IMAGE_IMPORT_FAILED", "Target Pi-hole image could not be imported", timeout=900)
         run_checked([DOCKER, "image", "inspect", target_digest], "IMAGE_DIGEST_MISMATCH", "Imported Pi-hole digest is unavailable")
         snapshot = transition(snapshot, "activating", "ACTIVATION_STARTED")
+        qualification_interrupt("activating")
         try:
             run_checked([SYSTEMCTL, "stop", "sovereign-pihole.service"], "SERVICE_STOP_FAILED", "Pi-hole could not be stopped")
             switch_current(target)
             run_checked([SYSTEMCTL, "start", "sovereign-pihole.service"], "SERVICE_START_FAILED", "Updated Pi-hole could not be started")
             snapshot = transition(snapshot, "validating", "TARGET_STARTED")
+            qualification_interrupt("validating")
             run_checked([HEALTH_CHECK], "POSTUPDATE_HEALTH_FAILED", "Updated appliance failed health checks")
             snapshot = transition(snapshot, "committed", "UPDATE_COMMITTED", recovery_action="none")
             shutil.rmtree(directory / "release-candidate", ignore_errors=True)
@@ -997,6 +1026,7 @@ def parser():
 def main():
     args = parser().parse_args()
     try:
+        validate_qualification_interrupt()
         args.handler(args)
     except UpdateError as error:
         print(json.dumps({"status": "rejected", "code": error.code, "message": str(error)}), file=sys.stderr)

@@ -501,6 +501,121 @@ class UpdateClientTests(unittest.TestCase):
         self.assertEqual("recovery_required", state["state"])
         self.assertEqual("INTERRUPTED_TRANSACTION", state["failure"]["code"])
 
+    def test_qualification_interrupt_requires_explicit_arming(self):
+        manifest, signature = self.write_signed_manifest()
+        environment = self.environment() | {
+            "SOVEREIGN_UPDATE_QUALIFICATION_INTERRUPT": "backing_up"
+        }
+        prepared = subprocess.run(
+            [
+                str(CLIENT),
+                "prepare",
+                "--manifest",
+                str(manifest),
+                "--signature",
+                str(signature),
+                "--artifact",
+                str(self.artifact),
+            ],
+            env=environment,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(2, prepared.returncode)
+        self.assertEqual(
+            "QUALIFICATION_NOT_ARMED", json.loads(prepared.stderr)["code"]
+        )
+
+    def test_qualification_interrupt_at_backing_up_is_recoverable(self):
+        manifest, signature = self.write_signed_manifest()
+        prepared = self.run_prepare(manifest, signature)
+        transaction_id = json.loads(prepared.stdout)["transaction_id"]
+        environment = self.environment() | {
+            "SOVEREIGN_UPDATE_QUALIFICATION": "1",
+            "SOVEREIGN_UPDATE_QUALIFICATION_INTERRUPT": "backing_up",
+        }
+        interrupted = subprocess.run(
+            [str(CLIENT), "backup", transaction_id],
+            env=environment,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(75, interrupted.returncode)
+        transaction = self.directory / "update-state/transactions" / transaction_id
+        self.assertEqual(
+            "backing_up", json.loads((transaction / "state.json").read_text())["state"]
+        )
+        self.assertFalse(self.service_log.exists())
+
+        recovered = subprocess.run(
+            [str(CLIENT), "recover"],
+            env=self.environment(),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(0, recovered.returncode, recovered.stderr)
+        state = json.loads((transaction / "state.json").read_text())
+        self.assertEqual("recovery_required", state["state"])
+
+    def run_interrupted_activation(self, boundary):
+        transaction_id = self.prepare_and_backup_bundle()
+        staged = subprocess.run(
+            [str(CLIENT), "stage", transaction_id],
+            env=self.environment(),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(0, staged.returncode, staged.stderr)
+        environment = self.environment() | {
+            "SOVEREIGN_UPDATE_QUALIFICATION": "1",
+            "SOVEREIGN_UPDATE_QUALIFICATION_INTERRUPT": boundary,
+        }
+        interrupted = subprocess.run(
+            [str(CLIENT), "activate", transaction_id],
+            env=environment,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(75, interrupted.returncode)
+        transaction = self.directory / "update-state/transactions" / transaction_id
+        self.assertEqual(
+            boundary, json.loads((transaction / "state.json").read_text())["state"]
+        )
+        return transaction_id, transaction
+
+    def test_qualification_interrupt_at_activating_is_recoverable(self):
+        transaction_id, transaction = self.run_interrupted_activation("activating")
+        self.assertEqual("0.1.0-preview.5", self.releases.joinpath("current").resolve().name)
+
+        recovered = subprocess.run(
+            [str(CLIENT), "recover"],
+            env=self.environment(),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(0, recovered.returncode, recovered.stderr)
+        self.assertEqual("0.1.0-preview.5", self.releases.joinpath("current").resolve().name)
+        self.assertEqual(
+            "recovery_required",
+            json.loads((transaction / "state.json").read_text())["state"],
+        )
+
+    def test_qualification_interrupt_at_validating_restores_previous_pointer(self):
+        transaction_id, transaction = self.run_interrupted_activation("validating")
+        self.assertEqual("0.1.0-preview.6", self.releases.joinpath("current").resolve().name)
+
+        recovered = subprocess.run(
+            [str(CLIENT), "recover"],
+            env=self.environment(),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(0, recovered.returncode, recovered.stderr)
+        self.assertEqual("0.1.0-preview.5", self.releases.joinpath("current").resolve().name)
+        state = json.loads((transaction / "state.json").read_text())
+        self.assertEqual("recovery_required", state["state"])
+        self.assertEqual("INTERRUPTED_TRANSACTION", state["failure"]["code"])
+
 
 if __name__ == "__main__":
     unittest.main()
