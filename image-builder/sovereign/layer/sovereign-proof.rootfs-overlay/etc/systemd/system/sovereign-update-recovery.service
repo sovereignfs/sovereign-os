@@ -1,0 +1,20 @@
+[Unit]
+Description=Audit interrupted Sovereign update transactions
+RequiresMountsFor=/data
+After=sovereign-data-expand.service sovereign-proof.service
+Before=sovereign-pihole.service
+ConditionPathIsMountPoint=/data
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/sovereign-update recover
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=full
+ReadWritePaths=/data/sovereign/update-state /opt/sovereign
+CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_FOWNER
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

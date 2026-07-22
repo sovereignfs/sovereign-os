@@ -92,6 +92,28 @@ class ConsoleTests(unittest.TestCase):
         self.assertEqual("degraded", payload["status"])
         self.assertEqual("degraded", payload["checks"]["pihole"]["status"])
 
+    def test_update_recovery_is_visible_without_journal_details(self):
+        module = runpy.run_path(str(HEALTH_SERVICE))
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            status = Path(temporary_directory) / "update-status.json"
+            status.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "state": "recovery_required",
+                        "target_version": "0.1.0-preview.7",
+                        "updated_at": "2026-07-22T20:00:00Z",
+                    }
+                )
+            )
+            with mock.patch.dict(
+                module["update_check"].__globals__,
+                {"UPDATE_STATUS_PATH": status},
+            ):
+                result = module["update_check"]()
+        self.assertEqual("degraded", result["status"])
+        self.assertNotIn("transaction", json.dumps(result).lower())
+
     def test_console_routes_and_privilege_boundary(self):
         nginx = NGINX.read_text()
         service = SYSTEMD_SERVICE.read_text()

@@ -100,6 +100,13 @@ back to the previous release and records `rolled_back` only after that release
 passes the same health gate; otherwise it records `recovery_required`. Initial
 v1 activation rejects data migrations and releases without rollback support.
 
+The build workflow can emit an unsigned update candidate beside an image
+candidate. `scripts/create-update-release.py` assembles its bundle and outer
+manifest from pinned Pi-hole metadata and OCI build evidence.
+`scripts/sign-update-manifest.py` signs those exact bytes with a locally held
+Ed25519 private key. The private key is never an input to the image builder or
+ordinary unsigned packaging workflow.
+
 Trusted public keys live under `/etc/sovereign/update-trust.d/` as matching
 `<key-id>.pem` and `<key-id>.json` files. The preview image intentionally ships
 with an empty trust store until release-key custody and rotation are approved;

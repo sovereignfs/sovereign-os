@@ -1,6 +1,7 @@
 const labels = {
   storage: "Persistent storage",
   dns: "DNS resolution",
+  update: "Appliance updates",
   pihole: "Network protection",
   local_access: "Local access",
 };

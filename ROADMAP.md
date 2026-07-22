@@ -13,7 +13,7 @@ health experience backed by a stable `/api/v1/health` contract.
 
 ## Subsequent Priorities
 
-🟡 Milestone 01.1 — Appliance Update Foundation
+🟡 Milestone 01.1 — Appliance Update Foundation (Pi qualification pending)
 
 Deliver signed, rollback-capable Pi-hole and appliance updates without reflashing or erasing persistent data.
 
@@ -36,7 +36,7 @@ read operations, and opt-in web search through a self-hosted SearXNG instance.
 - ✅ Image Build System Assessment — `rpi-image-gen` recommended
 - ⏳ `rpi-image-gen` Proof Build
 - ⏳ Raspberry Pi Image
-- ⏳ Signed Appliance Update Artifact
+- 🟡 Signed appliance update tooling implemented; Pi qualification pending
 - 🟡 Sovereign Console health page implemented; image qualification pending
 - ⏳ Local inference benchmark on Raspberry Pi 5
 - ⏳ Conversation and capability architecture RFC

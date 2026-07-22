@@ -43,6 +43,9 @@ UPDATE_ROOT = pathlib.Path(
 STATE_ROOT = pathlib.Path(
     os.environ.get("SOVEREIGN_STATE_ROOT", str(DATA_PATH / "sovereign"))
 )
+UPDATE_STATUS_PATH = pathlib.Path(
+    os.environ.get("SOVEREIGN_UPDATE_STATUS", str(STATE_ROOT / "update-status.json"))
+)
 RELEASES_ROOT = pathlib.Path(
     os.environ.get("SOVEREIGN_RELEASES_ROOT", "/opt/sovereign")
 )
@@ -437,6 +440,7 @@ def create_transaction(source_version, target_version):
     }
     atomic_json(directory / "state.json", snapshot)
     append_event(directory, None, snapshot, "MANIFEST_ACCEPTED")
+    publish_update_status(snapshot)
     return snapshot
 
 
@@ -464,7 +468,21 @@ def transition(snapshot, next_state, reason, **changes):
     directory = transaction_path(snapshot["transaction_id"])
     atomic_json(directory / "state.json", snapshot)
     append_event(directory, previous, snapshot, reason)
+    publish_update_status(snapshot)
     return snapshot
+
+
+def publish_update_status(snapshot):
+    atomic_json(
+        UPDATE_STATUS_PATH,
+        {
+            "schema_version": 1,
+            "state": snapshot["state"],
+            "target_version": snapshot["target_version"],
+            "updated_at": snapshot["updated_at"],
+        },
+        mode=0o644,
+    )
 
 
 def load_transaction(transaction_id, required_state=None):
@@ -860,6 +878,14 @@ def activate_release(args):
         current = RELEASES_ROOT / "current"
         fail(current.is_symlink(), "ACTIVE_RELEASE_MISSING", "Active release pointer is unavailable")
         previous = current.resolve(strict=True)
+        atomic_json(
+            directory / "activation.json",
+            {
+                "schema_version": 1,
+                "previous_release": previous.name,
+                "target_release": target.name,
+            },
+        )
         target_digest = manifest["components"]["pihole"]["digest"]
         run_checked([DOCKER, "load", "--input", str(directory / "release-candidate/pihole-arm64.oci.tar")], "IMAGE_IMPORT_FAILED", "Target Pi-hole image could not be imported", timeout=900)
         run_checked([DOCKER, "image", "inspect", target_digest], "IMAGE_DIGEST_MISMATCH", "Imported Pi-hole digest is unavailable")
@@ -893,16 +919,48 @@ def activate_release(args):
             raise
 
 
+def recover_transactions(_args):
+    fail(os.geteuid() == 0 or os.environ.get("SOVEREIGN_UPDATE_TEST_MODE") == "1", "ROOT_REQUIRED", "Recovery audit requires administrator privileges")
+    reviewed = []
+    with update_lock():
+        for state_path in sorted((UPDATE_ROOT / "transactions").glob("*/state.json")):
+            snapshot = read_json(state_path, "INVALID_TRANSACTION")
+            state = snapshot.get("state")
+            transaction_id = snapshot.get("transaction_id")
+            if state not in {"backing_up", "activating", "validating", "rolling_back"}:
+                continue
+            if state in {"activating", "validating", "rolling_back"}:
+                activation = read_json(state_path.parent / "activation.json", "RECOVERY_METADATA_MISSING")
+                exact_keys(activation, ["schema_version", "previous_release", "target_release"], "activation metadata")
+                previous_name = activation["previous_release"]
+                fail(isinstance(previous_name, str) and SAFE_ID.fullmatch(previous_name), "RECOVERY_METADATA_INVALID", "Previous release identity is invalid")
+                previous = RELEASES_ROOT / "releases" / previous_name
+                fail(previous.is_dir(), "RECOVERY_RELEASE_MISSING", "Previous release is unavailable")
+                switch_current(previous)
+            transition(
+                snapshot,
+                "recovery_required",
+                "INTERRUPTED_TRANSACTION",
+                failure={
+                    "code": "INTERRUPTED_TRANSACTION",
+                    "message": "Update was interrupted before a health-gated terminal state",
+                    "retryable": False,
+                },
+                recovery_action="manual",
+            )
+            reviewed.append(transaction_id)
+    print(json.dumps({"status": "reviewed", "recovery_required": reviewed}, sort_keys=True))
+
+
 def show_status(_args):
     policy = read_json(POLICY_PATH, "INVALID_POLICY")
-    transactions = sorted((UPDATE_ROOT / "transactions").glob("*/state.json"))
-    latest = read_json(transactions[-1]) if transactions else None
+    latest = read_json(UPDATE_STATUS_PATH) if UPDATE_STATUS_PATH.is_file() else None
     result = {
         "installed_version": read_release_version(),
         "channel": policy.get("channel"),
         "device": policy.get("device"),
         "update_state": latest["state"] if latest else "idle",
-        "transaction_id": latest["transaction_id"] if latest else None,
+        "target_version": latest["target_version"] if latest else None,
     }
     print(json.dumps(result, sort_keys=True))
 
@@ -931,6 +989,8 @@ def parser():
     activate = subcommands.add_parser("activate", help="activate and health-check a staged update")
     activate.add_argument("transaction")
     activate.set_defaults(handler=activate_release)
+    recover = subcommands.add_parser("recover", help="audit interrupted transactions at boot")
+    recover.set_defaults(handler=recover_transactions)
     return command
 
 

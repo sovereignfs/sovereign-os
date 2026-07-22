@@ -1,6 +1,6 @@
 # Milestone 01.1 - Appliance Update Foundation
 
-**Status:** In progress
+**Status:** Initial no-migration software slice complete; Raspberry Pi qualification pending
 **Priority:** Immediate next priority after Phase 01 release  
 **Depends on:** [Phase 01 Flashable Pi-hole Image POC](01-preview-poc.md)  
 **Owner:** Project creator  
@@ -200,6 +200,12 @@ immutable release metadata, pinned OCI import, atomic active-release switching,
 local DNS/HTTP validation, health-gated commit, and automatic release-pointer
 rollback. Data migrations remain rejected, and real-device backup/rollback
 qualification is still pending.
+
+Because the initial slice rejects all data migrations, automatic rollback does
+not restore persistent data that the updater never modifies. The pre-update
+backup remains the recovery boundary, but a general data-restore command is not
+enabled until archive and restore behavior are qualified against real Pi-hole
+state on the Raspberry Pi.
 
 ### U2 - Persistent Data and Versioned Releases
 

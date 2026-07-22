@@ -20,6 +20,26 @@ on:
         required: true
         default: false
         type: boolean
+      build_update_candidate:
+        description: Also package an unsigned installed-device update candidate
+        required: true
+        default: false
+        type: boolean
+      update_source_minimum:
+        description: Minimum installed version accepted by the update candidate
+        required: false
+        default: ""
+        type: string
+      update_source_maximum_exclusive:
+        description: Exclusive upper installed-version bound
+        required: false
+        default: "0.2.0"
+        type: string
+      update_key_id:
+        description: Public key identifier expected when the candidate is signed offline
+        required: false
+        default: preview-local
+        type: string
 
 permissions:
   contents: read
@@ -63,11 +83,37 @@ jobs:
           cd build/release
           sha256sum --check SHA256SUMS
 
+      - name: Package unsigned appliance update candidate
+        if: inputs.build_update_candidate
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_CHANNEL: ${{ inputs.channel }}
+          UPDATE_SOURCE_MINIMUM: ${{ inputs.update_source_minimum }}
+          UPDATE_SOURCE_MAXIMUM_EXCLUSIVE: ${{ inputs.update_source_maximum_exclusive }}
+          UPDATE_KEY_ID: ${{ inputs.update_key_id }}
+        run: |
+          test -n "$UPDATE_SOURCE_MINIMUM"
+          source_date_epoch=$(git show -s --format=%ct HEAD)
+          ./scripts/create-update-release.py \
+            --version "$RELEASE_VERSION" \
+            --channel "$RELEASE_CHANNEL" \
+            --source-minimum "$UPDATE_SOURCE_MINIMUM" \
+            --source-maximum-exclusive "$UPDATE_SOURCE_MAXIMUM_EXCLUSIVE" \
+            --pihole-env image-builder/sovereign/pihole-image.env \
+            --oci build/sovereign-image/evidence/oci/pihole-arm64.oci.tar \
+            --output-dir build/update-release \
+            --key-id "$UPDATE_KEY_ID" \
+            --artifact-base-url "https://github.com/sovereignfs/sovereign-os/releases/download/v${RELEASE_VERSION}" \
+            --notes-url "https://github.com/sovereignfs/sovereign-os/releases/tag/v${RELEASE_VERSION}" \
+            --source-date-epoch "$source_date_epoch"
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: sovereign-os-${{ inputs.version }}-rpi5-arm64
-          path: build/release/
+          path: |
+            build/release/
+            build/update-release/
           if-no-files-found: error
           compression-level: 0
           retention-days: 14

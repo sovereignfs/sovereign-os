@@ -9,6 +9,7 @@ Operational guides will be written alongside the preview implementation and veri
 - [Raspberry Pi Imager provisioning and flashing](raspberry-pi-imager-provisioning.md)
 - [First login and network setup](first-login-and-network-setup.md)
 - [Appliance update release checklist](appliance-update-checklist.md)
+- [Combined Console and update qualification](combined-console-update-qualification.md)
 - Development and image-build environment
 - Stable-IP and router DNS configuration
 - Service lifecycle and reboot behavior

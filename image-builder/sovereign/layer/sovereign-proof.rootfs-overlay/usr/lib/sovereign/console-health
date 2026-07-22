@@ -18,6 +18,12 @@ RELEASE_PATH = pathlib.Path(
 )
 DIG_PATH = os.environ.get("SOVEREIGN_DIG_PATH", "/usr/bin/dig")
 IP_PATH = os.environ.get("SOVEREIGN_IP_PATH", "/usr/sbin/ip")
+UPDATE_STATUS_PATH = pathlib.Path(
+    os.environ.get(
+        "SOVEREIGN_UPDATE_STATUS_PATH",
+        "/data/sovereign/update-status.json",
+    )
+)
 
 
 def read_key_values(path):
@@ -164,6 +170,22 @@ def tcp_check(port):
         return False
 
 
+def update_check():
+    if not UPDATE_STATUS_PATH.is_file():
+        return {"status": "healthy", "summary": "Ready"}
+    try:
+        state = json.loads(UPDATE_STATUS_PATH.read_text()).get("state")
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return {"status": "degraded", "summary": "Update state is unreadable"}
+    if state == "recovery_required":
+        return {"status": "degraded", "summary": "Update recovery required"}
+    labels = {
+        "committed": "Latest update committed",
+        "rolled_back": "Latest update rolled back safely",
+    }
+    return {"status": "healthy", "summary": labels.get(state, "Update prepared")}
+
+
 def collect_health():
     active_release = pathlib.Path("/opt/sovereign/current/sovereign-release")
     release = read_key_values(active_release if active_release.is_file() else RELEASE_PATH)
@@ -173,6 +195,7 @@ def collect_health():
             "update-state/data-expand-ready", {"partition": "3"}
         ),
         "dns": dns_check(),
+        "update": update_check(),
         "pihole": marker_check(
             "pihole-ready",
             {

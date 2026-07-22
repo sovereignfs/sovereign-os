@@ -462,6 +462,45 @@ class UpdateClientTests(unittest.TestCase):
         )
         self.assertEqual("rolled_back", state["state"])
 
+    def test_boot_recovery_restores_previous_release_pointer(self):
+        transaction_id = self.prepare_and_backup_bundle()
+        staged = subprocess.run(
+            [str(CLIENT), "stage", transaction_id],
+            env=self.environment(),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(0, staged.returncode, staged.stderr)
+        transaction = self.directory / "update-state/transactions" / transaction_id
+        state_path = transaction / "state.json"
+        state = json.loads(state_path.read_text())
+        state["state"] = "validating"
+        state["sequence"] += 2
+        state_path.write_text(json.dumps(state))
+        (transaction / "activation.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "previous_release": "0.1.0-preview.5",
+                    "target_release": "0.1.0-preview.6",
+                }
+            )
+        )
+        current = self.releases / "current"
+        current.unlink()
+        current.symlink_to("releases/0.1.0-preview.6")
+        recovered = subprocess.run(
+            [str(CLIENT), "recover"],
+            env=self.environment(),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(0, recovered.returncode, recovered.stderr)
+        self.assertEqual("0.1.0-preview.5", current.resolve().name)
+        state = json.loads(state_path.read_text())
+        self.assertEqual("recovery_required", state["state"])
+        self.assertEqual("INTERRUPTED_TRANSACTION", state["failure"]["code"])
+
 
 if __name__ == "__main__":
     unittest.main()
