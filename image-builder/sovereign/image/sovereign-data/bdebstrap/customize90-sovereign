@@ -7,6 +7,7 @@ set -eu
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-pihole-artifact.service
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-pihole-import.service
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-pihole.service
+"$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-console.service
 "$BDEBSTRAP_HOOKS/enable-units" "$1" nginx.service
 "$BDEBSTRAP_HOOKS/enable-units" "$1" avahi-daemon.service
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-local-access.service

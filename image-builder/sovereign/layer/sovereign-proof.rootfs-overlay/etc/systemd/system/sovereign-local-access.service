@@ -1,7 +1,7 @@
 [Unit]
 Description=Verify Sovereign local HTTP access
-Requires=sovereign-pihole.service nginx.service
-After=sovereign-pihole.service nginx.service
+Requires=sovereign-pihole.service sovereign-console.service nginx.service
+After=sovereign-pihole.service sovereign-console.service nginx.service
 Wants=avahi-daemon.service
 RequiresMountsFor=/data
 ConditionPathIsMountPoint=/data

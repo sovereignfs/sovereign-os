@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>Sovereign Console</title>
+    <link rel="stylesheet" href="/console/assets/console.css">
+    <script src="/console/assets/console.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to status</a>
+    <header class="topbar">
+      <a class="brand" href="/console/" aria-label="Sovereign Console home">
+        <span class="brand-mark" aria-hidden="true">S</span>
+        <span>
+          <strong>Sovereign</strong>
+          <small>Console</small>
+        </span>
+      </a>
+      <nav aria-label="Console navigation">
+        <a class="active" href="/console/health/">Health</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero" aria-labelledby="page-title">
+        <div>
+          <p class="eyebrow">Local system overview</p>
+          <h1 id="page-title">Your Sovereign system</h1>
+          <p class="lede">Private services, running on hardware you control.</p>
+        </div>
+        <div id="overall-status" class="status-panel loading" role="status" aria-live="polite">
+          <span class="status-dot" aria-hidden="true"></span>
+          <div>
+            <small>Overall status</small>
+            <strong id="status-label">Checking</strong>
+            <span id="checked-at">Contacting the device…</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="metrics" aria-label="System measurements">
+        <article class="metric-card">
+          <span>Data storage</span>
+          <strong id="storage-value">—</strong>
+          <small id="storage-detail">Checking available space</small>
+        </article>
+        <article class="metric-card">
+          <span>Memory</span>
+          <strong id="memory-value">—</strong>
+          <small id="memory-detail">Checking available memory</small>
+        </article>
+        <article class="metric-card">
+          <span>Temperature</span>
+          <strong id="temperature-value">—</strong>
+          <small>Current device temperature</small>
+        </article>
+        <article class="metric-card">
+          <span>Uptime</span>
+          <strong id="uptime-value">—</strong>
+          <small id="version-detail">Sovereign OS</small>
+        </article>
+      </section>
+
+      <section class="content-grid">
+        <section class="panel" aria-labelledby="services-title">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Required checks</p>
+              <h2 id="services-title">System health</h2>
+            </div>
+            <button id="retry" type="button">Refresh</button>
+          </div>
+          <div id="checks" class="check-list" aria-live="polite">
+            <p class="placeholder">Running local health checks…</p>
+          </div>
+        </section>
+
+        <aside class="panel service-panel" aria-labelledby="dns-title">
+          <p class="eyebrow">Installed service</p>
+          <div class="service-icon" aria-hidden="true">DNS</div>
+          <h2 id="dns-title">Network protection</h2>
+          <p>Pi-hole filters unwanted DNS requests for devices on your network.</p>
+          <a class="primary-action" href="/dns/admin/">Open Pi-hole <span aria-hidden="true">→</span></a>
+        </aside>
+      </section>
+
+      <section class="panel network-panel" aria-labelledby="network-title">
+        <div>
+          <p class="eyebrow">Local connectivity</p>
+          <h2 id="network-title">Network</h2>
+        </div>
+        <div id="network-list" class="network-list">
+          <span class="placeholder">Checking interfaces…</span>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <span id="system-model">Sovereign device</span>
+      <span>Local-first · No telemetry</span>
+    </footer>
+  </body>
+</html>

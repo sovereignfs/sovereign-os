@@ -1,0 +1,36 @@
+[Unit]
+Description=Serve Sovereign Console health data
+After=local-fs.target network.target sovereign-proof.service
+Wants=sovereign-proof.service
+RequiresMountsFor=/data
+ConditionPathIsMountPoint=/data
+
+[Service]
+Type=simple
+DynamicUser=yes
+ExecStart=/usr/lib/sovereign/console-health
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+UMask=0077
+TasksMax=16
+MemoryMax=64M
+
+[Install]
+WantedBy=multi-user.target
