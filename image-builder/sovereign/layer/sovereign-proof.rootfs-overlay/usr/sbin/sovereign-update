@@ -3,11 +3,15 @@
 import argparse
 import base64
 import binascii
+import contextlib
+import datetime
+import fcntl
 import hashlib
 import json
 import os
 import pathlib
 import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -22,6 +26,9 @@ RELEASE_PATH = pathlib.Path(
 )
 DATA_PATH = pathlib.Path(os.environ.get("SOVEREIGN_DATA_PATH", "/data"))
 OPENSSL = os.environ.get("SOVEREIGN_OPENSSL", "/usr/bin/openssl")
+UPDATE_ROOT = pathlib.Path(
+    os.environ.get("SOVEREIGN_UPDATE_ROOT", str(DATA_PATH / "sovereign/update-state"))
+)
 
 SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
 SAFE_KEY_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
@@ -265,7 +272,7 @@ def verify_artifact(path, artifact):
     fail(digest.hexdigest() == artifact["sha256"], "ARTIFACT_DIGEST_MISMATCH", "Update artifact digest does not match")
 
 
-def inspect_update(args):
+def inspect_update(args, emit=True):
     policy = read_json(POLICY_PATH, "INVALID_POLICY")
     manifest_path = pathlib.Path(args.manifest)
     try:
@@ -296,16 +303,199 @@ def inspect_update(args):
         "reboot_required": manifest["requirements"]["reboot"],
         "rollback_supported": manifest["rollback"]["supported"],
     }
-    print(json.dumps(result, sort_keys=True))
+    if emit:
+        print(json.dumps(result, sort_keys=True))
+    return manifest, result
+
+
+def timestamp():
+    return (
+        datetime.datetime.now(datetime.timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+
+
+def sync_directory(path):
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def atomic_json(path, value, mode=0o600):
+    path = pathlib.Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    temporary = path.with_name(f".{path.name}.{secrets.token_hex(4)}.tmp")
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            json.dump(value, stream, sort_keys=True, separators=(",", ":"))
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        os.chmod(path, mode)
+        sync_directory(path.parent)
+    finally:
+        try:
+            temporary.unlink()
+        except OSError:
+            pass
+
+
+@contextlib.contextmanager
+def update_lock():
+    UPDATE_ROOT.mkdir(parents=True, exist_ok=True, mode=0o700)
+    lock_path = UPDATE_ROOT / "update.lock"
+    descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise UpdateError("UPDATE_BUSY", "Another update operation is running") from error
+        yield
+    finally:
+        os.close(descriptor)
+
+
+def transaction_path(transaction_id):
+    fail(bool(SAFE_ID.fullmatch(transaction_id)), "INVALID_TRANSACTION", "Invalid transaction id")
+    return UPDATE_ROOT / "transactions" / transaction_id
+
+
+def append_event(directory, previous, snapshot, reason):
+    event = {
+        "transaction_id": snapshot["transaction_id"],
+        "sequence": snapshot["sequence"],
+        "previous_state": previous,
+        "next_state": snapshot["state"],
+        "timestamp": snapshot["updated_at"],
+        "reason": reason,
+    }
+    path = directory / "events.jsonl"
+    descriptor = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    with os.fdopen(descriptor, "a", encoding="utf-8") as stream:
+        stream.write(json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+    sync_directory(directory)
+
+
+def create_transaction(source_version, target_version):
+    now = timestamp()
+    compact = now.replace("-", "").replace(":", "").lower()
+    transaction_id = f"update-{compact}-{secrets.token_hex(4)}"
+    directory = transaction_path(transaction_id)
+    directory.mkdir(parents=True, mode=0o700)
+    snapshot = {
+        "schema_version": 1,
+        "transaction_id": transaction_id,
+        "sequence": 0,
+        "state": "available",
+        "source_version": source_version,
+        "target_version": target_version,
+        "created_at": now,
+        "updated_at": now,
+        "backup_id": None,
+        "failure": None,
+        "recovery_action": "resume",
+    }
+    atomic_json(directory / "state.json", snapshot)
+    append_event(directory, None, snapshot, "MANIFEST_ACCEPTED")
+    return snapshot
+
+
+ALLOWED_TRANSITIONS = {
+    "available": {"downloading", "recovery_required"},
+    "downloading": {"verified", "recovery_required"},
+    "verified": {"backing_up", "recovery_required"},
+    "backing_up": {"backed_up", "recovery_required"},
+    "backed_up": {"staged", "recovery_required"},
+    "staged": {"activating", "recovery_required"},
+    "activating": {"validating", "rolling_back", "recovery_required"},
+    "validating": {"committed", "rolling_back", "recovery_required"},
+    "rolling_back": {"rolled_back", "recovery_required"},
+}
+
+
+def transition(snapshot, next_state, reason, **changes):
+    fail(next_state in ALLOWED_TRANSITIONS.get(snapshot["state"], set()), "INVALID_TRANSITION", f"Cannot move from {snapshot['state']} to {next_state}")
+    previous = snapshot["state"]
+    snapshot = dict(snapshot)
+    snapshot.update(changes)
+    snapshot["state"] = next_state
+    snapshot["sequence"] += 1
+    snapshot["updated_at"] = timestamp()
+    directory = transaction_path(snapshot["transaction_id"])
+    atomic_json(directory / "state.json", snapshot)
+    append_event(directory, previous, snapshot, reason)
+    return snapshot
+
+
+def copy_verified(source, destination, expected_size=None, expected_digest=None):
+    source = pathlib.Path(source)
+    destination = pathlib.Path(destination)
+    digest = hashlib.sha256()
+    size = 0
+    descriptor = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with source.open("rb") as input_stream, os.fdopen(descriptor, "wb") as output_stream:
+            for chunk in iter(lambda: input_stream.read(1024 * 1024), b""):
+                output_stream.write(chunk)
+                digest.update(chunk)
+                size += len(chunk)
+            output_stream.flush()
+            os.fsync(output_stream.fileno())
+    except OSError as error:
+        try:
+            destination.unlink()
+        except OSError:
+            pass
+        raise UpdateError("STAGING_FAILED", "Could not stage update input") from error
+    if expected_size is not None:
+        fail(size == expected_size, "ARTIFACT_SIZE_MISMATCH", "Staged artifact size does not match")
+    if expected_digest is not None:
+        fail(digest.hexdigest() == expected_digest, "ARTIFACT_DIGEST_MISMATCH", "Staged artifact digest does not match")
+    return size, digest.hexdigest()
+
+
+def prepare_update(args):
+    fail(args.artifact is not None, "ARTIFACT_REQUIRED", "Preparing an update requires the local bundle")
+    with update_lock():
+        manifest, result = inspect_update(args, emit=False)
+        snapshot = create_transaction(result["source_version"], result["target_version"])
+        directory = transaction_path(snapshot["transaction_id"])
+        staging = directory / "staging"
+        staging.mkdir(mode=0o700)
+        snapshot = transition(snapshot, "downloading", "LOCAL_STAGING_STARTED")
+        copy_verified(args.manifest, staging / "release-manifest.json")
+        copy_verified(args.signature, staging / "release-manifest.sig")
+        artifact = manifest["artifacts"][0]
+        copy_verified(args.artifact, staging / "update-bundle.tar.zst", artifact["size"], artifact["sha256"])
+        sync_directory(staging)
+        staged_args = argparse.Namespace(
+            manifest=staging / "release-manifest.json",
+            signature=staging / "release-manifest.sig",
+            artifact=staging / "update-bundle.tar.zst",
+        )
+        inspect_update(staged_args, emit=False)
+        snapshot = transition(snapshot, "verified", "STAGED_INPUTS_VERIFIED")
+        print(json.dumps({"status": "verified", "transaction_id": snapshot["transaction_id"], "target_version": snapshot["target_version"]}, sort_keys=True))
 
 
 def show_status(_args):
     policy = read_json(POLICY_PATH, "INVALID_POLICY")
+    transactions = sorted((UPDATE_ROOT / "transactions").glob("*/state.json"))
+    latest = read_json(transactions[-1]) if transactions else None
     result = {
         "installed_version": read_release_version(),
         "channel": policy.get("channel"),
         "device": policy.get("device"),
-        "update_state": "idle",
+        "update_state": latest["state"] if latest else "idle",
+        "transaction_id": latest["transaction_id"] if latest else None,
     }
     print(json.dumps(result, sort_keys=True))
 
@@ -320,6 +510,11 @@ def parser():
     inspect.add_argument("--signature", required=True)
     inspect.add_argument("--artifact")
     inspect.set_defaults(handler=inspect_update)
+    prepare = subcommands.add_parser("prepare", help="verify and durably stage a local update")
+    prepare.add_argument("--manifest", required=True)
+    prepare.add_argument("--signature", required=True)
+    prepare.add_argument("--artifact", required=True)
+    prepare.set_defaults(handler=prepare_update)
     return command
 
 

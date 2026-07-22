@@ -112,6 +112,7 @@ class UpdateClientTests(unittest.TestCase):
             "SOVEREIGN_UPDATE_POLICY": str(self.policy),
             "SOVEREIGN_RELEASE_PATH": str(self.release),
             "SOVEREIGN_DATA_PATH": str(self.directory),
+            "SOVEREIGN_UPDATE_ROOT": str(self.directory / "update-state"),
             "SOVEREIGN_OPENSSL": OPENSSL,
         }
         command = [
@@ -125,6 +126,30 @@ class UpdateClientTests(unittest.TestCase):
         if artifact:
             command.extend(["--artifact", str(self.artifact)])
         return subprocess.run(command, env=environment, capture_output=True, text=True)
+
+    def run_prepare(self, manifest, signature):
+        environment = os.environ | {
+            "SOVEREIGN_UPDATE_POLICY": str(self.policy),
+            "SOVEREIGN_RELEASE_PATH": str(self.release),
+            "SOVEREIGN_DATA_PATH": str(self.directory),
+            "SOVEREIGN_UPDATE_ROOT": str(self.directory / "update-state"),
+            "SOVEREIGN_OPENSSL": OPENSSL,
+        }
+        return subprocess.run(
+            [
+                str(CLIENT),
+                "prepare",
+                "--manifest",
+                str(manifest),
+                "--signature",
+                str(signature),
+                "--artifact",
+                str(self.artifact),
+            ],
+            env=environment,
+            capture_output=True,
+            text=True,
+        )
 
     def test_accepts_trusted_compatible_manifest_and_artifact(self):
         manifest, signature = self.write_signed_manifest()
@@ -175,6 +200,35 @@ class UpdateClientTests(unittest.TestCase):
         completed = self.run_client(manifest, signature, artifact=False)
         self.assertEqual(2, completed.returncode)
         self.assertEqual("REVOKED_SIGNING_KEY", json.loads(completed.stderr)["code"])
+
+    def test_prepare_creates_durable_verified_transaction(self):
+        manifest, signature = self.write_signed_manifest()
+        completed = self.run_prepare(manifest, signature)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        result = json.loads(completed.stdout)
+        transaction = (
+            self.directory
+            / "update-state/transactions"
+            / result["transaction_id"]
+        )
+        state = json.loads((transaction / "state.json").read_text())
+        events = [json.loads(line) for line in (transaction / "events.jsonl").read_text().splitlines()]
+        self.assertEqual("verified", state["state"])
+        self.assertEqual(2, state["sequence"])
+        self.assertEqual(
+            ["available", "downloading", "verified"],
+            [event["next_state"] for event in events],
+        )
+        self.assertEqual(self.artifact.read_bytes(), (transaction / "staging/update-bundle.tar.zst").read_bytes())
+        self.assertEqual(0o600, (transaction / "state.json").stat().st_mode & 0o777)
+
+    def test_failed_prepare_does_not_reach_verified(self):
+        manifest, signature = self.write_signed_manifest()
+        self.artifact.write_bytes(b"corrupt")
+        completed = self.run_prepare(manifest, signature)
+        self.assertEqual(2, completed.returncode)
+        transactions = list((self.directory / "update-state/transactions").glob("*"))
+        self.assertEqual([], transactions)
 
 
 if __name__ == "__main__":

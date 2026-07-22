@@ -179,6 +179,11 @@ manifest structure, compatibility, downgrade, free-space, and bundle digest
 rules without mutating the appliance. Production preview-key provisioning is
 still blocked on the documented key-custody decision.
 
+Authenticated local inputs can also be durably prepared under an exclusive
+lock. The updater records atomic, fsynced transaction snapshots and append-only
+events through the `verified` state, while deliberately performing no archive
+extraction or service mutation yet.
+
 ### U2 - Persistent Data and Versioned Releases
 
 - Pi-hole state confirmed under `/data`

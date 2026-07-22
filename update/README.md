@@ -49,6 +49,15 @@ trusted-key metadata, revocation state, device, source-version range,
 downgrade rule, free-space requirement, artifact size, and SHA-256 digest.
 Success performs no mutation.
 
+`sovereign-update prepare` accepts the same three inputs and is the first
+mutating boundary. Under an exclusive updater lock, it copies authenticated
+inputs into a mode-`0700` transaction directory under
+`/data/sovereign/update-state/`, fsyncs them, verifies the staged copies again,
+and advances an atomic journal through `available`, `downloading`, and
+`verified`. It does not extract the bundle, stop a service, or activate files.
+An interrupted transaction therefore remains diagnosable and safely precedes
+the backup/service-mutation boundary.
+
 Trusted public keys live under `/etc/sovereign/update-trust.d/` as matching
 `<key-id>.pem` and `<key-id>.json` files. The preview image intentionally ships
 with an empty trust store until release-key custody and rotation are approved;
