@@ -27,6 +27,12 @@ class UpdateClientTests(unittest.TestCase):
         self.trust.mkdir()
         self.release = self.directory / "sovereign-release"
         self.release.write_text('NAME="Sovereign OS"\nVERSION="0.1.0-preview.5"\n')
+        self.pihole_env = self.directory / "pihole-image.env"
+        self.pihole_env.write_text(
+            "PIHOLE_IMAGE_DIGEST=sha256:"
+            + "a" * 64
+            + "\n"
+        )
         self.policy = self.directory / "policy.json"
         self.policy.write_text(
             json.dumps(
@@ -63,6 +69,39 @@ class UpdateClientTests(unittest.TestCase):
         )
         self.artifact = self.directory / "update.tar.zst"
         self.artifact.write_bytes(b"authenticated update fixture\n")
+        self.state_root = self.directory / "state"
+        (self.state_root / "apps/pihole/etc-pihole").mkdir(parents=True)
+        (self.state_root / "apps/pihole/etc-pihole/gravity.db").write_text("fixture")
+        (self.state_root / "configuration").mkdir()
+        (self.state_root / "configuration/device.json").write_text("{}\n")
+        (self.state_root / "secrets").mkdir(mode=0o700)
+        (self.state_root / "secrets/pihole-admin-password").write_text("test-only\n")
+        self.tools = self.directory / "tools"
+        self.tools.mkdir()
+        self.service_log = self.directory / "service.log"
+        self.systemctl = self.tools / "systemctl"
+        self.systemctl.write_text(
+            "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$SOVEREIGN_TEST_SERVICE_LOG\"\n"
+        )
+        self.systemctl.chmod(0o755)
+        self.health = self.tools / "health"
+        self.health.write_text("#!/bin/sh\nexit 0\n")
+        self.health.chmod(0o755)
+        self.tar = self.tools / "tar"
+        self.tar.write_text(
+            "#!/bin/sh\n"
+            "output=\n"
+            "previous=\n"
+            "for argument in \"$@\"; do\n"
+            "  if [ \"$previous\" = --file ]; then output=$argument; fi\n"
+            "  previous=$argument\n"
+            "done\n"
+            "case \" $* \" in\n"
+            "  *' --create '*) eval 'last=${'$#'}'; printf '%s/\\n' \"$last\" > \"$output\" ;;\n"
+            "  *' --list '*) cat \"$output\" ;;\n"
+            "esac\n"
+        )
+        self.tar.chmod(0o755)
         self.manifest = json.loads(EXAMPLE.read_text())
         self.manifest["release"]["id"] = "sovereign-os-0.1.0-preview.6"
         self.manifest["release"]["version"] = "0.1.0-preview.6"
@@ -114,6 +153,7 @@ class UpdateClientTests(unittest.TestCase):
             "SOVEREIGN_DATA_PATH": str(self.directory),
             "SOVEREIGN_UPDATE_ROOT": str(self.directory / "update-state"),
             "SOVEREIGN_OPENSSL": OPENSSL,
+            "SOVEREIGN_PIHOLE_ENV": str(self.pihole_env),
         }
         command = [
             str(CLIENT),
@@ -128,13 +168,7 @@ class UpdateClientTests(unittest.TestCase):
         return subprocess.run(command, env=environment, capture_output=True, text=True)
 
     def run_prepare(self, manifest, signature):
-        environment = os.environ | {
-            "SOVEREIGN_UPDATE_POLICY": str(self.policy),
-            "SOVEREIGN_RELEASE_PATH": str(self.release),
-            "SOVEREIGN_DATA_PATH": str(self.directory),
-            "SOVEREIGN_UPDATE_ROOT": str(self.directory / "update-state"),
-            "SOVEREIGN_OPENSSL": OPENSSL,
-        }
+        environment = self.environment()
         return subprocess.run(
             [
                 str(CLIENT),
@@ -150,6 +184,23 @@ class UpdateClientTests(unittest.TestCase):
             capture_output=True,
             text=True,
         )
+
+    def environment(self):
+        return os.environ | {
+            "SOVEREIGN_UPDATE_POLICY": str(self.policy),
+            "SOVEREIGN_RELEASE_PATH": str(self.release),
+            "SOVEREIGN_DATA_PATH": str(self.directory),
+            "SOVEREIGN_UPDATE_ROOT": str(self.directory / "update-state"),
+            "SOVEREIGN_OPENSSL": OPENSSL,
+            "SOVEREIGN_PIHOLE_ENV": str(self.pihole_env),
+            "SOVEREIGN_STATE_ROOT": str(self.state_root),
+            "SOVEREIGN_RELEASES_ROOT": str(self.directory / "releases"),
+            "SOVEREIGN_SYSTEMCTL": str(self.systemctl),
+            "SOVEREIGN_UPDATE_HEALTH_CHECK": str(self.health),
+            "SOVEREIGN_TAR": str(self.tar),
+            "SOVEREIGN_UPDATE_TEST_MODE": "1",
+            "SOVEREIGN_TEST_SERVICE_LOG": str(self.service_log),
+        }
 
     def test_accepts_trusted_compatible_manifest_and_artifact(self):
         manifest, signature = self.write_signed_manifest()
@@ -229,6 +280,62 @@ class UpdateClientTests(unittest.TestCase):
         self.assertEqual(2, completed.returncode)
         transactions = list((self.directory / "update-state/transactions").glob("*"))
         self.assertEqual([], transactions)
+
+    def test_backup_is_complete_and_health_gated(self):
+        manifest, signature = self.write_signed_manifest()
+        prepared = self.run_prepare(manifest, signature)
+        transaction_id = json.loads(prepared.stdout)["transaction_id"]
+        completed = subprocess.run(
+            [str(CLIENT), "backup", transaction_id],
+            env=self.environment(),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        result = json.loads(completed.stdout)
+        backup = self.state_root / "backups" / result["backup_id"]
+        backup_manifest = json.loads((backup / "backup-manifest.json").read_text())
+        self.assertEqual(
+            {"pihole_state", "sovereign_configuration", "secrets", "release_pointer"},
+            {artifact["role"] for artifact in backup_manifest["artifacts"]},
+        )
+        state = json.loads(
+            (
+                self.directory
+                / "update-state/transactions"
+                / transaction_id
+                / "state.json"
+            ).read_text()
+        )
+        self.assertEqual("backed_up", state["state"])
+        self.assertEqual(result["backup_id"], state["backup_id"])
+        self.assertEqual(
+            ["stop sovereign-pihole.service", "start sovereign-pihole.service"],
+            self.service_log.read_text().splitlines(),
+        )
+
+    def test_failed_post_backup_health_requires_recovery(self):
+        manifest, signature = self.write_signed_manifest()
+        prepared = self.run_prepare(manifest, signature)
+        transaction_id = json.loads(prepared.stdout)["transaction_id"]
+        self.health.write_text("#!/bin/sh\nexit 1\n")
+        completed = subprocess.run(
+            [str(CLIENT), "backup", transaction_id],
+            env=self.environment(),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(2, completed.returncode)
+        state = json.loads(
+            (
+                self.directory
+                / "update-state/transactions"
+                / transaction_id
+                / "state.json"
+            ).read_text()
+        )
+        self.assertEqual("recovery_required", state["state"])
+        self.assertEqual("PREUPDATE_HEALTH_FAILED", state["failure"]["code"])
 
 
 if __name__ == "__main__":

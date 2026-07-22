@@ -184,6 +184,11 @@ lock. The updater records atomic, fsynced transaction snapshots and append-only
 events through the `verified` state, while deliberately performing no archive
 extraction or service mutation yet.
 
+The quiesced pre-update backup is now implemented. Four root-only archive roles
+are generated and validated, Pi-hole downtime is bounded to archive creation,
+and local DNS/HTTP health must recover before the transaction can become
+`backed_up`. Restore and activation remain pending.
+
 ### U2 - Persistent Data and Versioned Releases
 
 - Pi-hole state confirmed under `/data`

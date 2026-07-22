@@ -24,10 +24,24 @@ POLICY_PATH = pathlib.Path(
 RELEASE_PATH = pathlib.Path(
     os.environ.get("SOVEREIGN_RELEASE_PATH", "/etc/sovereign-release")
 )
+PIHOLE_ENV_PATH = pathlib.Path(
+    os.environ.get("SOVEREIGN_PIHOLE_ENV", "/usr/lib/sovereign/pihole-image.env")
+)
 DATA_PATH = pathlib.Path(os.environ.get("SOVEREIGN_DATA_PATH", "/data"))
 OPENSSL = os.environ.get("SOVEREIGN_OPENSSL", "/usr/bin/openssl")
+TAR = os.environ.get("SOVEREIGN_TAR", "/usr/bin/tar")
+SYSTEMCTL = os.environ.get("SOVEREIGN_SYSTEMCTL", "/usr/bin/systemctl")
+HEALTH_CHECK = os.environ.get(
+    "SOVEREIGN_UPDATE_HEALTH_CHECK", "/usr/lib/sovereign/verify-update-health"
+)
 UPDATE_ROOT = pathlib.Path(
     os.environ.get("SOVEREIGN_UPDATE_ROOT", str(DATA_PATH / "sovereign/update-state"))
+)
+STATE_ROOT = pathlib.Path(
+    os.environ.get("SOVEREIGN_STATE_ROOT", str(DATA_PATH / "sovereign"))
+)
+RELEASES_ROOT = pathlib.Path(
+    os.environ.get("SOVEREIGN_RELEASES_ROOT", "/opt/sovereign")
 )
 
 SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
@@ -113,6 +127,19 @@ def read_release_version():
     version = values.get("VERSION")
     parse_version(version)
     return version
+
+
+def read_key_values(path):
+    try:
+        lines = pathlib.Path(path).read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as error:
+        raise UpdateError("METADATA_UNAVAILABLE", f"Installed metadata is unavailable: {path}") from error
+    values = {}
+    for line in lines:
+        key, separator, value = line.partition("=")
+        if separator:
+            values[key.strip()] = value.strip().strip('"')
+    return values
 
 
 def validate_manifest(manifest):
@@ -435,6 +462,24 @@ def transition(snapshot, next_state, reason, **changes):
     return snapshot
 
 
+def load_transaction(transaction_id, required_state=None):
+    snapshot = read_json(
+        transaction_path(transaction_id) / "state.json", "INVALID_TRANSACTION"
+    )
+    fail(
+        snapshot.get("transaction_id") == transaction_id,
+        "INVALID_TRANSACTION",
+        "Transaction identity does not match",
+    )
+    if required_state:
+        fail(
+            snapshot.get("state") == required_state,
+            "INVALID_TRANSACTION_STATE",
+            f"Transaction must be {required_state}",
+        )
+    return snapshot
+
+
 def copy_verified(source, destination, expected_size=None, expected_digest=None):
     source = pathlib.Path(source)
     destination = pathlib.Path(destination)
@@ -486,6 +531,184 @@ def prepare_update(args):
         print(json.dumps({"status": "verified", "transaction_id": snapshot["transaction_id"], "target_version": snapshot["target_version"]}, sort_keys=True))
 
 
+def run_checked(command, code, message, timeout=120):
+    try:
+        subprocess.run(
+            command,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        raise UpdateError(code, message) from error
+
+
+def archive_directory(source, destination):
+    source = pathlib.Path(source)
+    fail(source.is_dir(), "BACKUP_SOURCE_MISSING", f"Backup source is missing: {source.name}")
+    run_checked(
+        [
+            TAR,
+            "--create",
+            "--zstd",
+            "--file",
+            str(destination),
+            "--numeric-owner",
+            "--owner=0",
+            "--group=0",
+            "--no-acls",
+            "--no-xattrs",
+            "--directory",
+            str(source.parent),
+            source.name,
+        ],
+        "BACKUP_ARCHIVE_FAILED",
+        f"Could not archive {source.name}",
+        timeout=600,
+    )
+    os.chmod(destination, 0o600)
+    try:
+        listing = subprocess.run(
+            [TAR, "--list", "--zstd", "--file", str(destination)],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        ).stdout.splitlines()
+    except (OSError, subprocess.SubprocessError) as error:
+        raise UpdateError("BACKUP_ARCHIVE_INVALID", f"Could not validate {destination.name}") from error
+    fail(0 < len(listing) <= 100000, "BACKUP_ARCHIVE_INVALID", "Backup archive has an invalid entry count")
+    for entry in listing:
+        path = pathlib.PurePosixPath(entry.rstrip("/"))
+        fail(not path.is_absolute() and ".." not in path.parts, "BACKUP_ARCHIVE_UNSAFE", "Backup archive contains an unsafe path")
+        fail(path.parts and path.parts[0] == source.name, "BACKUP_ARCHIVE_UNSAFE", "Backup archive escaped its role prefix")
+    digest = hashlib.sha256()
+    with destination.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return {
+        "size": destination.stat().st_size,
+        "sha256": digest.hexdigest(),
+    }
+
+
+def release_pointer_source(directory, snapshot, manifest):
+    source = directory / "release-pointer"
+    source.mkdir(mode=0o700)
+    pointer = {
+        "source_version": snapshot["source_version"],
+        "target_version": snapshot["target_version"],
+        "pihole_digest": manifest["components"]["pihole"]["digest"],
+        "active_release": None,
+    }
+    current = RELEASES_ROOT / "current"
+    if current.is_symlink():
+        pointer["active_release"] = os.readlink(current)
+    atomic_json(source / "release-pointer.json", pointer)
+    return source
+
+
+def create_backup(args):
+    fail(
+        os.geteuid() == 0 or os.environ.get("SOVEREIGN_UPDATE_TEST_MODE") == "1",
+        "ROOT_REQUIRED",
+        "Backup requires administrator privileges",
+    )
+    with update_lock():
+        snapshot = load_transaction(args.transaction, "verified")
+        directory = transaction_path(args.transaction)
+        manifest = read_json(directory / "staging/release-manifest.json")
+        installed_pihole = read_key_values(PIHOLE_ENV_PATH)
+        source_pihole_digest = installed_pihole.get("PIHOLE_IMAGE_DIGEST")
+        fail(
+            isinstance(source_pihole_digest, str)
+            and OCI_DIGEST.fullmatch(source_pihole_digest),
+            "METADATA_UNAVAILABLE",
+            "Installed Pi-hole digest is unavailable",
+        )
+        snapshot = transition(snapshot, "backing_up", "BACKUP_STARTED")
+        now = timestamp()
+        compact = now.replace("-", "").replace(":", "").lower()
+        backup_id = f"backup-{compact}-{secrets.token_hex(4)}"
+        backup = STATE_ROOT / "backups" / backup_id
+        backup.mkdir(parents=True, mode=0o700)
+        stopped = False
+        try:
+            run_checked(
+                [SYSTEMCTL, "stop", "sovereign-pihole.service"],
+                "SERVICE_STOP_FAILED",
+                "Pi-hole could not be stopped for backup",
+            )
+            stopped = True
+            release_source = release_pointer_source(directory, snapshot, manifest)
+            sources = [
+                ("pihole_state", STATE_ROOT / "apps/pihole/etc-pihole", "pihole-state.tar.zst"),
+                ("sovereign_configuration", STATE_ROOT / "configuration", "sovereign-configuration.tar.zst"),
+                ("secrets", STATE_ROOT / "secrets", "secrets.tar.zst"),
+                ("release_pointer", release_source, "release-pointer.tar.zst"),
+            ]
+            artifacts = []
+            for role, source, filename in sources:
+                details = archive_directory(source, backup / filename)
+                artifacts.append({"role": role, "file": filename, **details})
+            run_checked(
+                [SYSTEMCTL, "start", "sovereign-pihole.service"],
+                "SERVICE_RESTART_FAILED",
+                "Pi-hole could not be restarted after backup",
+            )
+            stopped = False
+            run_checked(
+                [HEALTH_CHECK],
+                "PREUPDATE_HEALTH_FAILED",
+                "Pi-hole did not recover after backup",
+            )
+            backup_manifest = {
+                "schema_version": 1,
+                "backup_id": backup_id,
+                "transaction_id": args.transaction,
+                "created_at": now,
+                "source": {
+                    "appliance_version": snapshot["source_version"],
+                    "pihole_digest": source_pihole_digest,
+                    "data_schema": 1,
+                },
+                "consistency": {
+                    "method": "quiesced",
+                    "services_stopped": ["sovereign-pihole"],
+                    "restarted_and_healthy": True,
+                },
+                "artifacts": artifacts,
+            }
+            atomic_json(backup / "backup-manifest.json", backup_manifest)
+            sync_directory(backup)
+            snapshot = transition(
+                snapshot,
+                "backed_up",
+                "BACKUP_VERIFIED",
+                backup_id=backup_id,
+            )
+            print(json.dumps({"status": "backed_up", "transaction_id": args.transaction, "backup_id": backup_id}, sort_keys=True))
+        except UpdateError as error:
+            if stopped:
+                try:
+                    run_checked(
+                        [SYSTEMCTL, "start", "sovereign-pihole.service"],
+                        "SERVICE_RESTART_FAILED",
+                        "Pi-hole could not be restarted after backup failure",
+                    )
+                except UpdateError:
+                    pass
+            transition(
+                snapshot,
+                "recovery_required",
+                error.code,
+                failure={"code": error.code, "message": str(error), "retryable": False},
+                recovery_action="manual",
+            )
+            raise
+
+
 def show_status(_args):
     policy = read_json(POLICY_PATH, "INVALID_POLICY")
     transactions = sorted((UPDATE_ROOT / "transactions").glob("*/state.json"))
@@ -515,6 +738,9 @@ def parser():
     prepare.add_argument("--signature", required=True)
     prepare.add_argument("--artifact", required=True)
     prepare.set_defaults(handler=prepare_update)
+    backup = subcommands.add_parser("backup", help="create a quiesced pre-update backup")
+    backup.add_argument("transaction")
+    backup.set_defaults(handler=create_backup)
     return command
 
 

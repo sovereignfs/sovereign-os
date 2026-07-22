@@ -2,6 +2,6 @@
 
 set -eu
 
-install -d -m 0755 /data/sovereign
+install -d -m 0755 /data/sovereign /data/sovereign/configuration
+install -d -m 0700 /data/sovereign/backups /data/sovereign/update-state
 printf '%s\n' "Sovereign image initialized" > /data/sovereign/proof-ready
-

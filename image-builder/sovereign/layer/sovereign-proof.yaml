@@ -18,5 +18,6 @@ mmdebstrap:
     - openssl
     - python3-minimal
     - sudo
+    - zstd
   customize-hooks:
     - test -d "$1"

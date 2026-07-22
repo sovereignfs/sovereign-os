@@ -58,6 +58,14 @@ and advances an atomic journal through `available`, `downloading`, and
 An interrupted transaction therefore remains diagnosable and safely precedes
 the backup/service-mutation boundary.
 
+`sudo sovereign-update backup <transaction-id>` creates the first quiesced
+backup boundary. It stops only Pi-hole, archives the four mandatory roles with
+root-only permissions, rejects unsafe or unreadable archive listings, records
+size and SHA-256 metadata, restarts Pi-hole immediately, and requires container,
+TCP/UDP DNS, HTTP routing, Nginx, and DATA-mount health before entering
+`backed_up`. A restart or health failure enters `recovery_required`; activation
+is never attempted.
+
 Trusted public keys live under `/etc/sovereign/update-trust.d/` as matching
 `<key-id>.pem` and `<key-id>.json` files. The preview image intentionally ships
 with an empty trust store until release-key custody and rotation are approved;
