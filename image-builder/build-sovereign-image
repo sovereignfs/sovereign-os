@@ -1,0 +1,29 @@
+#!/bin/sh
+
+set -eu
+
+case "$SOVEREIGN_VERSION" in
+  ''|*[!0-9A-Za-z.-]*)
+    echo "Invalid Sovereign version" >&2
+    exit 2
+    ;;
+esac
+case "$SOVEREIGN_CHANNEL" in
+  preview|stable) ;;
+  *)
+    echo "Invalid Sovereign channel" >&2
+    exit 2
+    ;;
+esac
+
+release=/opt/sovereign-image/layer/sovereign-proof.rootfs-overlay/etc/sovereign-release
+cat > "$release" <<EOF
+NAME="Sovereign OS"
+VARIANT="Raspberry Pi 5"
+VERSION="$SOVEREIGN_VERSION"
+CHANNEL="$SOVEREIGN_CHANNEL"
+DEVICE="rpi5-arm64"
+DATA_SCHEMA="1"
+EOF
+
+exec ./rpi-image-gen build -S /opt/sovereign-image -c sovereign-proof.yaml

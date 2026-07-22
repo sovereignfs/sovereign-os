@@ -2,8 +2,12 @@ FROM debian:trixie-slim
 
 ARG RPI_IMAGE_GEN_TAG=v2.7.0
 ARG RPI_IMAGE_GEN_COMMIT=a7b6d4806183195f3efadb533f58c8e46393d057
+ARG SOVEREIGN_VERSION=0.1.0-dev
+ARG SOVEREIGN_CHANNEL=preview
 
 ENV DEBIAN_FRONTEND=noninteractive
+ENV SOVEREIGN_VERSION=${SOVEREIGN_VERSION}
+ENV SOVEREIGN_CHANNEL=${SOVEREIGN_CHANNEL}
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -25,7 +29,8 @@ RUN git -C /opt/rpi-image-gen apply --check /tmp/bin-ns.patch \
     && rm /tmp/bin-ns.patch
 
 COPY image-builder/sovereign /opt/sovereign-image
+COPY image-builder/build-sovereign-image /usr/local/bin/build-sovereign-image
 
 WORKDIR /opt/rpi-image-gen
 
-CMD ["./rpi-image-gen", "build", "-S", "/opt/sovereign-image", "-c", "sovereign-proof.yaml"]
+CMD ["/usr/local/bin/build-sovereign-image"]

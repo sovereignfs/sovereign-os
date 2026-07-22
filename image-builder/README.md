@@ -48,6 +48,18 @@ Build the external Sovereign layer and its boot/root/DATA layout with:
 ./scripts/build-sovereign-image.sh
 ```
 
+Release builds must provide the version and channel so the installed image and
+published artifact identity cannot diverge:
+
+```bash
+SOVEREIGN_VERSION=0.1.0-preview.6 \
+SOVEREIGN_CHANNEL=preview \
+./scripts/build-sovereign-image.sh
+```
+
+The build exports the embedded `/etc/sovereign-release` as evidence, and release
+packaging fails if it does not match the requested release identity.
+
 The flash artifact is written to the ignored path
 `build/sovereign-image/deploy/sovereign-proof.img.zst`. Product-owned inputs
 live under `image-builder/sovereign/`; the pinned upstream checkout is not

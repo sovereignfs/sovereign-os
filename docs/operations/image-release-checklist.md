@@ -6,6 +6,8 @@
 ## Release Identity
 
 - [ ] Release version and channel assigned.
+- [ ] `/etc/sovereign-release` inside the image matches the assigned version,
+      channel, device identifier, and DATA schema.
 - [ ] Source revision recorded.
 - [ ] Image-build-tool revision recorded.
 - [ ] Raspberry Pi OS base release recorded.

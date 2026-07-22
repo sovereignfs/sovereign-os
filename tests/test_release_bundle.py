@@ -33,6 +33,10 @@ class ReleaseBundleTests(unittest.TestCase):
         )
         (self.repo / "scripts").mkdir()
         (self.repo / "scripts/create-imager-manifest.py").write_text("# helper\n")
+        (self.repo / "build/sovereign-image/evidence").mkdir(parents=True)
+        (self.repo / "build/sovereign-image/evidence/sovereign-release").write_text(
+            'NAME="Sovereign OS"\nVERSION="0.1.0"\nCHANNEL="preview"\n'
+        )
         package_manifest = self.root / "manifest"
         package_manifest.write_text(
             "".join(f"{package}\t1.0\n" for package in MODULE.REQUIRED_PACKAGES)
@@ -88,4 +92,11 @@ class ReleaseBundleTests(unittest.TestCase):
         self.output.mkdir()
         (self.output / "existing").write_text("do not overwrite")
         with self.assertRaisesRegex(ValueError, "not empty"):
+            MODULE.create_bundle(self.arguments())
+
+    def test_rejects_image_version_mismatch(self):
+        (self.repo / "build/sovereign-image/evidence/sovereign-release").write_text(
+            'VERSION="0.1.0-preview.1"\nCHANNEL="preview"\n'
+        )
+        with self.assertRaisesRegex(ValueError, "embedded version"):
             MODULE.create_bundle(self.arguments())

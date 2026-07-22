@@ -107,6 +107,13 @@ def create_bundle(args):
 
     builder = parse_env(repo_root / "image-builder/rpi-image-gen.version")
     pihole = parse_env(repo_root / "image-builder/sovereign/pihole-image.env")
+    installed_release = parse_env(
+        repo_root / "build/sovereign-image/evidence/sovereign-release"
+    )
+    if installed_release.get("VERSION") != args.version:
+        raise ValueError("image-embedded version does not match release version")
+    if installed_release.get("CHANNEL") != args.channel:
+        raise ValueError("image-embedded channel does not match release channel")
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", pihole["PIHOLE_IMAGE_DIGEST"]):
         raise ValueError("Pi-hole image digest is not a complete SHA-256 digest")
     package_versions = read_package_versions(deploy_dir / "manifest.zst")

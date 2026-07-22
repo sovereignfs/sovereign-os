@@ -9,11 +9,15 @@ image="sovereign-image-builder:${RPI_IMAGE_GEN_TAG}"
 container="sovereign-image-build"
 output_dir="${repo_root}/build/sovereign-image"
 patched_version="${RPI_IMAGE_GEN_TAG}-dirty"
+sovereign_version=${SOVEREIGN_VERSION:-0.1.0-dev}
+sovereign_channel=${SOVEREIGN_CHANNEL:-preview}
 
 docker build \
   --platform linux/arm64 \
   --build-arg "RPI_IMAGE_GEN_TAG=${RPI_IMAGE_GEN_TAG}" \
   --build-arg "RPI_IMAGE_GEN_COMMIT=${RPI_IMAGE_GEN_COMMIT}" \
+  --build-arg "SOVEREIGN_VERSION=${sovereign_version}" \
+  --build-arg "SOVEREIGN_CHANNEL=${sovereign_channel}" \
   --file "${repo_root}/image-builder/Dockerfile.sovereign" \
   --tag "${image}" \
   "${repo_root}"
@@ -43,6 +47,9 @@ docker cp \
 docker cp \
   "${container}:/opt/rpi-image-gen/work/chroot-${patched_version}/filesystem/usr/lib/sovereign/artifacts/." \
   "${output_dir}/evidence/oci/" 2>/dev/null || true
+docker cp \
+  "${container}:/opt/rpi-image-gen/work/chroot-${patched_version}/filesystem/etc/sovereign-release" \
+  "${output_dir}/evidence/sovereign-release" 2>/dev/null || true
 
 echo "Build evidence exported to ${output_dir}"
 echo "Retained container: ${container}"

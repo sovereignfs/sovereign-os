@@ -42,6 +42,9 @@ jobs:
           df -h .
 
       - name: Build image
+        env:
+          SOVEREIGN_VERSION: ${{ inputs.version }}
+          SOVEREIGN_CHANNEL: ${{ inputs.channel }}
         run: ./scripts/build-sovereign-image.sh
 
       - name: Package release candidate
