@@ -462,6 +462,51 @@ class UpdateClientTests(unittest.TestCase):
         )
         self.assertEqual("rolled_back", state["state"])
 
+    def test_qualification_health_failure_rolls_back_with_real_health_check(self):
+        transaction_id = self.prepare_and_backup_bundle()
+        staged = subprocess.run(
+            [str(CLIENT), "stage", transaction_id],
+            env=self.environment(),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(0, staged.returncode, staged.stderr)
+        environment = self.environment() | {
+            "SOVEREIGN_UPDATE_QUALIFICATION": "1",
+            "SOVEREIGN_UPDATE_QUALIFICATION_FAIL_HEALTH": "1",
+        }
+        activated = subprocess.run(
+            [str(CLIENT), "activate", transaction_id],
+            env=environment,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(2, activated.returncode)
+        self.assertEqual(
+            "POSTUPDATE_HEALTH_FAILED", json.loads(activated.stderr)["code"]
+        )
+        self.assertEqual("0.1.0-preview.5", self.releases.joinpath("current").resolve().name)
+        state = json.loads(
+            (
+                self.directory
+                / "update-state/transactions"
+                / transaction_id
+                / "state.json"
+            ).read_text()
+        )
+        self.assertEqual("rolled_back", state["state"])
+        self.assertEqual(
+            [
+                "stop sovereign-pihole.service",
+                "start sovereign-pihole.service",
+                "stop sovereign-pihole.service",
+                "start sovereign-pihole.service",
+                "stop sovereign-pihole.service",
+                "start sovereign-pihole.service",
+            ],
+            self.service_log.read_text().splitlines(),
+        )
+
     def test_boot_recovery_restores_previous_release_pointer(self):
         transaction_id = self.prepare_and_backup_bundle()
         staged = subprocess.run(

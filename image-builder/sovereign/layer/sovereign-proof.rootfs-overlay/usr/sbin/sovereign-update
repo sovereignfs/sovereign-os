@@ -75,18 +75,26 @@ def fail(condition, code, message):
 
 def validate_qualification_interrupt():
     boundary = os.environ.get("SOVEREIGN_UPDATE_QUALIFICATION_INTERRUPT")
-    if boundary is None:
+    fail_health = os.environ.get("SOVEREIGN_UPDATE_QUALIFICATION_FAIL_HEALTH")
+    if boundary is None and fail_health is None:
         return
     fail(
         os.environ.get("SOVEREIGN_UPDATE_QUALIFICATION") == "1",
         "QUALIFICATION_NOT_ARMED",
         "Qualification interruption requires explicit arming",
     )
-    fail(
-        boundary in QUALIFICATION_BOUNDARIES,
-        "INVALID_QUALIFICATION_BOUNDARY",
-        "Unknown qualification interruption boundary",
-    )
+    if boundary is not None:
+        fail(
+            boundary in QUALIFICATION_BOUNDARIES,
+            "INVALID_QUALIFICATION_BOUNDARY",
+            "Unknown qualification interruption boundary",
+        )
+    if fail_health is not None:
+        fail(
+            fail_health == "1",
+            "INVALID_QUALIFICATION_HEALTH_FAILURE",
+            "Qualification health failure must be set to 1",
+        )
 
 
 def qualification_interrupt(boundary):
@@ -95,6 +103,14 @@ def qualification_interrupt(boundary):
         # preceding transition has already atomically persisted and fsynced its
         # state and event, which is exactly what reboot recovery must inspect.
         os._exit(QUALIFICATION_EXIT)
+
+
+def qualification_health_failure():
+    fail(
+        os.environ.get("SOVEREIGN_UPDATE_QUALIFICATION_FAIL_HEALTH") != "1",
+        "POSTUPDATE_HEALTH_FAILED",
+        "Qualification forced the target health check to fail",
+    )
 
 
 def read_json(path, code="INVALID_JSON"):
@@ -926,6 +942,7 @@ def activate_release(args):
             run_checked([SYSTEMCTL, "start", "sovereign-pihole.service"], "SERVICE_START_FAILED", "Updated Pi-hole could not be started")
             snapshot = transition(snapshot, "validating", "TARGET_STARTED")
             qualification_interrupt("validating")
+            qualification_health_failure()
             run_checked([HEALTH_CHECK], "POSTUPDATE_HEALTH_FAILED", "Updated appliance failed health checks")
             snapshot = transition(snapshot, "committed", "UPDATE_COMMITTED", recovery_action="none")
             shutil.rmtree(directory / "release-candidate", ignore_errors=True)

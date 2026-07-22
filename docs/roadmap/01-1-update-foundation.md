@@ -201,6 +201,12 @@ local DNS/HTTP validation, health-gated commit, and automatic release-pointer
 rollback. Data migrations remain rejected, and real-device backup/rollback
 qualification is still pending.
 
+Repeatable hardware qualification tooling is also implemented: exact-byte
+offline kit preparation, explicitly armed interruption hooks at the durable
+`backing_up`, `activating`, and `validating` boundaries, and safe cleanup of
+inactive failed targets without deleting their journals or referenced backups.
+The next image cycle will qualify these paths on Raspberry Pi 5 hardware.
+
 Because the initial slice rejects all data migrations, automatic rollback does
 not restore persistent data that the updater never modifies. The pre-update
 backup remains the recovery boundary, but a general data-restore command is not

@@ -107,6 +107,14 @@ manifest from pinned Pi-hole metadata and OCI build evidence.
 Ed25519 private key. The private key is never an input to the image builder or
 ordinary unsigned packaging workflow.
 
+For physical engineering qualification,
+`scripts/prepare-update-qualification.py` validates the unsigned workflow
+output, signs and verifies the exact manifest, derives matching public trust
+files, and produces a checksummed transfer kit that excludes the private key.
+The installed updater also provides explicitly armed durable-boundary
+interruption hooks and a safe `discard` command for removing only inactive
+failed-test payloads while retaining journals and backups.
+
 Trusted public keys live under `/etc/sovereign/update-trust.d/` as matching
 `<key-id>.pem` and `<key-id>.json` files. The preview image intentionally ships
 with an empty trust store until release-key custody and rotation are approved;
