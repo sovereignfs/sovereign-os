@@ -2,6 +2,7 @@ import base64
 import json
 import shutil
 import subprocess
+import tarfile
 import tempfile
 import unittest
 from pathlib import Path
@@ -47,6 +48,35 @@ class UpdateReleaseTests(unittest.TestCase):
             self.assertEqual("0.1.0-preview.7", manifest["release"]["version"])
             bundle = output / "sovereign-update-0.1.0-preview.7-rpi5-arm64.tar.zst"
             self.assertEqual(bundle.stat().st_size, manifest["artifacts"][0]["size"])
+            tar_path = temporary / "update.tar"
+            subprocess.run([ZSTD, "-q", "-d", "-o", tar_path, bundle], check=True)
+            with tarfile.open(tar_path) as archive:
+                names = archive.getnames()
+                self.assertIn(
+                    "sovereign-update-v1/release/appliance/console/index.html",
+                    names,
+                )
+                self.assertIn(
+                    "sovereign-update-v1/release/appliance/bin/start-pihole",
+                    names,
+                )
+                bundle_manifest = json.load(
+                    archive.extractfile(
+                        "sovereign-update-v1/bundle-manifest.json"
+                    )
+                )
+                modes = {
+                    entry["path"]: entry["mode"]
+                    for entry in bundle_manifest["files"]
+                }
+                self.assertEqual(
+                    0o755,
+                    modes["release/appliance/bin/start-pihole"],
+                )
+                self.assertEqual(
+                    0o644,
+                    modes["release/appliance/console/index.html"],
+                )
             private = temporary / "private.pem"
             public = temporary / "public.pem"
             subprocess.run([OPENSSL, "genpkey", "-algorithm", "Ed25519", "-out", private], check=True)
@@ -75,8 +105,14 @@ class UpdateReleaseTests(unittest.TestCase):
         self.assertIn("Before=sovereign-pihole.service", recovery)
         self.assertIn("After=", pihole)
         self.assertIn("sovereign-update-recovery.service", pihole)
-        self.assertIn("ExecStop=/usr/lib/sovereign/stop-pihole", pihole)
-        self.assertIn("docker compose", (overlay / "usr/lib/sovereign/stop-pihole").read_text())
+        self.assertIn(
+            "ExecStop=/opt/sovereign/current/appliance/bin/stop-pihole",
+            pihole,
+        )
+        self.assertIn(
+            "docker compose",
+            (ROOT / "image-builder/sovereign/appliance/bin/stop-pihole").read_text(),
+        )
         self.assertIn("sovereign-update-recovery.service", enablement)
         wrapper = overlay / "usr/bin/sovereign-update"
         self.assertTrue(wrapper.is_file())

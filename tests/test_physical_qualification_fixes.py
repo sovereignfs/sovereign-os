@@ -7,6 +7,7 @@ OVERLAY = (
     ROOT
     / "image-builder/sovereign/layer/sovereign-proof.rootfs-overlay"
 )
+APPLIANCE = ROOT / "image-builder/sovereign/appliance"
 LAYER = ROOT / "image-builder/sovereign/layer/sovereign-proof.yaml"
 ENABLE_UNITS = (
     ROOT
@@ -47,9 +48,9 @@ class PhysicalQualificationFixTests(unittest.TestCase):
 
     def test_pihole_secret_name_and_authenticated_readiness(self):
         compose = (
-            OVERLAY / "usr/lib/sovereign/pihole/compose.yaml.in"
+            APPLIANCE / "pihole/compose.yaml.in"
         ).read_text()
-        start = (OVERLAY / "usr/lib/sovereign/start-pihole").read_text()
+        start = (APPLIANCE / "bin/start-pihole").read_text()
 
         self.assertIn("WEBPASSWORD_FILE: pihole_webpasswd", compose)
         self.assertNotIn("WEBPASSWORD_FILE: /run/secrets/", compose)
@@ -59,8 +60,8 @@ class PhysicalQualificationFixTests(unittest.TestCase):
         self.assertIn("credential=pass", start)
 
     def test_dns_slash_redirect_and_absolute_redirect_verification(self):
-        nginx = (OVERLAY / "etc/nginx/sites-available/sovereign").read_text()
-        verifier = (OVERLAY / "usr/lib/sovereign/verify-local-access").read_text()
+        nginx = (APPLIANCE / "nginx/sovereign.conf").read_text()
+        verifier = (APPLIANCE / "bin/verify-local-access").read_text()
         service = (
             OVERLAY / "etc/systemd/system/sovereign-local-access.service"
         ).read_text()

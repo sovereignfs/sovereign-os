@@ -10,7 +10,7 @@ StartLimitBurst=6
 
 [Service]
 Type=oneshot
-ExecStart=/usr/lib/sovereign/verify-local-access
+ExecStart=/opt/sovereign/current/appliance/bin/verify-local-access
 RemainAfterExit=yes
 Restart=on-failure
 RestartSec=10s

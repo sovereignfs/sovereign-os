@@ -35,6 +35,25 @@ def parse_env(path):
     return values
 
 
+def copy_appliance(source, destination):
+    source = pathlib.Path(source).resolve()
+    if not source.is_dir():
+        raise ValueError("appliance source directory is missing")
+    for path in source.rglob("*"):
+        if path.is_symlink():
+            raise ValueError(f"appliance source contains a symlink: {path}")
+        if not (path.is_dir() or path.is_file()):
+            raise ValueError(f"appliance source contains a special file: {path}")
+    shutil.copytree(source, destination)
+    for path in destination.rglob("*"):
+        if path.is_dir():
+            path.chmod(0o755)
+        elif path.parent == destination / "bin":
+            path.chmod(0o755)
+        else:
+            path.chmod(0o644)
+
+
 def create(args):
     for value in (args.version, args.source_minimum, args.source_maximum_exclusive):
         if not VERSION.fullmatch(value):
@@ -61,6 +80,7 @@ def create(args):
     with tempfile.TemporaryDirectory() as temporary_directory:
         release = pathlib.Path(temporary_directory) / "release"
         release.mkdir()
+        copy_appliance(args.appliance_dir, release / "appliance")
         shutil.copyfile(pihole_env, release / "pihole-image.env")
         shutil.copyfile(oci, release / "pihole-arm64.oci.tar")
         (release / "sovereign-release").write_text(
@@ -148,6 +168,12 @@ def main():
     parser.add_argument("--source-maximum-exclusive", required=True)
     parser.add_argument("--pihole-env", type=pathlib.Path, required=True)
     parser.add_argument("--oci", type=pathlib.Path, required=True)
+    parser.add_argument(
+        "--appliance-dir",
+        type=pathlib.Path,
+        default=pathlib.Path(__file__).resolve().parents[1]
+        / "image-builder/sovereign/appliance",
+    )
     parser.add_argument("--output-dir", type=pathlib.Path, required=True)
     parser.add_argument("--key-id", required=True)
     parser.add_argument("--artifact-base-url", required=True)

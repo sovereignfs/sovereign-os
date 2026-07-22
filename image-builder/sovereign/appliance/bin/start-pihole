@@ -7,13 +7,14 @@ app_dir=${state_dir}/apps/pihole
 secret_dir=${state_dir}/secrets
 password_file=${secret_dir}/pihole-admin-password
 compose_file=${app_dir}/compose.yaml
-template=/usr/lib/sovereign/pihole/compose.yaml.in
+appliance_root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+release_root=$(CDPATH= cd -- "${appliance_root}/.." && pwd)
+template=${appliance_root}/pihole/compose.yaml.in
 marker=${state_dir}/pihole-ready
 auth_request=$(mktemp)
 auth_response=$(mktemp)
 trap 'rm -f "$auth_request" "$auth_response"' EXIT
-image_environment=/opt/sovereign/current/pihole-image.env
-[ -f "$image_environment" ] || image_environment=/usr/lib/sovereign/pihole-image.env
+image_environment=${release_root}/pihole-image.env
 . "$image_environment"
 image_reference="${PIHOLE_IMAGE_REPOSITORY#docker.io/}@${PIHOLE_IMAGE_DIGEST}"
 

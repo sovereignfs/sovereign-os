@@ -8,7 +8,7 @@ ConditionPathIsMountPoint=/data
 [Service]
 Type=simple
 DynamicUser=yes
-ExecStart=/usr/lib/sovereign/console-health
+ExecStart=/opt/sovereign/current/appliance/bin/console-health
 Restart=on-failure
 RestartSec=5s
 NoNewPrivileges=yes

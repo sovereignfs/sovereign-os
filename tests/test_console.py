@@ -10,12 +10,13 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 OVERLAY = ROOT / "image-builder/sovereign/layer/sovereign-proof.rootfs-overlay"
-HEALTH_SERVICE = OVERLAY / "usr/lib/sovereign/console-health"
+APPLIANCE = ROOT / "image-builder/sovereign/appliance"
+HEALTH_SERVICE = APPLIANCE / "bin/console-health"
 SYSTEMD_SERVICE = OVERLAY / "etc/systemd/system/sovereign-console.service"
-NGINX = OVERLAY / "etc/nginx/sites-available/sovereign"
-HTML = OVERLAY / "usr/share/sovereign-console/index.html"
-JAVASCRIPT = OVERLAY / "usr/share/sovereign-console/assets/console.js"
-STYLES = OVERLAY / "usr/share/sovereign-console/assets/console.css"
+NGINX = APPLIANCE / "nginx/sovereign.conf"
+HTML = APPLIANCE / "console/index.html"
+JAVASCRIPT = APPLIANCE / "console/assets/console.js"
+STYLES = APPLIANCE / "console/assets/console.css"
 ENABLE_UNITS = (
     ROOT
     / "image-builder/sovereign/image/sovereign-data/bdebstrap/customize90-sovereign"
@@ -126,6 +127,10 @@ class ConsoleTests(unittest.TestCase):
         self.assertIn("NoNewPrivileges=yes", service)
         self.assertIn("ProtectSystem=strict", service)
         self.assertIn("CapabilityBoundingSet=", service)
+        self.assertIn(
+            "ExecStart=/opt/sovereign/current/appliance/bin/console-health",
+            service,
+        )
         self.assertIn("AF_NETLINK", service)
         self.assertNotIn("docker.sock", service)
         self.assertIn("sovereign-console.service", enabled)
