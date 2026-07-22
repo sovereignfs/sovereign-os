@@ -6,18 +6,13 @@
 
 ## Next Priority
 
-🟡 Console Foundation
+🟡 Milestone 01.1 — Appliance Update Foundation
 
-Make `/console/` the Sovereign OS entry point and deliver a minimal read-only
-health experience backed by a stable `/api/v1/health` contract.
+Complete persistent-data restore, bounded retention, and production signing
+operations after the initial signed, rollback-capable update transaction passed
+Raspberry Pi qualification.
 
 ## Subsequent Priorities
-
-🟡 Milestone 01.1 — Appliance Update Foundation (Pi qualification pending)
-
-Deliver signed, rollback-capable Pi-hole and appliance updates without reflashing or erasing persistent data.
-
-## Following Milestone
 
 ⚪ Milestone 01.2 — Local Conversation and Capabilities
 
@@ -36,8 +31,9 @@ read operations, and opt-in web search through a self-hosted SearXNG instance.
 - ✅ Image Build System Assessment — `rpi-image-gen` recommended
 - ⏳ `rpi-image-gen` Proof Build
 - ⏳ Raspberry Pi Image
-- 🟡 Signed appliance update tooling implemented; Pi qualification pending
-- 🟡 Sovereign Console health page implemented; image qualification pending
+- 🟡 Signed appliance update transaction qualified on Pi; restore, retention,
+  and production signing remain
+- ✅ Sovereign Console health page qualified on Raspberry Pi 5
 - ⏳ Local inference benchmark on Raspberry Pi 5
 - ⏳ Conversation and capability architecture RFC
 - ⏳ SearXNG-backed web search capability

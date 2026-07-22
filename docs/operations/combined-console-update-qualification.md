@@ -1,6 +1,7 @@
 # Combined Console and Appliance Update Qualification
 
-**Status:** Ready for the next Raspberry Pi image cycle
+**Status:** Executed successfully for preview.7 to preview.8; see the
+[qualification report](../research/preview-8-appliance-update-qualification-report.md)
 
 ## Purpose
 

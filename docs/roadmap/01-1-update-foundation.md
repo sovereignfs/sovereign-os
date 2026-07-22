@@ -1,6 +1,6 @@
 # Milestone 01.1 - Appliance Update Foundation
 
-**Status:** Initial no-migration software slice complete; Raspberry Pi qualification pending
+**Status:** Initial no-migration transaction qualified on Raspberry Pi; restore automation and release operations pending
 **Priority:** Immediate next priority after Phase 01 release  
 **Depends on:** [Phase 01 Flashable Pi-hole Image POC](01-preview-poc.md)  
 **Owner:** Project creator  
@@ -199,13 +199,15 @@ Pi-hole-only versioned activation is now implemented: safe bundle extraction,
 immutable release metadata, pinned OCI import, atomic active-release switching,
 local DNS/HTTP validation, health-gated commit, and automatic release-pointer
 rollback. Data migrations remain rejected, and real-device backup/rollback
-qualification is still pending.
+qualification passed for preview.7 to preview.8. Persistent-data restore,
+retention cleanup, and production signing operations are still pending.
 
 Repeatable hardware qualification tooling is also implemented: exact-byte
 offline kit preparation, explicitly armed interruption hooks at the durable
 `backing_up`, `activating`, and `validating` boundaries, and safe cleanup of
 inactive failed targets without deleting their journals or referenced backups.
-The next image cycle will qualify these paths on Raspberry Pi 5 hardware.
+These paths passed Raspberry Pi 5 qualification in the preview.7 to preview.8
+campaign.
 
 Because the initial slice rejects all data migrations, automatic rollback does
 not restore persistent data that the updater never modifies. The pre-update
