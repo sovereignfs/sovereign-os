@@ -77,9 +77,15 @@
 - [ ] Pi-hole data persists across container recreation.
 - [ ] Pi-hole persistent mounts originate from the dedicated data partition.
 - [ ] Nginx starts automatically.
+- [ ] Sovereign Console and its loopback health service start automatically.
 - [ ] `sovereign.local` is advertised over mDNS.
 - [ ] Direct-IP access works.
-- [ ] Root URL redirects to `/dns/admin/`.
+- [ ] Root URL redirects to `/console/`.
+- [ ] Console renders at `/console/` without external assets or internet access.
+- [ ] `/console/health/` renders the health view.
+- [ ] `/api/v1/health` returns the documented, bounded schema without secrets,
+      logs, DNS query history, or client identifiers.
+- [ ] Console reports a degraded state and remains reachable when Pi-hole is stopped.
 - [ ] Both `/dns` and `/dns/` redirect to `/dns/admin/`.
 - [ ] Pi-hole UI works at `/dns/admin/`.
 - [ ] Pi-hole API works at `/dns/api/`.

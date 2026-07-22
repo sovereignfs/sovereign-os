@@ -40,8 +40,8 @@ internet or forward its SSH port from a router.
 ssh sovereign@sovereign.local
 ```
 
-Pi-hole is available over HTTP on the trusted local network at
-`http://sovereign.local/dns/admin/`. HTTPS with automatic browser trust is not
+The Sovereign Console is available at `http://sovereign.local/`; Pi-hole remains
+available at `http://sovereign.local/dns/admin/`. HTTPS with automatic browser trust is not
 part of the POC because public certificate authorities cannot issue for the
 private `.local` name.
 
@@ -65,6 +65,7 @@ Start with:
 - [Public roadmap](ROADMAP.md)
 - [Documentation index](docs/README.md)
 - [Phase 01 plan](docs/roadmap/01-preview-poc.md)
+- [Console Foundation plan](docs/roadmap/01-console-foundation.md)
 - [System architecture](docs/architecture/system-overview.md)
 - [Image build and release process](docs/operations/image-build-and-release.md)
 

@@ -10,3 +10,4 @@ Use the [ADR template](../templates/adr.md) and zero-padded sequential identifie
 - [ADR-0002: Separate installation images from update artifacts](0002-install-images-and-update-artifacts.md) - Accepted
 - [ADR-0003: Preview bootstrap access](0003-preview-bootstrap-access.md) - Accepted for the Phase 01 preview
 - [ADR-0004: Provider-neutral assistant and web search](0004-provider-neutral-assistant-and-web-search.md) - Accepted
+- [ADR-0005: Sovereign Console namespace and health boundary](0005-sovereign-console-and-health-boundary.md) - Accepted

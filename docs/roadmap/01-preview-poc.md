@@ -77,7 +77,9 @@ LAN TCP 80
 Externally visible routes:
 
 ```text
-/                 -> redirect to /dns/admin/
+/                 -> redirect to /console/ (post-POC Console Foundation)
+/console/*         -> Sovereign Console and read-only health view
+/api/v1/health     -> bounded read-only platform health API
 /dns              -> redirect to /dns/admin/
 /dns/             -> redirect to /dns/admin/
 /dns/admin/*       -> Pi-hole /admin/*
@@ -248,7 +250,8 @@ Phase 01 is complete when:
   installation by the user; the documented preview onboarding session remains
   required for headless credential retrieval.
 - Pi-hole starts automatically and answers DNS queries on port 53.
-- `http://sovereign.local/` redirects to `/dns/admin/` on tested mDNS clients.
+- `http://sovereign.local/` redirects to `/console/` after the Console
+  Foundation slice; the original POC redirected directly to `/dns/admin/`.
 - `http://sovereign.local/dns/admin/` provides the complete Pi-hole UI.
 - Pi-hole UI login, logout, assets, redirects, and API calls work under `/dns/*`.
 - Root `/admin/*` and `/api/*` remain unassigned to Pi-hole.

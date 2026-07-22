@@ -13,6 +13,8 @@ This directory contains the planning, design, research, and operational record f
 - [Image release checklist](operations/image-release-checklist.md): the required verification before publication.
 - [Appliance update milestone](roadmap/01-1-update-foundation.md): the immediate priority after the POC release.
 - [Appliance update RFC](rfcs/0014-appliance-update-system.md): signed, staged, health-gated updates without reflashing.
+- [Console Foundation](roadmap/01-console-foundation.md): the Sovereign UI entry point and first read-only system health vertical slice.
+- [Console health design brief](design/console-health.md): user experience, states, privacy, and acceptance requirements.
 - [Local conversation and capabilities milestone](roadmap/01-2-local-conversation-capabilities.md): the first assistant, local inference, capability execution, and web-search vertical slice.
 - [Local AI options](research/local-ai-options.md): the provider-neutral inference direction and Raspberry Pi benchmark plan.
 

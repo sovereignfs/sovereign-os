@@ -39,9 +39,17 @@ The preview may package some boundaries together in one process. Logical boundar
 
 Provides onboarding, dashboard, chat, status, and minimum settings. It must render clear degraded states and must not contain Pi-hole credentials or provider secrets.
 
+The first implementation is Sovereign Console at `/console/`. It is a
+dependency-free read-only health interface backed by `/api/v1/health`. Service
+interfaces such as Pi-hole remain independently namespaced.
+
 ### Local API
 
 Accepts requests from the web interface, enforces the preview access-control model, validates inputs, and returns structured results. Public internet access is outside preview scope.
+
+The initial health service binds only to loopback, runs without root or Docker
+socket access, and reads bounded system interfaces plus appliance readiness
+records. Nginx exposes only its versioned health resource to the LAN.
 
 ### Core Runtime
 

@@ -13,7 +13,7 @@
 
 # 1. Purpose of This Document
 
-This document defines the complete plan for turning the Sovereign Home OS concept into a working, sustainable product.
+This document defines the complete plan for turning the Sovereign OS concept into a working, sustainable product.
 
 It is broader than a software roadmap.
 
@@ -50,7 +50,7 @@ The first success criterion is not public adoption.
 
 It is:
 
-> Sovereign Home OS is useful enough to remain installed and actively used on the Raspberry Pi.
+> Sovereign OS is useful enough to remain installed and actively used on the Raspberry Pi.
 
 ---
 
@@ -110,7 +110,7 @@ AI agents should implement approved specifications rather than loosely defined i
 
 ## 2.5 Maintain Independence From Other Projects
 
-Sovereign Home OS may share:
+Sovereign OS may share:
 
 - Development practices
 - Documentation patterns
@@ -131,7 +131,7 @@ It must not require another project to:
 - Recover
 - Operate
 
-From an external perspective, Sovereign Home OS is an independent product with its own:
+From an external perspective, Sovereign OS is an independent product with its own:
 
 - Repository
 - Brand
@@ -277,6 +277,7 @@ continues delivering complete vertical slices.
 ```text
 Phase 00 — Project Foundation
 Phase 01 — Flashable Pi-hole Image POC
+Milestone 01.0 — Sovereign Console Foundation
 Milestone 01.1 — Appliance Update Foundation
 Milestone 01.2 — Local Conversation and Capabilities
 Phase 02 — Core Platform
@@ -434,6 +435,8 @@ Phase 00 is complete when:
 > **Scope amendment (2026-07-19):** The active Phase 01 has been narrowed to the [Flashable Pi-hole Image POC](01-preview-poc.md). It validates the Raspberry Pi OS Lite image, Docker-based Pi-hole appliance, `/dns/*` routing, first boot, and release pipeline. The dashboard, AI orchestration, and capability integration described in the original phase below are deferred until the image foundation is complete. See [ADR-0001](../adrs/0001-phase-01-appliance-architecture.md).
 
 > **Immediate next priority:** After the POC release, deliver the [Appliance Update Foundation](01-1-update-foundation.md) so installed devices can receive signed Pi-hole and appliance updates without reflashing. Phase 01 must create the dedicated persistent data partition required by that milestone. See [ADR-0002](../adrs/0002-install-images-and-update-artifacts.md).
+
+> **Current bounded slice:** Introduce the [Sovereign Console Foundation](01-console-foundation.md) before update controls or AI features. The local entry point moves to `/console/`; its first page is a read-only health overview backed by `/api/v1/health`. It must remain available when Pi-hole is degraded, expose no secrets or household activity, and perform no privileged or mutating operation. See [ADR-0005](../adrs/0005-sovereign-console-and-health-boundary.md) and the [design brief](../design/console-health.md).
 
 > **Following vertical slice:** After the update boundary is reliable, deliver
 > [Local Conversation and Capabilities](01-2-local-conversation-capabilities.md).

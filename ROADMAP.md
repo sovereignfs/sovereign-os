@@ -6,6 +6,13 @@
 
 ## Next Priority
 
+🟡 Console Foundation
+
+Make `/console/` the Sovereign OS entry point and deliver a minimal read-only
+health experience backed by a stable `/api/v1/health` contract.
+
+## Subsequent Priorities
+
 🟡 Milestone 01.1 — Appliance Update Foundation
 
 Deliver signed, rollback-capable Pi-hole and appliance updates without reflashing or erasing persistent data.
@@ -30,6 +37,7 @@ read operations, and opt-in web search through a self-hosted SearXNG instance.
 - ⏳ `rpi-image-gen` Proof Build
 - ⏳ Raspberry Pi Image
 - ⏳ Signed Appliance Update Artifact
+- 🟡 Sovereign Console health page implemented; image qualification pending
 - ⏳ Local inference benchmark on Raspberry Pi 5
 - ⏳ Conversation and capability architecture RFC
 - ⏳ SearXNG-backed web search capability
@@ -41,6 +49,7 @@ read operations, and opt-in web search through a self-hosted SearXNG instance.
 - [00 Master Plan](docs/roadmap/00-master-plan.md)
 - [01 Flashable Pi-hole Image POC](docs/roadmap/01-preview-poc.md)
 - [01.1 Appliance Update Foundation](docs/roadmap/01-1-update-foundation.md)
+- [Console Foundation](docs/roadmap/01-console-foundation.md)
 - [01.2 Local Conversation and Capabilities](docs/roadmap/01-2-local-conversation-capabilities.md)
 
 ## Project Documentation
@@ -56,4 +65,5 @@ read operations, and opt-in web search through a self-hosted SearXNG instance.
 - [Image release checklist](docs/operations/image-release-checklist.md)
 - [ADR-0002: Installation images and update artifacts](docs/adrs/0002-install-images-and-update-artifacts.md)
 - [ADR-0004: Provider-neutral assistant and web search](docs/adrs/0004-provider-neutral-assistant-and-web-search.md)
+- [ADR-0005: Sovereign Console namespace and health boundary](docs/adrs/0005-sovereign-console-and-health-boundary.md)
 - [RFC-0014: Appliance update system](docs/rfcs/0014-appliance-update-system.md)

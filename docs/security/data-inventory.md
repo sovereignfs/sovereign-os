@@ -20,6 +20,7 @@
 | Nginx access/error logs | Nginx | Diagnostics | Host logs | No by default | Medium | Bounded; avoid credentials/query payloads |
 | Pi-hole logs | Pi-hole | DNS and service diagnostics | Persistent volume | No by default | High | Rotation and privacy defaults documented |
 | Avahi service metadata | Host | Local discovery | Runtime/config | Local multicast | Low | Advertise service identity only |
+| Console health snapshot | Host runtime | Local status display | Generated in memory | Local LAN client on request | Medium | Bounded allowlist only; exclude secrets, logs, DNS history, client identities, and serial numbers |
 | Build manifest | Build pipeline | Provenance | Release artifact | Published | Low | Must not include build credentials or sensitive paths |
 | Diagnostic bundle | User-initiated future tool | Support | Generated on request | Only when user shares it | High | Contents previewed and redacted before sharing |
 
@@ -31,6 +32,7 @@
 - Pi-hole privacy level and query retention default
 - Nginx and Pi-hole log retention
 - Diagnostic bundle contents
+- Health API field allowlist and future authentication boundary
 - Backup, restore, and reflash semantics
 - Default upstream DNS provider
 - Treatment of IPv6 client and query data

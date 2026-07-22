@@ -12,6 +12,10 @@ Phase 01 proves that Sovereign can deliver a useful home appliance as one flasha
 http://sovereign.local/dns/admin/
 ```
 
+The post-POC Console Foundation adds a read-only platform entry point at
+`http://sovereign.local/`, which redirects to `/console/`. Pi-hole remains an
+independent service under `/dns/*`.
+
 The phase validates distribution and appliance foundations, not the AI-native platform.
 
 ## Included
@@ -33,7 +37,9 @@ The phase validates distribution and appliance foundations, not the AI-native pl
 
 ## Explicit Non-Goals
 
-- Sovereign web dashboard, backend, administration interface, or API.
+- General-purpose administration dashboard or mutating management API. The
+  bounded, read-only Console health surface is tracked separately in the
+  [Console Foundation plan](../roadmap/01-console-foundation.md).
 - Local or remote LLM, AI chat, capability registry, or Pi-hole AI adapter.
 - Voice or wake-word support.
 - Home Assistant, documents, calendar, or other service integrations.
@@ -53,4 +59,3 @@ Pi-hole will be operational immediately after first boot, but network-wide filte
 ## Change Control
 
 An item may enter Phase 01 only when it is required to produce, boot, access, secure, diagnose, or verify the Pi-hole appliance image. All AI and broader platform work remains in the master-plan backlog until this phase meets its exit criteria.
-
