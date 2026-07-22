@@ -15,6 +15,7 @@ This directory contains the planning, design, research, and operational record f
 - [Appliance update RFC](rfcs/0014-appliance-update-system.md): signed, staged, health-gated updates without reflashing.
 - [Console Foundation](roadmap/01-console-foundation.md): the Sovereign UI entry point and first read-only system health vertical slice.
 - [Console health design brief](design/console-health.md): user experience, states, privacy, and acceptance requirements.
+- [Versioned appliance release design](design/versioned-appliance-release.md): stable base/update ownership, versioned payload layout, validation, activation, and rollback boundaries.
 - [Local conversation and capabilities milestone](roadmap/01-2-local-conversation-capabilities.md): the first assistant, local inference, capability execution, and web-search vertical slice.
 - [Local AI options](research/local-ai-options.md): the provider-neutral inference direction and Raspberry Pi benchmark plan.
 - [Preview.6 Console qualification](research/preview-6-console-qualification-report.md): hardware findings, root causes, and live-hotfix evidence.

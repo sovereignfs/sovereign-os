@@ -202,6 +202,12 @@ rollback. Data migrations remain rejected, and real-device backup/rollback
 qualification passed for preview.7 to preview.8. Persistent-data restore,
 retention cleanup, and production signing operations are still pending.
 
+The next bounded slice is the accepted
+[versioned appliance release design](../design/versioned-appliance-release.md):
+package Console, Nginx, Compose, lifecycle, and health files behind the same
+atomic release pointer now that Pi-hole rollback is qualified. The updater and
+stable recovery/bootstrap units remain part of the flashed base for this slice.
+
 Repeatable hardware qualification tooling is also implemented: exact-byte
 offline kit preparation, explicitly armed interruption hooks at the durable
 `backing_up`, `activating`, and `validating` boundaries, and safe cleanup of

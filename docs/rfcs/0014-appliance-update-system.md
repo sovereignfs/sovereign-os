@@ -10,6 +10,10 @@
 
 Introduce a signed, user-triggered update mechanism for installed Sovereign appliances. It updates pinned application containers and versioned appliance files while preserving `/data/sovereign`, validating health, and restoring the previous release after failure where data compatibility permits.
 
+The concrete versioned file ownership, stable dispatch, and activation design
+is defined by the accepted
+[Versioned Appliance Release Design](../design/versioned-appliance-release.md).
+
 ## Problem
 
 Publishing a new disk image does not provide a safe update path for an installed device. Rewriting the image erases the installation, while ad hoc `apt`, file-copy, or `docker pull latest` operations are neither reproducible nor safely reversible.
