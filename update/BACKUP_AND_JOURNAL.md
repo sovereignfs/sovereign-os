@@ -100,7 +100,10 @@ available -> downloading -> verified -> backing_up -> backed_up -> staged
 Any non-terminal state may enter `recovery_required` when automated recovery
 is unsafe. Activation or validation failure enters `rolling_back`, followed by
 `rolled_back` only after rollback health checks pass; otherwise it enters
-`recovery_required`.
+`recovery_required`. An administrator may explicitly discard a `rolled_back`
+or `recovery_required` transaction after confirming the previous release is
+active. Discard removes only inactive target and transient payload files; it
+retains the transaction journal and referenced backup as evidence.
 
 On boot, one updater process holds an exclusive lock and examines every
 non-terminal transaction. Downloads and pre-activation staging may restart or

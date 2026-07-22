@@ -480,6 +480,8 @@ ALLOWED_TRANSITIONS = {
     "activating": {"validating", "rolling_back", "recovery_required"},
     "validating": {"committed", "rolling_back", "recovery_required"},
     "rolling_back": {"rolled_back", "recovery_required"},
+    "rolled_back": {"discarded"},
+    "recovery_required": {"discarded"},
 }
 
 
@@ -981,6 +983,79 @@ def recover_transactions(_args):
     print(json.dumps({"status": "reviewed", "recovery_required": reviewed}, sort_keys=True))
 
 
+def transaction_event_reasons(directory):
+    try:
+        return {
+            json.loads(line)["reason"]
+            for line in (directory / "events.jsonl").read_text().splitlines()
+        }
+    except (OSError, KeyError, json.JSONDecodeError) as error:
+        raise UpdateError(
+            "INVALID_TRANSACTION", "Transaction event history is unreadable"
+        ) from error
+
+
+def discard_transaction(args):
+    fail(
+        os.geteuid() == 0 or os.environ.get("SOVEREIGN_UPDATE_TEST_MODE") == "1",
+        "ROOT_REQUIRED",
+        "Discarding a transaction requires administrator privileges",
+    )
+    with update_lock():
+        snapshot = load_transaction(args.transaction)
+        fail(
+            snapshot["state"] in {"rolled_back", "recovery_required"},
+            "INVALID_TRANSACTION_STATE",
+            "Only rolled-back or recovery-required transactions can be discarded",
+        )
+        directory = transaction_path(args.transaction)
+        current = RELEASES_ROOT / "current"
+        fail(
+            current.is_symlink(),
+            "ACTIVE_RELEASE_MISSING",
+            "Active release pointer is unavailable",
+        )
+        active = current.resolve(strict=True)
+        releases = RELEASES_ROOT / "releases"
+        target = releases / snapshot["target_version"]
+        if target.exists():
+            fail(
+                "RELEASE_STAGED" in transaction_event_reasons(directory),
+                "DISCARD_TARGET_UNOWNED",
+                "Transaction did not stage the existing target release",
+            )
+            fail(
+                target.is_dir() and not target.is_symlink(),
+                "DISCARD_TARGET_UNSAFE",
+                "Target release is not a removable directory",
+            )
+            fail(
+                target.resolve() != active,
+                "DISCARD_TARGET_ACTIVE",
+                "Cannot discard the active release",
+            )
+            shutil.rmtree(target)
+            sync_directory(releases)
+        shutil.rmtree(directory / "release-candidate", ignore_errors=True)
+        try:
+            (directory / "staging/update-bundle.tar.zst").unlink()
+        except FileNotFoundError:
+            pass
+        sync_directory(directory / "staging")
+        snapshot = transition(
+            snapshot,
+            "discarded",
+            "TRANSACTION_DISCARDED",
+            recovery_action="none",
+        )
+        print(
+            json.dumps(
+                {"status": "discarded", "transaction_id": args.transaction},
+                sort_keys=True,
+            )
+        )
+
+
 def show_status(_args):
     policy = read_json(POLICY_PATH, "INVALID_POLICY")
     latest = read_json(UPDATE_STATUS_PATH) if UPDATE_STATUS_PATH.is_file() else None
@@ -1020,6 +1095,11 @@ def parser():
     activate.set_defaults(handler=activate_release)
     recover = subcommands.add_parser("recover", help="audit interrupted transactions at boot")
     recover.set_defaults(handler=recover_transactions)
+    discard = subcommands.add_parser(
+        "discard", help="remove inactive payloads from a failed transaction"
+    )
+    discard.add_argument("transaction")
+    discard.set_defaults(handler=discard_transaction)
     return command
 
 

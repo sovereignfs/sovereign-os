@@ -182,6 +182,7 @@ def update_check():
     labels = {
         "committed": "Latest update committed",
         "rolled_back": "Latest update rolled back safely",
+        "discarded": "Failed update safely discarded",
     }
     return {"status": "healthy", "summary": labels.get(state, "Update prepared")}
 

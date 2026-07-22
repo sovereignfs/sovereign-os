@@ -600,6 +600,22 @@ class UpdateClientTests(unittest.TestCase):
             json.loads((transaction / "state.json").read_text())["state"],
         )
 
+        discarded = subprocess.run(
+            [str(CLIENT), "discard", transaction_id],
+            env=self.environment(),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(0, discarded.returncode, discarded.stderr)
+        self.assertFalse(self.releases.joinpath("releases/0.1.0-preview.6").exists())
+        self.assertFalse(transaction.joinpath("release-candidate").exists())
+        self.assertFalse(transaction.joinpath("staging/update-bundle.tar.zst").exists())
+        self.assertTrue(transaction.joinpath("state.json").exists())
+        self.assertTrue(transaction.joinpath("events.jsonl").exists())
+        self.assertEqual(
+            "discarded", json.loads((transaction / "state.json").read_text())["state"]
+        )
+
     def test_qualification_interrupt_at_validating_restores_previous_pointer(self):
         transaction_id, transaction = self.run_interrupted_activation("validating")
         self.assertEqual("0.1.0-preview.6", self.releases.joinpath("current").resolve().name)
@@ -615,6 +631,21 @@ class UpdateClientTests(unittest.TestCase):
         state = json.loads((transaction / "state.json").read_text())
         self.assertEqual("recovery_required", state["state"])
         self.assertEqual("INTERRUPTED_TRANSACTION", state["failure"]["code"])
+
+    def test_discard_refuses_active_target_release(self):
+        transaction_id, transaction = self.run_interrupted_activation("validating")
+        recovered_state = json.loads((transaction / "state.json").read_text())
+        recovered_state["state"] = "recovery_required"
+        (transaction / "state.json").write_text(json.dumps(recovered_state))
+        discarded = subprocess.run(
+            [str(CLIENT), "discard", transaction_id],
+            env=self.environment(),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(2, discarded.returncode)
+        self.assertEqual("DISCARD_TARGET_ACTIVE", json.loads(discarded.stderr)["code"])
+        self.assertTrue(self.releases.joinpath("releases/0.1.0-preview.6").is_dir())
 
 
 if __name__ == "__main__":

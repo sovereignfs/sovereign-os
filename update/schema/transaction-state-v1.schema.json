@@ -34,7 +34,8 @@
         "committed",
         "rolling_back",
         "rolled_back",
-        "recovery_required"
+        "recovery_required",
+        "discarded"
       ]
     },
     "source_version": { "type": "string", "minLength": 1 },
