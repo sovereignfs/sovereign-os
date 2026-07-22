@@ -124,6 +124,12 @@ sovereign-update-<version>/
 
 The exact packaging format remains subject to RFC review. The manifest must identify compatibility, versions, digests, required storage, migrations, reboot requirements, and rollback limitations.
 
+The packaging question is now resolved by update bundle v1: a deterministic
+Zstandard-compressed tar with one `sovereign-update-v1/` root, a closed inner
+file manifest, regular files only, normalized modes, and per-file SHA-256
+digests. The signed outer manifest still authenticates the complete compressed
+artifact.
+
 ## 9. Update Transaction
 
 ```text

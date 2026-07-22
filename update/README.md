@@ -66,6 +66,26 @@ TCP/UDP DNS, HTTP routing, Nginx, and DATA-mount health before entering
 `backed_up`. A restart or health failure enters `recovery_required`; activation
 is never attempted.
 
+## Update bundle v1
+
+`scripts/create-update-bundle.py` produces the deterministic payload covered by
+the outer signed manifest. The archive has one closed root:
+
+```text
+sovereign-update-v1/
+├── bundle-manifest.json
+└── release/
+    └── <versioned appliance files>
+```
+
+The inner manifest follows
+[`schema/update-bundle-manifest-v1.schema.json`](schema/update-bundle-manifest-v1.schema.json)
+and allowlists every regular file, size, SHA-256, and normalized mode. Bundle
+creation rejects symlinks and special files. Installation must reject absolute
+or parent paths, links, device nodes, unlisted files, duplicate names, unsafe
+modes, digest mismatches, and a release version different from the signed outer
+manifest.
+
 Trusted public keys live under `/etc/sovereign/update-trust.d/` as matching
 `<key-id>.pem` and `<key-id>.json` files. The preview image intentionally ships
 with an empty trust store until release-key custody and rotation are approved;

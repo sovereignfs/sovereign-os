@@ -16,6 +16,7 @@ BACKUP_SCHEMA_PATH = ROOT / "update/schema/backup-manifest-v1.schema.json"
 BACKUP_EXAMPLE_PATH = ROOT / "update/examples/backup-manifest-v1.example.json"
 TRANSACTION_SCHEMA_PATH = ROOT / "update/schema/transaction-state-v1.schema.json"
 TRANSACTION_EXAMPLE_PATH = ROOT / "update/examples/transaction-state-v1.example.json"
+BUNDLE_SCHEMA_PATH = ROOT / "update/schema/update-bundle-manifest-v1.schema.json"
 
 
 class UpdateManifestTests(unittest.TestCase):
@@ -88,6 +89,17 @@ class BackupAndJournalTests(unittest.TestCase):
             self.transaction_example["backup_id"], self.backup_example["backup_id"]
         )
         self.assertEqual(self.transaction_example["recovery_action"], "resume")
+
+
+class UpdateBundleSchemaTests(unittest.TestCase):
+    def test_bundle_schema_is_closed_and_versioned(self):
+        schema = json.loads(BUNDLE_SCHEMA_PATH.read_text())
+        self.assertFalse(schema["additionalProperties"])
+        self.assertEqual(1, schema["properties"]["schema_version"]["const"])
+        self.assertEqual(
+            {"schema_version", "release_version", "files"},
+            set(schema["required"]),
+        )
 
 
 if __name__ == "__main__":
