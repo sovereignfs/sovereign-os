@@ -190,21 +190,27 @@ def collect_health():
     active_release = pathlib.Path("/opt/sovereign/current/sovereign-release")
     release = read_key_values(active_release if active_release.is_file() else RELEASE_PATH)
     local_web_healthy = tcp_check(80)
+    pihole_web_healthy = tcp_check(8080)
+    data_storage = storage_summary(DATA_PATH)
     checks = {
-        "storage": marker_check(
-            "update-state/data-expand-ready", {"partition": "3"}
-        ),
+        "storage": {
+            "status": "healthy" if data_storage else "degraded",
+            "summary": (
+                "Persistent storage available"
+                if data_storage
+                else "Persistent storage is unavailable"
+            ),
+        },
         "dns": dns_check(),
         "update": update_check(),
-        "pihole": marker_check(
-            "pihole-ready",
-            {
-                "health": "healthy",
-                "dns": "pass",
-                "http": "pass",
-                "credential": "pass",
-            },
-        ),
+        "pihole": {
+            "status": "healthy" if pihole_web_healthy else "degraded",
+            "summary": (
+                "Pi-hole is available"
+                if pihole_web_healthy
+                else "Pi-hole is unavailable"
+            ),
+        },
         "local_access": {
             "status": "healthy" if local_web_healthy else "degraded",
             "summary": (
@@ -214,11 +220,6 @@ def collect_health():
             ),
         },
     }
-    if not tcp_check(8080):
-        checks["pihole"] = {
-            "status": "degraded",
-            "summary": "Pi-hole is unavailable",
-        }
     status = (
         "healthy"
         if all(check["status"] == "healthy" for check in checks.values())
@@ -237,7 +238,7 @@ def collect_health():
             "model": device_model(),
             "uptime_seconds": uptime_seconds(),
             "memory": memory_summary(),
-            "data_storage": storage_summary(DATA_PATH),
+            "data_storage": data_storage,
             "temperature_celsius": temperature_celsius(),
             "network": network_interfaces(),
         },

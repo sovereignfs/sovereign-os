@@ -9,6 +9,7 @@ ConditionPathIsMountPoint=/data
 [Service]
 Type=oneshot
 ExecStart=/usr/lib/sovereign/start-pihole
+ExecStop=/usr/lib/sovereign/stop-pihole
 RemainAfterExit=yes
 Restart=on-failure
 RestartSec=10s

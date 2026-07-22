@@ -17,6 +17,7 @@ This directory contains the planning, design, research, and operational record f
 - [Console health design brief](design/console-health.md): user experience, states, privacy, and acceptance requirements.
 - [Local conversation and capabilities milestone](roadmap/01-2-local-conversation-capabilities.md): the first assistant, local inference, capability execution, and web-search vertical slice.
 - [Local AI options](research/local-ai-options.md): the provider-neutral inference direction and Raspberry Pi benchmark plan.
+- [Preview.6 Console qualification](research/preview-6-console-qualification-report.md): hardware findings, root causes, and live-hotfix evidence.
 
 ## Documentation Areas
 

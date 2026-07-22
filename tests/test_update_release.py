@@ -75,7 +75,12 @@ class UpdateReleaseTests(unittest.TestCase):
         self.assertIn("Before=sovereign-pihole.service", recovery)
         self.assertIn("After=", pihole)
         self.assertIn("sovereign-update-recovery.service", pihole)
+        self.assertIn("ExecStop=/usr/lib/sovereign/stop-pihole", pihole)
+        self.assertIn("docker compose", (overlay / "usr/lib/sovereign/stop-pihole").read_text())
         self.assertIn("sovereign-update-recovery.service", enablement)
+        wrapper = overlay / "usr/bin/sovereign-update"
+        self.assertTrue(wrapper.is_file())
+        self.assertIn("/usr/sbin/sovereign-update", wrapper.read_text())
 
     def test_workflow_packages_update_before_upload(self):
         workflow = (ROOT / ".github/workflows/build-image.yml").read_text()

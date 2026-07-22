@@ -26,15 +26,7 @@ class ConsoleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             temporary = Path(temporary_directory)
             state = temporary / "sovereign"
-            (state / "update-state").mkdir(parents=True)
-            (state / "update-state/data-expand-ready").write_text("partition=3\n")
-            (state / "pihole-ready").write_text(
-                "health=healthy\ndns=pass\nhttp=pass\ncredential=pass\n"
-            )
-            (state / "local-access-ready").write_text(
-                "nginx=pass\nroot_redirect=pass\ndns_redirect=pass\n"
-                "pihole_ui=pass\n"
-            )
+            state.mkdir(parents=True)
             release = temporary / "sovereign-release"
             release.write_text('NAME="Sovereign OS"\nVERSION="test"\n')
 
@@ -128,10 +120,13 @@ class ConsoleTests(unittest.TestCase):
         self.assertIn("location = /console/health/", nginx)
         self.assertIn("location = /api/v1/health", nginx)
         self.assertIn("127.0.0.1:8090/api/v1/health", nginx)
+        self.assertIn("try_files /index.html =404;", nginx)
+        self.assertNotIn("alias /usr/share/sovereign-console/index.html", nginx)
         self.assertIn("DynamicUser=yes", service)
         self.assertIn("NoNewPrivileges=yes", service)
         self.assertIn("ProtectSystem=strict", service)
         self.assertIn("CapabilityBoundingSet=", service)
+        self.assertIn("AF_NETLINK", service)
         self.assertNotIn("docker.sock", service)
         self.assertIn("sovereign-console.service", enabled)
         self.assertIn(
