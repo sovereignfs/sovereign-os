@@ -1,0 +1,337 @@
+#!/usr/bin/python3
+
+import argparse
+import base64
+import binascii
+import hashlib
+import json
+import os
+import pathlib
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+
+POLICY_PATH = pathlib.Path(
+    os.environ.get("SOVEREIGN_UPDATE_POLICY", "/etc/sovereign/update-policy.json")
+)
+RELEASE_PATH = pathlib.Path(
+    os.environ.get("SOVEREIGN_RELEASE_PATH", "/etc/sovereign-release")
+)
+DATA_PATH = pathlib.Path(os.environ.get("SOVEREIGN_DATA_PATH", "/data"))
+OPENSSL = os.environ.get("SOVEREIGN_OPENSSL", "/usr/bin/openssl")
+
+SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
+SAFE_KEY_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+VERSION = re.compile(
+    r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
+    r"(?:-([0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*))?$"
+)
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
+OCI_DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
+
+
+class UpdateError(Exception):
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
+
+
+def fail(condition, code, message):
+    if not condition:
+        raise UpdateError(code, message)
+
+
+def read_json(path, code="INVALID_JSON"):
+    try:
+        return json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise UpdateError(code, f"Cannot read valid JSON from {path}") from error
+
+
+def exact_keys(value, required, context):
+    fail(isinstance(value, dict), "INVALID_MANIFEST", f"{context} must be an object")
+    fail(
+        set(value) == set(required),
+        "INVALID_MANIFEST",
+        f"{context} has missing or unknown fields",
+    )
+
+
+def parse_version(value):
+    match = VERSION.fullmatch(value) if isinstance(value, str) else None
+    fail(match is not None, "INVALID_VERSION", f"Invalid version: {value!r}")
+    core = tuple(int(part) for part in match.group(1, 2, 3))
+    prerelease = match.group(4)
+    identifiers = None if prerelease is None else prerelease.split(".")
+    return core, identifiers
+
+
+def compare_versions(left, right):
+    left_core, left_pre = parse_version(left)
+    right_core, right_pre = parse_version(right)
+    if left_core != right_core:
+        return -1 if left_core < right_core else 1
+    if left_pre is None or right_pre is None:
+        if left_pre == right_pre:
+            return 0
+        return 1 if left_pre is None else -1
+    for left_id, right_id in zip(left_pre, right_pre):
+        if left_id == right_id:
+            continue
+        left_numeric = left_id.isdigit()
+        right_numeric = right_id.isdigit()
+        if left_numeric and right_numeric:
+            return -1 if int(left_id) < int(right_id) else 1
+        if left_numeric != right_numeric:
+            return -1 if left_numeric else 1
+        return -1 if left_id < right_id else 1
+    if len(left_pre) == len(right_pre):
+        return 0
+    return -1 if len(left_pre) < len(right_pre) else 1
+
+
+def read_release_version():
+    try:
+        lines = RELEASE_PATH.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as error:
+        raise UpdateError("RELEASE_UNAVAILABLE", "Installed release metadata is unavailable") from error
+    values = {}
+    for line in lines:
+        key, separator, value = line.partition("=")
+        if separator:
+            values[key.strip()] = value.strip().strip('"')
+    version = values.get("VERSION")
+    parse_version(version)
+    return version
+
+
+def validate_manifest(manifest):
+    top = [
+        "schema_version", "release", "compatibility", "artifacts", "components",
+        "requirements", "migrations", "rollback", "signing",
+    ]
+    exact_keys(manifest, top, "manifest")
+    fail(manifest["schema_version"] == 1, "UNSUPPORTED_SCHEMA", "Only manifest schema 1 is supported")
+
+    release = manifest["release"]
+    exact_keys(release, ["id", "version", "published_at", "channel", "notes_url"], "release")
+    fail(isinstance(release["id"], str) and SAFE_ID.fullmatch(release["id"]), "INVALID_MANIFEST", "Invalid release id")
+    parse_version(release["version"])
+    fail(release["channel"] in ("preview", "stable"), "INVALID_MANIFEST", "Invalid channel")
+    fail(isinstance(release["published_at"], str) and release["published_at"].endswith("Z"), "INVALID_MANIFEST", "Invalid publication time")
+    fail(isinstance(release["notes_url"], str) and release["notes_url"].startswith("https://"), "INVALID_MANIFEST", "Release notes must use HTTPS")
+
+    compatibility = manifest["compatibility"]
+    exact_keys(compatibility, ["devices", "source_versions", "allow_downgrade"], "compatibility")
+    fail(isinstance(compatibility["devices"], list) and compatibility["devices"], "INVALID_MANIFEST", "Compatible devices are required")
+    fail(all(device == "rpi5-arm64" for device in compatibility["devices"]), "INVALID_MANIFEST", "Unknown device compatibility value")
+    fail(compatibility["allow_downgrade"] is False, "INVALID_MANIFEST", "Downgrades cannot be enabled by a manifest")
+    source = compatibility["source_versions"]
+    exact_keys(source, ["minimum", "maximum_exclusive"], "source_versions")
+    parse_version(source["minimum"])
+    parse_version(source["maximum_exclusive"])
+
+    artifacts = manifest["artifacts"]
+    fail(isinstance(artifacts, list) and len(artifacts) == 1, "INVALID_MANIFEST", "Exactly one update bundle is required")
+    artifact = artifacts[0]
+    exact_keys(artifact, ["role", "url", "size", "sha256", "media_type"], "artifact")
+    fail(artifact["role"] == "update_bundle", "INVALID_MANIFEST", "Invalid artifact role")
+    fail(isinstance(artifact["url"], str) and artifact["url"].startswith("https://"), "INVALID_MANIFEST", "Artifact URL must use HTTPS")
+    fail(isinstance(artifact["size"], int) and artifact["size"] > 0, "INVALID_MANIFEST", "Invalid artifact size")
+    fail(isinstance(artifact["sha256"], str) and SHA256.fullmatch(artifact["sha256"]), "INVALID_MANIFEST", "Invalid artifact digest")
+    fail(artifact["media_type"] == "application/vnd.sovereign.update.v1+tar+zstd", "INVALID_MANIFEST", "Invalid artifact media type")
+
+    components = manifest["components"]
+    exact_keys(components, ["appliance", "image_base", "pihole"], "components")
+    exact_keys(components["appliance"], ["version"], "appliance component")
+    exact_keys(components["image_base"], ["version"], "image component")
+    parse_version(components["appliance"]["version"])
+    parse_version(components["image_base"]["version"])
+    pihole = components["pihole"]
+    exact_keys(pihole, ["version", "repository", "digest"], "Pi-hole component")
+    fail(isinstance(pihole["version"], str) and pihole["version"], "INVALID_MANIFEST", "Pi-hole version is required")
+    fail(isinstance(pihole["repository"], str) and pihole["repository"], "INVALID_MANIFEST", "Pi-hole repository is required")
+    fail(isinstance(pihole["digest"], str) and OCI_DIGEST.fullmatch(pihole["digest"]), "INVALID_MANIFEST", "Invalid Pi-hole digest")
+
+    requirements = manifest["requirements"]
+    exact_keys(requirements, ["free_bytes", "reboot"], "requirements")
+    fail(isinstance(requirements["free_bytes"], int) and requirements["free_bytes"] > 0, "INVALID_MANIFEST", "Invalid storage requirement")
+    fail(type(requirements["reboot"]) is bool, "INVALID_MANIFEST", "Invalid reboot requirement")
+    fail(isinstance(manifest["migrations"], list), "INVALID_MANIFEST", "Migrations must be a list")
+    for migration in manifest["migrations"]:
+        exact_keys(migration, ["id", "from_schema", "to_schema", "reversible"], "migration")
+        fail(isinstance(migration["id"], str) and SAFE_ID.fullmatch(migration["id"]), "INVALID_MANIFEST", "Invalid migration id")
+        fail(isinstance(migration["from_schema"], int) and migration["from_schema"] >= 0, "INVALID_MANIFEST", "Invalid source schema")
+        fail(isinstance(migration["to_schema"], int) and migration["to_schema"] >= 1, "INVALID_MANIFEST", "Invalid target schema")
+        fail(type(migration["reversible"]) is bool, "INVALID_MANIFEST", "Invalid migration reversibility")
+
+    rollback = manifest["rollback"]
+    exact_keys(rollback, ["supported", "requires_data_restore", "limitations"], "rollback")
+    fail(type(rollback["supported"]) is bool and type(rollback["requires_data_restore"]) is bool, "INVALID_MANIFEST", "Invalid rollback flags")
+    fail(isinstance(rollback["limitations"], list) and all(isinstance(item, str) and item for item in rollback["limitations"]), "INVALID_MANIFEST", "Invalid rollback limitations")
+
+    signing = manifest["signing"]
+    exact_keys(signing, ["algorithm", "key_id"], "signing")
+    fail(signing["algorithm"] == "Ed25519", "INVALID_MANIFEST", "Only Ed25519 is supported")
+    fail(isinstance(signing["key_id"], str) and SAFE_KEY_ID.fullmatch(signing["key_id"]), "INVALID_MANIFEST", "Invalid signing key id")
+
+
+def load_trusted_key(policy, key_id, channel):
+    trust_store = pathlib.Path(policy["trust_store"])
+    metadata = read_json(trust_store / f"{key_id}.json", "UNKNOWN_SIGNING_KEY")
+    exact_keys(metadata, ["schema_version", "key_id", "algorithm", "channels", "revoked"], "trusted key")
+    fail(metadata["schema_version"] == 1 and metadata["key_id"] == key_id, "UNTRUSTED_SIGNING_KEY", "Signing-key metadata does not match")
+    fail(metadata["algorithm"] == "Ed25519", "UNTRUSTED_SIGNING_KEY", "Signing key has an unsupported algorithm")
+    fail(metadata["revoked"] is False, "REVOKED_SIGNING_KEY", "The signing key is revoked")
+    fail(channel in metadata["channels"], "WRONG_KEY_CHANNEL", "The signing key is not trusted for this channel")
+    public_key = trust_store / f"{key_id}.pem"
+    fail(public_key.is_file(), "UNKNOWN_SIGNING_KEY", "Trusted public key is missing")
+    return public_key
+
+
+def verify_signature(manifest_path, signature_path, public_key):
+    try:
+        encoded = pathlib.Path(signature_path).read_text(encoding="ascii").strip()
+        signature = base64.b64decode(encoded, validate=True)
+    except (OSError, UnicodeError, binascii.Error) as error:
+        raise UpdateError("INVALID_SIGNATURE", "Detached signature is not valid base64") from error
+    fail(len(signature) == 64, "INVALID_SIGNATURE", "Ed25519 signature must be 64 bytes")
+    descriptor, temporary_name = tempfile.mkstemp(prefix="sovereign-signature-")
+    try:
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "wb") as temporary:
+            temporary.write(signature)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        completed = subprocess.run(
+            [OPENSSL, "pkeyutl", "-verify", "-pubin", "-inkey", str(public_key), "-rawin", "-in", str(manifest_path), "-sigfile", temporary_name],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        raise UpdateError("SIGNATURE_TOOL_FAILED", "Signature verification could not run") from error
+    finally:
+        try:
+            os.unlink(temporary_name)
+        except OSError:
+            pass
+    fail(completed.returncode == 0, "SIGNATURE_MISMATCH", "Manifest signature verification failed")
+
+
+def verify_policy(manifest, policy):
+    exact_keys(policy, ["schema_version", "channel", "device", "trust_store"], "update policy")
+    fail(policy["schema_version"] == 1, "INVALID_POLICY", "Unsupported update policy")
+    release = manifest["release"]
+    compatibility = manifest["compatibility"]
+    fail(release["channel"] == policy["channel"], "WRONG_CHANNEL", "Release channel does not match device policy")
+    fail(policy["device"] in compatibility["devices"], "INCOMPATIBLE_DEVICE", "Release does not support this device")
+    current = read_release_version()
+    bounds = compatibility["source_versions"]
+    fail(compare_versions(current, bounds["minimum"]) >= 0, "UNSUPPORTED_SOURCE", "Installed version is below the supported range")
+    fail(compare_versions(current, bounds["maximum_exclusive"]) < 0, "UNSUPPORTED_SOURCE", "Installed version is above the supported range")
+    fail(compare_versions(release["version"], current) > 0, "DOWNGRADE_REJECTED", "Target version must be newer than the installed version")
+    fail(compare_versions(components_version(manifest), release["version"]) == 0, "VERSION_MISMATCH", "Appliance and release versions differ")
+    try:
+        free_bytes = shutil.disk_usage(DATA_PATH).free
+    except OSError as error:
+        raise UpdateError("STORAGE_UNAVAILABLE", "Persistent storage is unavailable") from error
+    fail(free_bytes >= manifest["requirements"]["free_bytes"], "INSUFFICIENT_STORAGE", "Not enough free persistent storage")
+    return current
+
+
+def components_version(manifest):
+    return manifest["components"]["appliance"]["version"]
+
+
+def verify_artifact(path, artifact):
+    candidate = pathlib.Path(path)
+    try:
+        stat = candidate.stat()
+    except OSError as error:
+        raise UpdateError("ARTIFACT_UNAVAILABLE", "Update artifact cannot be read") from error
+    fail(stat.st_size == artifact["size"], "ARTIFACT_SIZE_MISMATCH", "Update artifact size does not match")
+    digest = hashlib.sha256()
+    try:
+        with candidate.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError as error:
+        raise UpdateError("ARTIFACT_UNAVAILABLE", "Update artifact cannot be read") from error
+    fail(digest.hexdigest() == artifact["sha256"], "ARTIFACT_DIGEST_MISMATCH", "Update artifact digest does not match")
+
+
+def inspect_update(args):
+    policy = read_json(POLICY_PATH, "INVALID_POLICY")
+    manifest_path = pathlib.Path(args.manifest)
+    try:
+        manifest_bytes = manifest_path.read_bytes()
+        manifest = json.loads(manifest_bytes)
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise UpdateError("INVALID_MANIFEST", "Manifest is not valid UTF-8 JSON") from error
+    fail(manifest_bytes.endswith(b"\n"), "INVALID_MANIFEST_BYTES", "Signed manifest must end with a newline")
+    signing = manifest.get("signing") if isinstance(manifest, dict) else None
+    fail(isinstance(signing, dict), "INVALID_MANIFEST", "Signing metadata is missing")
+    key_id = signing.get("key_id")
+    channel = manifest.get("release", {}).get("channel") if isinstance(manifest.get("release"), dict) else None
+    fail(isinstance(key_id, str) and SAFE_KEY_ID.fullmatch(key_id), "INVALID_MANIFEST", "Invalid signing key id")
+    fail(channel in ("preview", "stable"), "INVALID_MANIFEST", "Invalid release channel")
+    public_key = load_trusted_key(policy, key_id, channel)
+    verify_signature(manifest_path, args.signature, public_key)
+    validate_manifest(manifest)
+    current = verify_policy(manifest, policy)
+    if args.artifact:
+        verify_artifact(args.artifact, manifest["artifacts"][0])
+    result = {
+        "status": "verified",
+        "source_version": current,
+        "target_version": manifest["release"]["version"],
+        "channel": manifest["release"]["channel"],
+        "key_id": key_id,
+        "artifact_verified": bool(args.artifact),
+        "reboot_required": manifest["requirements"]["reboot"],
+        "rollback_supported": manifest["rollback"]["supported"],
+    }
+    print(json.dumps(result, sort_keys=True))
+
+
+def show_status(_args):
+    policy = read_json(POLICY_PATH, "INVALID_POLICY")
+    result = {
+        "installed_version": read_release_version(),
+        "channel": policy.get("channel"),
+        "device": policy.get("device"),
+        "update_state": "idle",
+    }
+    print(json.dumps(result, sort_keys=True))
+
+
+def parser():
+    command = argparse.ArgumentParser(prog="sovereign-update")
+    subcommands = command.add_subparsers(dest="command", required=True)
+    status = subcommands.add_parser("status", help="show installed update state")
+    status.set_defaults(handler=show_status)
+    inspect = subcommands.add_parser("inspect", help="verify a signed local update")
+    inspect.add_argument("--manifest", required=True)
+    inspect.add_argument("--signature", required=True)
+    inspect.add_argument("--artifact")
+    inspect.set_defaults(handler=inspect_update)
+    return command
+
+
+def main():
+    args = parser().parse_args()
+    try:
+        args.handler(args)
+    except UpdateError as error:
+        print(json.dumps({"status": "rejected", "code": error.code, "message": str(error)}), file=sys.stderr)
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

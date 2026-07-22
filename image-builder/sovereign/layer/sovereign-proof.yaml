@@ -15,6 +15,7 @@ mmdebstrap:
     - iwd
     - libnss-mdns
     - nginx
+    - openssl
     - python3-minimal
     - sudo
   customize-hooks:

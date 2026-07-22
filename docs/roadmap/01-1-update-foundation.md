@@ -1,6 +1,6 @@
 # Milestone 01.1 - Appliance Update Foundation
 
-**Status:** Draft  
+**Status:** In progress
 **Priority:** Immediate next priority after Phase 01 release  
 **Depends on:** [Phase 01 Flashable Pi-hole Image POC](01-preview-poc.md)  
 **Owner:** Project creator  
@@ -172,6 +172,12 @@ Commands that mutate state require appropriate administrator privilege. The upda
 
 The backup manifest and durable transaction-state schemas are also defined.
 Implementation and real-device restore validation remain part of U2-U5.
+
+**Implementation status:** The installed `sovereign-update inspect` verifier
+now enforces exact-byte Ed25519 signatures, local key/channel/revocation trust,
+manifest structure, compatibility, downgrade, free-space, and bundle digest
+rules without mutating the appliance. Production preview-key provisioning is
+still blocked on the documented key-custody decision.
 
 ### U2 - Persistent Data and Versioned Releases
 

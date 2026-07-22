@@ -1,0 +1,9 @@
+This directory contains only public Sovereign OS update verification keys.
+
+Each key uses two files with the same safe key identifier:
+
+  <key-id>.pem   Ed25519 public key in PEM SubjectPublicKeyInfo format
+  <key-id>.json  trusted metadata with algorithm, channels, and revoked status
+
+No preview key is installed until release-key custody and rotation are approved.
+An empty trust store fails closed and prevents update installation.

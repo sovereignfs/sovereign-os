@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "channel": "preview",
+  "device": "rpi5-arm64",
+  "trust_store": "/etc/sovereign/update-trust.d"
+}

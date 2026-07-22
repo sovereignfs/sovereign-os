@@ -29,6 +29,32 @@ links, and ownership or modes outside the update contract.
 The example hashes and sizes are illustrative and must never be published as a
 real release manifest.
 
+## Installed verifier
+
+The image installs the first update-client trust boundary as
+`sovereign-update`. It does not download or activate releases yet. An operator
+can inspect a previously downloaded manifest, detached signature, and bundle:
+
+```text
+sovereign-update status
+sovereign-update inspect \
+  --manifest release-manifest.json \
+  --signature release-manifest.sig \
+  --artifact sovereign-update-<version>.tar.zst
+```
+
+Inspection verifies the signature over the exact manifest bytes before using
+compatibility or artifact fields. It then enforces the installed channel,
+trusted-key metadata, revocation state, device, source-version range,
+downgrade rule, free-space requirement, artifact size, and SHA-256 digest.
+Success performs no mutation.
+
+Trusted public keys live under `/etc/sovereign/update-trust.d/` as matching
+`<key-id>.pem` and `<key-id>.json` files. The preview image intentionally ships
+with an empty trust store until release-key custody and rotation are approved;
+this fails closed instead of embedding a development private key or silently
+trusting an unapproved publisher.
+
 ## Backup and Journal v1
 
 The [backup and transaction journal contract](BACKUP_AND_JOURNAL.md) defines
