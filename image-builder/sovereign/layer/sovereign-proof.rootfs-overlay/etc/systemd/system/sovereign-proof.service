@@ -1,7 +1,8 @@
 [Unit]
 Description=Initialize the Sovereign proof data directory
+Requires=sovereign-data-expand.service
 RequiresMountsFor=/data
-After=local-fs.target
+After=local-fs.target sovereign-data-expand.service
 ConditionPathIsMountPoint=/data
 
 [Service]
@@ -11,4 +12,3 @@ RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
-

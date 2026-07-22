@@ -9,6 +9,7 @@ mmdebstrap:
   packages:
     - avahi-daemon
     - ca-certificates
+    - cloud-guest-utils
     - curl
     - dnsutils
     - iwd

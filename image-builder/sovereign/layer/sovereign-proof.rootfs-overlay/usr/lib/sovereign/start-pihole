@@ -9,6 +9,9 @@ password_file=${secret_dir}/pihole-admin-password
 compose_file=${app_dir}/compose.yaml
 template=/usr/lib/sovereign/pihole/compose.yaml.in
 marker=${state_dir}/pihole-ready
+auth_request=$(mktemp)
+auth_response=$(mktemp)
+trap 'rm -f "$auth_request" "$auth_response"' EXIT
 . /usr/lib/sovereign/pihole-image.env
 image_reference="${PIHOLE_IMAGE_REPOSITORY#docker.io/}@${PIHOLE_IMAGE_DIGEST}"
 
@@ -46,10 +49,24 @@ dig +short +time=3 +tries=1 @127.0.0.1 pi.hole | grep -q .
 curl --fail --silent --show-error --max-time 10 \
   --output /dev/null http://127.0.0.1:8080/admin/
 
+# A healthy login page is insufficient: verify that the device credential and
+# Pi-hole's effective API password are the same before recording readiness.
+chmod 0600 "$auth_request" "$auth_response"
+python3 -c 'import json, sys; json.dump({"password": sys.stdin.read().rstrip("\n")}, sys.stdout)' \
+  < "$password_file" > "$auth_request"
+curl --fail --silent --show-error --max-time 10 \
+  --header 'Content-Type: application/json' \
+  --request POST \
+  --data-binary "@$auth_request" \
+  --output "$auth_response" \
+  http://127.0.0.1:8080/api/auth
+grep -Eq '"valid"[[:space:]]*:[[:space:]]*true' "$auth_response"
+
 {
   printf 'image=%s\n' "$(docker inspect --format '{{.Image}}' pihole)"
   printf 'health=%s\n' "$health"
   printf 'dns=pass\n'
   printf 'http=pass\n'
+  printf 'credential=pass\n'
 } > "${marker}.tmp"
 mv "${marker}.tmp" "$marker"

@@ -1,0 +1,48 @@
+#!/bin/sh
+
+set -eu
+
+state_dir=/data/sovereign/update-state
+marker=${state_dir}/data-expand-ready
+source_device=$(findmnt --noheadings --output SOURCE --target /data)
+source_device=$(readlink -f "$source_device")
+parent_name=$(lsblk --noheadings --output PKNAME "$source_device" | tr -d '[:space:]')
+partition_number=$(lsblk --noheadings --output PARTN "$source_device" | tr -d '[:space:]')
+
+if [ -z "$parent_name" ] || [ -z "$partition_number" ]; then
+  printf 'Cannot identify the parent disk for %s.\n' "$source_device" >&2
+  exit 1
+fi
+
+parent_device=/dev/${parent_name}
+case "$source_device" in
+  /dev/${parent_name}p${partition_number}|/dev/${parent_name}${partition_number}) ;;
+  *)
+    printf '%s is not partition %s on %s.\n' \
+      "$source_device" "$partition_number" "$parent_device" >&2
+    exit 1
+    ;;
+esac
+
+grow_output=$(mktemp)
+trap 'rm -f "$grow_output"' EXIT
+if ! growpart "$parent_device" "$partition_number" >"$grow_output" 2>&1; then
+  if ! grep -q 'NOCHANGE:' "$grow_output"; then
+    cat "$grow_output" >&2
+    exit 1
+  fi
+fi
+
+# The DATA filesystem is ext4 and supports online growth while mounted.
+resize2fs "$source_device"
+
+install -d -m 0755 "$state_dir"
+{
+  printf 'device=%s\n' "$source_device"
+  printf 'parent=%s\n' "$parent_device"
+  printf 'partition=%s\n' "$partition_number"
+  printf 'partition_bytes=%s\n' "$(lsblk --bytes --noheadings --output SIZE "$source_device" | tr -d '[:space:]')"
+  printf 'filesystem_bytes=%s\n' "$(findmnt --bytes --noheadings --output SIZE --target /data | tr -d '[:space:]')"
+} > "${marker}.tmp"
+chmod 0644 "${marker}.tmp"
+mv "${marker}.tmp" "$marker"

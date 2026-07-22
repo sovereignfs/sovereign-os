@@ -27,6 +27,7 @@
 - [ ] Partition table and filesystems pass validation.
 - [ ] Raw image size fits the advertised minimum storage.
 - [ ] Dedicated `/data` partition exists and expands or is sized according to the documented policy.
+- [ ] DATA expansion completes before containerd, Docker, or appliance initialization and records its completion marker.
 - [ ] Pi-hole data, device secrets, backups, and update state resolve to `/data/sovereign`.
 - [ ] Root filesystem replacement cannot silently become the authoritative location for persistent Pi-hole data.
 
@@ -58,8 +59,10 @@
 - [ ] Release notes identify the bootstrap credential as a preview-only LAN
       risk and link to the first-login hardening procedure.
 - [ ] Wi-Fi connects without Ethernet using the settings supplied while flashing.
+- [ ] Unconfigured Wi-Fi does not delay or fail an otherwise routable Ethernet boot.
 - [ ] `/boot/firmware/rpi-preseed.toml` is removed after it is consumed.
 - [ ] Unique Pi-hole administrator credential is generated.
+- [ ] The generated Pi-hole credential successfully authenticates through the Pi-hole API before first-boot completion.
 - [ ] Embedded Pi-hole artifact imports without internet access.
 - [ ] First-boot completion is recorded only after health checks pass.
 - [ ] First-boot duration is measured and documented.
@@ -77,10 +80,12 @@
 - [ ] `sovereign.local` is advertised over mDNS.
 - [ ] Direct-IP access works.
 - [ ] Root URL redirects to `/dns/admin/`.
+- [ ] Both `/dns` and `/dns/` redirect to `/dns/admin/`.
 - [ ] Pi-hole UI works at `/dns/admin/`.
 - [ ] Pi-hole API works at `/dns/api/`.
 - [ ] Login, logout, assets, navigation, and redirects retain the prefix.
 - [ ] Prefix traversal and escape tests fail safely.
+- [ ] Local-access verification completes once without a restart loop or unbounded log growth.
 
 ## Failure and Recovery
 

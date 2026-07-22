@@ -1,0 +1,14 @@
+[Unit]
+Description=Expand the Sovereign persistent data partition
+RequiresMountsFor=/data
+After=local-fs.target
+Before=sovereign-proof.service containerd.service docker.service
+ConditionPathIsMountPoint=/data
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/sovereign/expand-data-partition
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

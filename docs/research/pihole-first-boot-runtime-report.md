@@ -1,6 +1,6 @@
 # Pi-hole First-Boot Runtime Report
 
-Status: **Runtime configuration and isolated execution passed; Pi 5 boot and credential delivery pending**
+Status: **Superseded in part by physical qualification; credential correction pending fresh-image verification**
 Build date: 2026-07-19
 
 ## Outcome
@@ -11,8 +11,11 @@ import are ready. Configuration, Pi-hole data, the generated administrator
 secret, and the completion marker are all persisted under `/data`.
 
 The implementation follows Pi-hole v6's documented `FTLCONF_*` configuration
-and `WEBPASSWORD_FILE` Compose-secret mechanisms. Pi-hole's documentation also
-states that the proxy prefix must be stripped before forwarding to its backend;
+and `WEBPASSWORD_FILE` Compose-secret mechanisms. Physical qualification found
+that `WEBPASSWORD_FILE` must contain the Compose secret name
+(`pihole_webpasswd`), not its `/run/secrets/...` mount path. The source has been
+corrected and now performs an authenticated API readiness check. Pi-hole's
+documentation also states that the proxy prefix must be stripped before forwarding to its backend;
 therefore the container advertises `/dns` in generated links while its
 loopback-only backend health check uses `/admin/`.
 

@@ -9,7 +9,7 @@ services:
       - "127.0.0.1:8080:80/tcp"
     environment:
       TZ: UTC
-      WEBPASSWORD_FILE: /run/secrets/pihole_webpasswd
+      WEBPASSWORD_FILE: pihole_webpasswd
       FTLCONF_dns_listeningMode: all
       FTLCONF_dns_upstreams: "1.1.1.1;1.0.0.1"
       FTLCONF_dhcp_active: "false"
