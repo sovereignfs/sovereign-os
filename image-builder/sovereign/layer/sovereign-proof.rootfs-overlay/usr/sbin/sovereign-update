@@ -15,6 +15,7 @@ import secrets
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 
 
@@ -30,6 +31,8 @@ PIHOLE_ENV_PATH = pathlib.Path(
 DATA_PATH = pathlib.Path(os.environ.get("SOVEREIGN_DATA_PATH", "/data"))
 OPENSSL = os.environ.get("SOVEREIGN_OPENSSL", "/usr/bin/openssl")
 TAR = os.environ.get("SOVEREIGN_TAR", "/usr/bin/tar")
+ZSTD = os.environ.get("SOVEREIGN_ZSTD", "/usr/bin/zstd")
+DOCKER = os.environ.get("SOVEREIGN_DOCKER", "/usr/bin/docker")
 SYSTEMCTL = os.environ.get("SOVEREIGN_SYSTEMCTL", "/usr/bin/systemctl")
 HEALTH_CHECK = os.environ.get(
     "SOVEREIGN_UPDATE_HEALTH_CHECK", "/usr/lib/sovereign/verify-update-health"
@@ -115,15 +118,17 @@ def compare_versions(left, right):
 
 
 def read_release_version():
+    active_release = RELEASES_ROOT / "current/sovereign-release"
+    source = active_release if active_release.is_file() else RELEASE_PATH
     try:
-        lines = RELEASE_PATH.read_text(encoding="utf-8").splitlines()
+        lines = source.read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeError) as error:
         raise UpdateError("RELEASE_UNAVAILABLE", "Installed release metadata is unavailable") from error
     values = {}
     for line in lines:
         key, separator, value = line.partition("=")
         if separator:
-            values[key.strip()] = value.strip().strip('"')
+            values[key.strip()] = value.strip().strip('"').strip("'")
     version = values.get("VERSION")
     parse_version(version)
     return version
@@ -138,7 +143,7 @@ def read_key_values(path):
     for line in lines:
         key, separator, value = line.partition("=")
         if separator:
-            values[key.strip()] = value.strip().strip('"')
+            values[key.strip()] = value.strip().strip('"').strip("'")
     return values
 
 
@@ -709,6 +714,185 @@ def create_backup(args):
             raise
 
 
+def validate_bundle_manifest(value, target_version):
+    exact_keys(value, ["schema_version", "release_version", "files"], "bundle manifest")
+    fail(value["schema_version"] == 1, "INVALID_BUNDLE", "Unsupported bundle schema")
+    fail(value["release_version"] == target_version, "INVALID_BUNDLE", "Bundle release version does not match")
+    fail(isinstance(value["files"], list) and value["files"], "INVALID_BUNDLE", "Bundle file list is empty")
+    seen = set()
+    for item in value["files"]:
+        exact_keys(item, ["path", "size", "sha256", "mode"], "bundle file")
+        path = pathlib.PurePosixPath(item["path"])
+        fail(not path.is_absolute() and path.parts[0] == "release" and ".." not in path.parts, "UNSAFE_BUNDLE", "Bundle file path is unsafe")
+        fail(item["path"] not in seen, "INVALID_BUNDLE", "Bundle contains duplicate file metadata")
+        seen.add(item["path"])
+        fail(isinstance(item["size"], int) and item["size"] >= 0, "INVALID_BUNDLE", "Invalid bundle file size")
+        fail(isinstance(item["sha256"], str) and SHA256.fullmatch(item["sha256"]), "INVALID_BUNDLE", "Invalid bundle file digest")
+        fail(item["mode"] in (0o644, 0o755), "UNSAFE_BUNDLE", "Unsafe bundle file mode")
+    return {item["path"]: item for item in value["files"]}
+
+
+def extract_bundle(bundle, destination, target_version):
+    transaction_directory = destination.parent
+    tar_path = transaction_directory / "update-bundle.tar"
+    run_checked(
+        [ZSTD, "--decompress", "--quiet", "--force", "--output-dir-flat", str(transaction_directory), str(bundle)],
+        "BUNDLE_DECOMPRESSION_FAILED",
+        "Update bundle could not be decompressed",
+        timeout=600,
+    )
+    # zstd derives the output by removing .zst from update-bundle.tar.zst.
+    fail(tar_path.is_file(), "BUNDLE_DECOMPRESSION_FAILED", "Decompressed update bundle is missing")
+    try:
+        with tarfile.open(tar_path, "r:") as archive:
+            members = archive.getmembers()
+            fail(0 < len(members) <= 100000, "INVALID_BUNDLE", "Bundle has an invalid entry count")
+            names = [member.name for member in members]
+            fail(len(names) == len(set(names)), "INVALID_BUNDLE", "Bundle contains duplicate archive names")
+            for member in members:
+                path = pathlib.PurePosixPath(member.name)
+                fail(not path.is_absolute() and ".." not in path.parts, "UNSAFE_BUNDLE", "Bundle archive path is unsafe")
+                fail(member.isfile(), "UNSAFE_BUNDLE", "Only regular files are allowed in update bundles")
+            manifest_name = "sovereign-update-v1/bundle-manifest.json"
+            fail(manifest_name in names, "INVALID_BUNDLE", "Bundle manifest is missing")
+            bundle_manifest = json.load(archive.extractfile(manifest_name))
+            declared = validate_bundle_manifest(bundle_manifest, target_version)
+            expected = {manifest_name} | {
+                f"sovereign-update-v1/{name}" for name in declared
+            }
+            fail(set(names) == expected, "INVALID_BUNDLE", "Bundle has unlisted or missing files")
+            destination.mkdir(parents=True, mode=0o755)
+            for relative, details in declared.items():
+                member = archive.getmember(f"sovereign-update-v1/{relative}")
+                output = destination.joinpath(*pathlib.PurePosixPath(relative).parts[1:])
+                output.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+                digest = hashlib.sha256()
+                size = 0
+                descriptor = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, details["mode"])
+                with archive.extractfile(member) as source, os.fdopen(descriptor, "wb") as target:
+                    for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                        target.write(chunk)
+                        digest.update(chunk)
+                        size += len(chunk)
+                    target.flush()
+                    os.fsync(target.fileno())
+                fail(size == details["size"] and digest.hexdigest() == details["sha256"], "BUNDLE_FILE_MISMATCH", f"Bundle file failed verification: {relative}")
+                os.chmod(output, details["mode"])
+    except (OSError, tarfile.TarError, json.JSONDecodeError, KeyError) as error:
+        raise UpdateError("INVALID_BUNDLE", "Update bundle structure is invalid") from error
+    finally:
+        try:
+            tar_path.unlink()
+        except OSError:
+            pass
+
+
+def validate_release_payload(release, manifest):
+    required = ["sovereign-release", "pihole-image.env", "pihole-arm64.oci.tar"]
+    fail(all((release / name).is_file() for name in required), "INCOMPLETE_RELEASE", "Required release payload is missing")
+    identity = read_key_values(release / "sovereign-release")
+    pihole = read_key_values(release / "pihole-image.env")
+    fail(identity.get("VERSION") == manifest["release"]["version"], "VERSION_MISMATCH", "Release identity does not match")
+    fail(identity.get("CHANNEL") == manifest["release"]["channel"], "WRONG_CHANNEL", "Release identity channel does not match")
+    target = manifest["components"]["pihole"]
+    fail(pihole.get("PIHOLE_IMAGE_REPOSITORY") == target["repository"], "COMPONENT_MISMATCH", "Pi-hole repository does not match")
+    fail(pihole.get("PIHOLE_IMAGE_DIGEST") == target["digest"], "COMPONENT_MISMATCH", "Pi-hole digest does not match")
+    fail(pihole.get("PIHOLE_IMAGE_PLATFORM") == "linux/arm64", "COMPONENT_MISMATCH", "Pi-hole platform does not match")
+
+
+def stage_release(args):
+    fail(os.geteuid() == 0 or os.environ.get("SOVEREIGN_UPDATE_TEST_MODE") == "1", "ROOT_REQUIRED", "Staging requires administrator privileges")
+    with update_lock():
+        snapshot = load_transaction(args.transaction, "backed_up")
+        directory = transaction_path(args.transaction)
+        manifest = read_json(directory / "staging/release-manifest.json")
+        fail(not manifest["migrations"], "MIGRATION_UNSUPPORTED", "Data migrations are not supported by this updater version")
+        fail(manifest["rollback"]["supported"], "ROLLBACK_UNSUPPORTED", "This updater requires a rollback-capable release")
+        releases = RELEASES_ROOT / "releases"
+        releases.mkdir(parents=True, exist_ok=True, mode=0o755)
+        final_release = releases / snapshot["target_version"]
+        fail(not final_release.exists(), "RELEASE_EXISTS", "Target release already exists")
+        candidate = directory / "release-candidate"
+        fail(not candidate.exists(), "STAGING_EXISTS", "Candidate release staging already exists")
+        install_candidate = releases / f".{snapshot['target_version']}.{args.transaction}.tmp"
+        try:
+            extract_bundle(directory / "staging/update-bundle.tar.zst", candidate, snapshot["target_version"])
+            validate_release_payload(candidate, manifest)
+            install_candidate.mkdir(mode=0o755)
+            for source in sorted(candidate.rglob("*")):
+                relative = source.relative_to(candidate)
+                if relative.as_posix() == "pihole-arm64.oci.tar":
+                    continue
+                destination = install_candidate / relative
+                if source.is_dir():
+                    destination.mkdir(exist_ok=True, mode=0o755)
+                else:
+                    destination.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+                    shutil.copyfile(source, destination)
+                    os.chmod(destination, source.stat().st_mode & 0o777)
+            sync_directory(install_candidate)
+            os.replace(install_candidate, final_release)
+            sync_directory(releases)
+            snapshot = transition(snapshot, "staged", "RELEASE_STAGED")
+            print(json.dumps({"status": "staged", "transaction_id": args.transaction, "release": str(final_release)}, sort_keys=True))
+        except UpdateError:
+            shutil.rmtree(candidate, ignore_errors=True)
+            shutil.rmtree(install_candidate, ignore_errors=True)
+            raise
+
+
+def switch_current(target):
+    current = RELEASES_ROOT / "current"
+    temporary = RELEASES_ROOT / f".current.{secrets.token_hex(4)}"
+    relative = os.path.relpath(target, RELEASES_ROOT)
+    os.symlink(relative, temporary)
+    os.replace(temporary, current)
+    sync_directory(RELEASES_ROOT)
+
+
+def activate_release(args):
+    fail(os.geteuid() == 0 or os.environ.get("SOVEREIGN_UPDATE_TEST_MODE") == "1", "ROOT_REQUIRED", "Activation requires administrator privileges")
+    with update_lock():
+        snapshot = load_transaction(args.transaction, "staged")
+        directory = transaction_path(args.transaction)
+        manifest = read_json(directory / "staging/release-manifest.json")
+        target = RELEASES_ROOT / "releases" / snapshot["target_version"]
+        current = RELEASES_ROOT / "current"
+        fail(current.is_symlink(), "ACTIVE_RELEASE_MISSING", "Active release pointer is unavailable")
+        previous = current.resolve(strict=True)
+        target_digest = manifest["components"]["pihole"]["digest"]
+        run_checked([DOCKER, "load", "--input", str(directory / "release-candidate/pihole-arm64.oci.tar")], "IMAGE_IMPORT_FAILED", "Target Pi-hole image could not be imported", timeout=900)
+        run_checked([DOCKER, "image", "inspect", target_digest], "IMAGE_DIGEST_MISMATCH", "Imported Pi-hole digest is unavailable")
+        snapshot = transition(snapshot, "activating", "ACTIVATION_STARTED")
+        try:
+            run_checked([SYSTEMCTL, "stop", "sovereign-pihole.service"], "SERVICE_STOP_FAILED", "Pi-hole could not be stopped")
+            switch_current(target)
+            run_checked([SYSTEMCTL, "start", "sovereign-pihole.service"], "SERVICE_START_FAILED", "Updated Pi-hole could not be started")
+            snapshot = transition(snapshot, "validating", "TARGET_STARTED")
+            run_checked([HEALTH_CHECK], "POSTUPDATE_HEALTH_FAILED", "Updated appliance failed health checks")
+            snapshot = transition(snapshot, "committed", "UPDATE_COMMITTED", recovery_action="none")
+            shutil.rmtree(directory / "release-candidate", ignore_errors=True)
+            try:
+                (directory / "staging/update-bundle.tar.zst").unlink()
+            except OSError:
+                pass
+            print(json.dumps({"status": "committed", "transaction_id": args.transaction, "version": snapshot["target_version"]}, sort_keys=True))
+        except UpdateError as activation_error:
+            if snapshot["state"] == "activating":
+                snapshot = transition(snapshot, "rolling_back", activation_error.code, failure={"code": activation_error.code, "message": str(activation_error), "retryable": False}, recovery_action="rollback")
+            elif snapshot["state"] == "validating":
+                snapshot = transition(snapshot, "rolling_back", activation_error.code, failure={"code": activation_error.code, "message": str(activation_error), "retryable": False}, recovery_action="rollback")
+            try:
+                run_checked([SYSTEMCTL, "stop", "sovereign-pihole.service"], "ROLLBACK_STOP_FAILED", "Pi-hole could not stop for rollback")
+                switch_current(previous)
+                run_checked([SYSTEMCTL, "start", "sovereign-pihole.service"], "ROLLBACK_START_FAILED", "Previous Pi-hole could not restart")
+                run_checked([HEALTH_CHECK], "ROLLBACK_HEALTH_FAILED", "Previous release failed health checks")
+                transition(snapshot, "rolled_back", "ROLLBACK_HEALTHY", recovery_action="none")
+            except UpdateError as rollback_error:
+                transition(snapshot, "recovery_required", rollback_error.code, failure={"code": rollback_error.code, "message": str(rollback_error), "retryable": False}, recovery_action="manual")
+            raise
+
+
 def show_status(_args):
     policy = read_json(POLICY_PATH, "INVALID_POLICY")
     transactions = sorted((UPDATE_ROOT / "transactions").glob("*/state.json"))
@@ -741,6 +925,12 @@ def parser():
     backup = subcommands.add_parser("backup", help="create a quiesced pre-update backup")
     backup.add_argument("transaction")
     backup.set_defaults(handler=create_backup)
+    stage = subcommands.add_parser("stage", help="safely extract a backed-up update")
+    stage.add_argument("transaction")
+    stage.set_defaults(handler=stage_release)
+    activate = subcommands.add_parser("activate", help="activate and health-check a staged update")
+    activate.add_argument("transaction")
+    activate.set_defaults(handler=activate_release)
     return command
 
 

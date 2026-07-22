@@ -4,4 +4,13 @@ set -eu
 
 install -d -m 0755 /data/sovereign /data/sovereign/configuration
 install -d -m 0700 /data/sovereign/backups /data/sovereign/update-state
+version=$(sed -n 's/^VERSION="\(.*\)"$/\1/p' /etc/sovereign-release)
+test -n "$version"
+release_dir="/opt/sovereign/releases/$version"
+install -d -m 0755 "$release_dir"
+install -m 0644 /etc/sovereign-release "$release_dir/sovereign-release"
+install -m 0644 /usr/lib/sovereign/pihole-image.env "$release_dir/pihole-image.env"
+if [ ! -L /opt/sovereign/current ]; then
+  ln -s "releases/$version" /opt/sovereign/current
+fi
 printf '%s\n' "Sovereign image initialized" > /data/sovereign/proof-ready

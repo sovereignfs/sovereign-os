@@ -193,7 +193,13 @@ extraction or service mutation yet.
 The quiesced pre-update backup is now implemented. Four root-only archive roles
 are generated and validated, Pi-hole downtime is bounded to archive creation,
 and local DNS/HTTP health must recover before the transaction can become
-`backed_up`. Restore and activation remain pending.
+`backed_up`.
+
+Pi-hole-only versioned activation is now implemented: safe bundle extraction,
+immutable release metadata, pinned OCI import, atomic active-release switching,
+local DNS/HTTP validation, health-gated commit, and automatic release-pointer
+rollback. Data migrations remain rejected, and real-device backup/rollback
+qualification is still pending.
 
 ### U2 - Persistent Data and Versioned Releases
 

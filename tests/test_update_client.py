@@ -16,9 +16,11 @@ CLIENT = (
 )
 EXAMPLE = ROOT / "update/examples/update-manifest-v1.example.json"
 OPENSSL = shutil.which("openssl")
+ZSTD = shutil.which("zstd")
+BUNDLE_BUILDER = ROOT / "scripts/create-update-bundle.py"
 
 
-@unittest.skipIf(OPENSSL is None, "OpenSSL is unavailable")
+@unittest.skipIf(OPENSSL is None or ZSTD is None, "OpenSSL or zstd is unavailable")
 class UpdateClientTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -87,6 +89,9 @@ class UpdateClientTests(unittest.TestCase):
         self.health = self.tools / "health"
         self.health.write_text("#!/bin/sh\nexit 0\n")
         self.health.chmod(0o755)
+        self.docker = self.tools / "docker"
+        self.docker.write_text("#!/bin/sh\nexit 0\n")
+        self.docker.chmod(0o755)
         self.tar = self.tools / "tar"
         self.tar.write_text(
             "#!/bin/sh\n"
@@ -102,6 +107,14 @@ class UpdateClientTests(unittest.TestCase):
             "esac\n"
         )
         self.tar.chmod(0o755)
+        self.releases = self.directory / "releases"
+        active = self.releases / "releases/0.1.0-preview.5"
+        active.mkdir(parents=True)
+        (active / "sovereign-release").write_text(
+            'VERSION="0.1.0-preview.5"\nCHANNEL="preview"\n'
+        )
+        (active / "pihole-image.env").write_text(self.pihole_env.read_text())
+        (self.releases / "current").symlink_to("releases/0.1.0-preview.5")
         self.manifest = json.loads(EXAMPLE.read_text())
         self.manifest["release"]["id"] = "sovereign-os-0.1.0-preview.6"
         self.manifest["release"]["version"] = "0.1.0-preview.6"
@@ -194,13 +207,49 @@ class UpdateClientTests(unittest.TestCase):
             "SOVEREIGN_OPENSSL": OPENSSL,
             "SOVEREIGN_PIHOLE_ENV": str(self.pihole_env),
             "SOVEREIGN_STATE_ROOT": str(self.state_root),
-            "SOVEREIGN_RELEASES_ROOT": str(self.directory / "releases"),
+            "SOVEREIGN_RELEASES_ROOT": str(self.releases),
             "SOVEREIGN_SYSTEMCTL": str(self.systemctl),
             "SOVEREIGN_UPDATE_HEALTH_CHECK": str(self.health),
             "SOVEREIGN_TAR": str(self.tar),
+            "SOVEREIGN_ZSTD": ZSTD,
+            "SOVEREIGN_DOCKER": str(self.docker),
             "SOVEREIGN_UPDATE_TEST_MODE": "1",
             "SOVEREIGN_TEST_SERVICE_LOG": str(self.service_log),
         }
+
+    def build_update_bundle(self):
+        release = self.directory / "target-release"
+        release.mkdir()
+        (release / "sovereign-release").write_text(
+            'VERSION="0.1.0-preview.6"\nCHANNEL="preview"\n'
+        )
+        (release / "pihole-image.env").write_text(
+            "PIHOLE_IMAGE_REPOSITORY='docker.io/pihole/pihole'\n"
+            "PIHOLE_IMAGE_TAG='2026.04.1'\n"
+            f"PIHOLE_IMAGE_DIGEST='{self.manifest['components']['pihole']['digest']}'\n"
+            "PIHOLE_IMAGE_PLATFORM='linux/arm64'\n"
+        )
+        (release / "pihole-arm64.oci.tar").write_bytes(b"OCI fixture\n")
+        self.artifact = self.directory / "update-bundle.tar.zst"
+        subprocess.run(
+            [
+                str(BUNDLE_BUILDER),
+                "--version",
+                "0.1.0-preview.6",
+                "--release-dir",
+                str(release),
+                "--output",
+                str(self.artifact),
+                "--zstd",
+                ZSTD,
+            ],
+            check=True,
+            capture_output=True,
+        )
+        self.manifest["artifacts"][0]["size"] = self.artifact.stat().st_size
+        self.manifest["artifacts"][0]["sha256"] = hashlib.sha256(
+            self.artifact.read_bytes()
+        ).hexdigest()
 
     def test_accepts_trusted_compatible_manifest_and_artifact(self):
         manifest, signature = self.write_signed_manifest()
@@ -336,6 +385,82 @@ class UpdateClientTests(unittest.TestCase):
         )
         self.assertEqual("recovery_required", state["state"])
         self.assertEqual("PREUPDATE_HEALTH_FAILED", state["failure"]["code"])
+
+    def prepare_and_backup_bundle(self):
+        self.build_update_bundle()
+        manifest, signature = self.write_signed_manifest()
+        prepared = self.run_prepare(manifest, signature)
+        self.assertEqual(0, prepared.returncode, prepared.stderr)
+        transaction_id = json.loads(prepared.stdout)["transaction_id"]
+        backed_up = subprocess.run(
+            [str(CLIENT), "backup", transaction_id],
+            env=self.environment(),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(0, backed_up.returncode, backed_up.stderr)
+        return transaction_id
+
+    def test_stage_and_activate_commits_versioned_release(self):
+        transaction_id = self.prepare_and_backup_bundle()
+        staged = subprocess.run(
+            [str(CLIENT), "stage", transaction_id],
+            env=self.environment(),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(0, staged.returncode, staged.stderr)
+        activated = subprocess.run(
+            [str(CLIENT), "activate", transaction_id],
+            env=self.environment(),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(0, activated.returncode, activated.stderr)
+        self.assertEqual("0.1.0-preview.6", self.releases.joinpath("current").resolve().name)
+        self.assertFalse(
+            (self.releases / "releases/0.1.0-preview.6/pihole-arm64.oci.tar").exists()
+        )
+        self.assertFalse(
+            (
+                self.directory
+                / "update-state/transactions"
+                / transaction_id
+                / "release-candidate"
+            ).exists()
+        )
+        state = json.loads(
+            (self.directory / "update-state/transactions" / transaction_id / "state.json").read_text()
+        )
+        self.assertEqual("committed", state["state"])
+
+    def test_failed_activation_health_rolls_back_pointer(self):
+        transaction_id = self.prepare_and_backup_bundle()
+        staged = subprocess.run(
+            [str(CLIENT), "stage", transaction_id],
+            env=self.environment(),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(0, staged.returncode, staged.stderr)
+        health_marker = self.directory / "health-failed-once"
+        self.health.write_text(
+            "#!/bin/sh\n"
+            f"if [ ! -f '{health_marker}' ]; then touch '{health_marker}'; exit 1; fi\n"
+            "exit 0\n"
+        )
+        activated = subprocess.run(
+            [str(CLIENT), "activate", transaction_id],
+            env=self.environment(),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(2, activated.returncode)
+        self.assertEqual("0.1.0-preview.5", self.releases.joinpath("current").resolve().name)
+        state = json.loads(
+            (self.directory / "update-state/transactions" / transaction_id / "state.json").read_text()
+        )
+        self.assertEqual("rolled_back", state["state"])
 
 
 if __name__ == "__main__":

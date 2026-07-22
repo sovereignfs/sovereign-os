@@ -12,7 +12,9 @@ marker=${state_dir}/pihole-ready
 auth_request=$(mktemp)
 auth_response=$(mktemp)
 trap 'rm -f "$auth_request" "$auth_response"' EXIT
-. /usr/lib/sovereign/pihole-image.env
+image_environment=/opt/sovereign/current/pihole-image.env
+[ -f "$image_environment" ] || image_environment=/usr/lib/sovereign/pihole-image.env
+. "$image_environment"
 image_reference="${PIHOLE_IMAGE_REPOSITORY#docker.io/}@${PIHOLE_IMAGE_DIGEST}"
 
 install -d -m 0755 "$state_dir" "$app_dir" "${app_dir}/etc-pihole"

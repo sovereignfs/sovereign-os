@@ -31,9 +31,9 @@ real release manifest.
 
 ## Installed verifier
 
-The image installs the first update-client trust boundary as
-`sovereign-update`. It does not download or activate releases yet. An operator
-can inspect a previously downloaded manifest, detached signature, and bundle:
+The image installs the update client as `sovereign-update`. It intentionally
+does not download releases yet; an operator supplies previously downloaded
+inputs. Inspection remains non-mutating:
 
 ```text
 sovereign-update status
@@ -85,6 +85,20 @@ creation rejects symlinks and special files. Installation must reject absolute
 or parent paths, links, device nodes, unlisted files, duplicate names, unsafe
 modes, digest mismatches, and a release version different from the signed outer
 manifest.
+
+After a successful backup, `sovereign-update stage <transaction-id>` safely
+decompresses and manually extracts regular files, verifies the closed inner
+manifest, and installs small immutable runtime metadata under
+`/opt/sovereign/releases/<version>/`. Large OCI data remains temporarily on the
+DATA partition.
+
+`sovereign-update activate <transaction-id>` imports and verifies the pinned
+Pi-hole image, atomically switches `/opt/sovereign/current`, recreates Pi-hole
+against its existing persistent state, and runs the complete local health gate.
+Success records `committed` and removes transient OCI payloads. Failure switches
+back to the previous release and records `rolled_back` only after that release
+passes the same health gate; otherwise it records `recovery_required`. Initial
+v1 activation rejects data migrations and releases without rollback support.
 
 Trusted public keys live under `/etc/sovereign/update-trust.d/` as matching
 `<key-id>.pem` and `<key-id>.json` files. The preview image intentionally ships

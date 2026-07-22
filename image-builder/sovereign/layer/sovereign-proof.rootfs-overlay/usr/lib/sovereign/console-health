@@ -165,7 +165,8 @@ def tcp_check(port):
 
 
 def collect_health():
-    release = read_key_values(RELEASE_PATH)
+    active_release = pathlib.Path("/opt/sovereign/current/sovereign-release")
+    release = read_key_values(active_release if active_release.is_file() else RELEASE_PATH)
     local_web_healthy = tcp_check(80)
     checks = {
         "storage": marker_check(
