@@ -18,6 +18,7 @@ EXAMPLE = ROOT / "update/examples/update-manifest-v1.example.json"
 OPENSSL = shutil.which("openssl")
 ZSTD = shutil.which("zstd")
 BUNDLE_BUILDER = ROOT / "scripts/create-update-bundle.py"
+APPLIANCE = ROOT / "image-builder/sovereign/appliance"
 
 
 @unittest.skipIf(OPENSSL is None or ZSTD is None, "OpenSSL or zstd is unavailable")
@@ -92,6 +93,9 @@ class UpdateClientTests(unittest.TestCase):
         self.docker = self.tools / "docker"
         self.docker.write_text("#!/bin/sh\nexit 0\n")
         self.docker.chmod(0o755)
+        self.nginx = self.tools / "nginx"
+        self.nginx.write_text("#!/bin/sh\nexit 0\n")
+        self.nginx.chmod(0o755)
         self.tar = self.tools / "tar"
         self.tar.write_text(
             "#!/bin/sh\n"
@@ -213,13 +217,15 @@ class UpdateClientTests(unittest.TestCase):
             "SOVEREIGN_TAR": str(self.tar),
             "SOVEREIGN_ZSTD": ZSTD,
             "SOVEREIGN_DOCKER": str(self.docker),
+            "SOVEREIGN_NGINX": str(self.nginx),
             "SOVEREIGN_UPDATE_TEST_MODE": "1",
             "SOVEREIGN_TEST_SERVICE_LOG": str(self.service_log),
         }
 
-    def build_update_bundle(self):
+    def build_update_bundle(self, mutate=None):
         release = self.directory / "target-release"
         release.mkdir()
+        shutil.copytree(APPLIANCE, release / "appliance")
         (release / "sovereign-release").write_text(
             'VERSION="0.1.0-preview.6"\nCHANNEL="preview"\n'
         )
@@ -230,6 +236,8 @@ class UpdateClientTests(unittest.TestCase):
             "PIHOLE_IMAGE_PLATFORM='linux/arm64'\n"
         )
         (release / "pihole-arm64.oci.tar").write_bytes(b"OCI fixture\n")
+        if mutate is not None:
+            mutate(release)
         self.artifact = self.directory / "update-bundle.tar.zst"
         subprocess.run(
             [
@@ -250,6 +258,64 @@ class UpdateClientTests(unittest.TestCase):
         self.manifest["artifacts"][0]["sha256"] = hashlib.sha256(
             self.artifact.read_bytes()
         ).hexdigest()
+
+    def stage_mutated_bundle(self, mutate):
+        self.build_update_bundle(mutate)
+        manifest, signature = self.write_signed_manifest()
+        prepared = self.run_prepare(manifest, signature)
+        self.assertEqual(0, prepared.returncode, prepared.stderr)
+        transaction_id = json.loads(prepared.stdout)["transaction_id"]
+        backed_up = subprocess.run(
+            [str(CLIENT), "backup", transaction_id],
+            env=self.environment(),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(0, backed_up.returncode, backed_up.stderr)
+        staged = subprocess.run(
+            [str(CLIENT), "stage", transaction_id],
+            env=self.environment(),
+            capture_output=True,
+            text=True,
+        )
+        return transaction_id, staged
+
+    def test_stage_rejects_unknown_appliance_file(self):
+        def add_unknown(release):
+            (release / "appliance/console/unknown.js").write_text("fixture\n")
+
+        transaction_id, staged = self.stage_mutated_bundle(add_unknown)
+        self.assertEqual(2, staged.returncode)
+        self.assertEqual("INCOMPLETE_RELEASE", json.loads(staged.stderr)["code"])
+        self.assertFalse(
+            self.releases.joinpath("releases/0.1.0-preview.6").exists()
+        )
+        self.assertFalse(
+            self.directory.joinpath(
+                "update-state/transactions", transaction_id, "release-candidate"
+            ).exists()
+        )
+
+    def test_stage_rejects_invalid_appliance_script(self):
+        def break_script(release):
+            (release / "appliance/bin/stop-pihole").write_text(
+                "#!/bin/sh\nif broken\n"
+            )
+            (release / "appliance/bin/stop-pihole").chmod(0o755)
+
+        _, staged = self.stage_mutated_bundle(break_script)
+        self.assertEqual(2, staged.returncode)
+        self.assertEqual(
+            "INVALID_APPLIANCE_SCRIPT", json.loads(staged.stderr)["code"]
+        )
+
+    def test_stage_rejects_incorrect_appliance_mode(self):
+        def weaken_mode(release):
+            (release / "appliance/bin/stop-pihole").chmod(0o644)
+
+        _, staged = self.stage_mutated_bundle(weaken_mode)
+        self.assertEqual(2, staged.returncode)
+        self.assertEqual("UNSAFE_RELEASE_MODE", json.loads(staged.stderr)["code"])
 
     def test_accepts_trusted_compatible_manifest_and_artifact(self):
         manifest, signature = self.write_signed_manifest()
@@ -433,6 +499,21 @@ class UpdateClientTests(unittest.TestCase):
             (self.directory / "update-state/transactions" / transaction_id / "state.json").read_text()
         )
         self.assertEqual("committed", state["state"])
+        self.assertEqual(
+            [
+                "stop sovereign-pihole.service",
+                "start sovereign-pihole.service",
+                "stop sovereign-local-access.service",
+                "stop nginx.service",
+                "stop sovereign-console.service",
+                "stop sovereign-pihole.service",
+                "start sovereign-pihole.service",
+                "start sovereign-console.service",
+                "start nginx.service",
+                "start sovereign-local-access.service",
+            ],
+            self.service_log.read_text().splitlines(),
+        )
 
     def test_failed_activation_health_rolls_back_pointer(self):
         transaction_id = self.prepare_and_backup_bundle()
@@ -499,10 +580,22 @@ class UpdateClientTests(unittest.TestCase):
             [
                 "stop sovereign-pihole.service",
                 "start sovereign-pihole.service",
+                "stop sovereign-local-access.service",
+                "stop nginx.service",
+                "stop sovereign-console.service",
                 "stop sovereign-pihole.service",
                 "start sovereign-pihole.service",
+                "start sovereign-console.service",
+                "start nginx.service",
+                "start sovereign-local-access.service",
+                "stop sovereign-local-access.service",
+                "stop nginx.service",
+                "stop sovereign-console.service",
                 "stop sovereign-pihole.service",
                 "start sovereign-pihole.service",
+                "start sovereign-console.service",
+                "start nginx.service",
+                "start sovereign-local-access.service",
             ],
             self.service_log.read_text().splitlines(),
         )

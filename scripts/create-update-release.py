@@ -16,6 +16,18 @@ VERSION = re.compile(
     r"(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$"
 )
 SAFE_KEY = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+APPLIANCE_FILES = {
+    "bin/console-health": 0o755,
+    "bin/start-pihole": 0o755,
+    "bin/stop-pihole": 0o755,
+    "bin/verify-local-access": 0o755,
+    "bin/verify-update-health": 0o755,
+    "console/assets/console.css": 0o644,
+    "console/assets/console.js": 0o644,
+    "console/index.html": 0o644,
+    "nginx/sovereign.conf": 0o644,
+    "pihole/compose.yaml.in": 0o644,
+}
 
 
 def sha256(path):
@@ -39,19 +51,21 @@ def copy_appliance(source, destination):
     source = pathlib.Path(source).resolve()
     if not source.is_dir():
         raise ValueError("appliance source directory is missing")
+    actual = set()
     for path in source.rglob("*"):
         if path.is_symlink():
             raise ValueError(f"appliance source contains a symlink: {path}")
         if not (path.is_dir() or path.is_file()):
             raise ValueError(f"appliance source contains a special file: {path}")
-    shutil.copytree(source, destination)
-    for path in destination.rglob("*"):
-        if path.is_dir():
-            path.chmod(0o755)
-        elif path.parent == destination / "bin":
-            path.chmod(0o755)
-        else:
-            path.chmod(0o644)
+        if path.is_file():
+            actual.add(path.relative_to(source).as_posix())
+    if actual != set(APPLIANCE_FILES):
+        raise ValueError("appliance source has missing or unknown files")
+    for relative, mode in APPLIANCE_FILES.items():
+        target = destination / relative
+        target.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+        shutil.copyfile(source / relative, target)
+        target.chmod(mode)
 
 
 def create(args):

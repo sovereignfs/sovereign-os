@@ -13,6 +13,7 @@ import pathlib
 import re
 import secrets
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
@@ -25,18 +26,16 @@ POLICY_PATH = pathlib.Path(
 RELEASE_PATH = pathlib.Path(
     os.environ.get("SOVEREIGN_RELEASE_PATH", "/etc/sovereign-release")
 )
-PIHOLE_ENV_PATH = pathlib.Path(
-    os.environ.get("SOVEREIGN_PIHOLE_ENV", "/usr/lib/sovereign/pihole-image.env")
-)
+PIHOLE_ENV_OVERRIDE = os.environ.get("SOVEREIGN_PIHOLE_ENV")
 DATA_PATH = pathlib.Path(os.environ.get("SOVEREIGN_DATA_PATH", "/data"))
 OPENSSL = os.environ.get("SOVEREIGN_OPENSSL", "/usr/bin/openssl")
 TAR = os.environ.get("SOVEREIGN_TAR", "/usr/bin/tar")
 ZSTD = os.environ.get("SOVEREIGN_ZSTD", "/usr/bin/zstd")
 DOCKER = os.environ.get("SOVEREIGN_DOCKER", "/usr/bin/docker")
 SYSTEMCTL = os.environ.get("SOVEREIGN_SYSTEMCTL", "/usr/bin/systemctl")
-HEALTH_CHECK = os.environ.get(
-    "SOVEREIGN_UPDATE_HEALTH_CHECK", "/usr/lib/sovereign/verify-update-health"
-)
+NGINX = os.environ.get("SOVEREIGN_NGINX", "/usr/sbin/nginx")
+SHELL = os.environ.get("SOVEREIGN_SHELL", "/bin/sh")
+HEALTH_CHECK_OVERRIDE = os.environ.get("SOVEREIGN_UPDATE_HEALTH_CHECK")
 UPDATE_ROOT = pathlib.Path(
     os.environ.get("SOVEREIGN_UPDATE_ROOT", str(DATA_PATH / "sovereign/update-state"))
 )
@@ -49,6 +48,25 @@ UPDATE_STATUS_PATH = pathlib.Path(
 RELEASES_ROOT = pathlib.Path(
     os.environ.get("SOVEREIGN_RELEASES_ROOT", "/opt/sovereign")
 )
+
+APPLIANCE_FILES = {
+    "appliance/bin/console-health": 0o755,
+    "appliance/bin/start-pihole": 0o755,
+    "appliance/bin/stop-pihole": 0o755,
+    "appliance/bin/verify-local-access": 0o755,
+    "appliance/bin/verify-update-health": 0o755,
+    "appliance/console/assets/console.css": 0o644,
+    "appliance/console/assets/console.js": 0o644,
+    "appliance/console/index.html": 0o644,
+    "appliance/nginx/sovereign.conf": 0o644,
+    "appliance/pihole/compose.yaml.in": 0o644,
+}
+RELEASE_FILES = {
+    **APPLIANCE_FILES,
+    "pihole-arm64.oci.tar": 0o644,
+    "pihole-image.env": 0o644,
+    "sovereign-release": 0o644,
+}
 
 SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
 SAFE_KEY_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
@@ -177,6 +195,18 @@ def read_release_version():
     version = values.get("VERSION")
     parse_version(version)
     return version
+
+
+def installed_pihole_env_path():
+    if PIHOLE_ENV_OVERRIDE:
+        return pathlib.Path(PIHOLE_ENV_OVERRIDE)
+    return RELEASES_ROOT / "current/pihole-image.env"
+
+
+def health_check_command():
+    if HEALTH_CHECK_OVERRIDE:
+        return HEALTH_CHECK_OVERRIDE
+    return str(RELEASES_ROOT / "current/appliance/bin/verify-update-health")
 
 
 def read_key_values(path):
@@ -686,7 +716,7 @@ def create_backup(args):
         snapshot = load_transaction(args.transaction, "verified")
         directory = transaction_path(args.transaction)
         manifest = read_json(directory / "staging/release-manifest.json")
-        installed_pihole = read_key_values(PIHOLE_ENV_PATH)
+        installed_pihole = read_key_values(installed_pihole_env_path())
         source_pihole_digest = installed_pihole.get("PIHOLE_IMAGE_DIGEST")
         fail(
             isinstance(source_pihole_digest, str)
@@ -727,7 +757,7 @@ def create_backup(args):
             )
             stopped = False
             run_checked(
-                [HEALTH_CHECK],
+                [health_check_command()],
                 "PREUPDATE_HEALTH_FAILED",
                 "Pi-hole did not recover after backup",
             )
@@ -851,8 +881,21 @@ def extract_bundle(bundle, destination, target_version):
 
 
 def validate_release_payload(release, manifest):
-    required = ["sovereign-release", "pihole-image.env", "pihole-arm64.oci.tar"]
-    fail(all((release / name).is_file() for name in required), "INCOMPLETE_RELEASE", "Required release payload is missing")
+    actual = {
+        path.relative_to(release).as_posix(): stat.S_IMODE(path.stat().st_mode)
+        for path in release.rglob("*")
+        if path.is_file()
+    }
+    fail(
+        set(actual) == set(RELEASE_FILES),
+        "INCOMPLETE_RELEASE",
+        "Release payload has missing or unknown files",
+    )
+    fail(
+        actual == RELEASE_FILES,
+        "UNSAFE_RELEASE_MODE",
+        "Release payload has an invalid file mode",
+    )
     identity = read_key_values(release / "sovereign-release")
     pihole = read_key_values(release / "pihole-image.env")
     fail(identity.get("VERSION") == manifest["release"]["version"], "VERSION_MISMATCH", "Release identity does not match")
@@ -861,6 +904,109 @@ def validate_release_payload(release, manifest):
     fail(pihole.get("PIHOLE_IMAGE_REPOSITORY") == target["repository"], "COMPONENT_MISMATCH", "Pi-hole repository does not match")
     fail(pihole.get("PIHOLE_IMAGE_DIGEST") == target["digest"], "COMPONENT_MISMATCH", "Pi-hole digest does not match")
     fail(pihole.get("PIHOLE_IMAGE_PLATFORM") == "linux/arm64", "COMPONENT_MISMATCH", "Pi-hole platform does not match")
+    validate_appliance_configuration(release, target)
+
+
+def validate_appliance_configuration(release, pihole):
+    appliance = release / "appliance"
+    for script in sorted((appliance / "bin").iterdir()):
+        if script.name == "console-health":
+            try:
+                compile(
+                    script.read_text(encoding="utf-8"),
+                    str(script),
+                    "exec",
+                )
+            except (OSError, UnicodeError, SyntaxError) as error:
+                raise UpdateError(
+                    "INVALID_APPLIANCE_SCRIPT",
+                    "Console health service has invalid Python syntax",
+                ) from error
+        else:
+            run_checked(
+                [SHELL, "-n", str(script)],
+                "INVALID_APPLIANCE_SCRIPT",
+                f"Appliance script has invalid shell syntax: {script.name}",
+            )
+
+    html = appliance / "console/index.html"
+    try:
+        console = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (
+                html,
+                appliance / "console/assets/console.css",
+                appliance / "console/assets/console.js",
+            )
+        ).lower()
+    except (OSError, UnicodeError) as error:
+        raise UpdateError(
+            "INVALID_CONSOLE_ASSETS", "Console assets are not valid UTF-8"
+        ) from error
+    fail(
+        'href="/console/assets/console.css"' in console
+        and 'src="/console/assets/console.js"' in console,
+        "INVALID_CONSOLE_ASSETS",
+        "Console does not reference its packaged assets",
+    )
+    fail(
+        "http://" not in console and "https://" not in console,
+        "EXTERNAL_CONSOLE_ASSET",
+        "Console assets must not load external resources",
+    )
+
+    image_reference = (
+        f"{pihole['repository'].removeprefix('docker.io/')}@{pihole['digest']}"
+    )
+    with tempfile.TemporaryDirectory(
+        prefix="appliance-validation-", dir=release.parent
+    ) as temporary_directory:
+        temporary = pathlib.Path(temporary_directory)
+        compose = temporary / "compose.yaml"
+        try:
+            template = (appliance / "pihole/compose.yaml.in").read_text(
+                encoding="utf-8"
+            )
+            fail(
+                template.count("@PIHOLE_IMAGE_REFERENCE@") == 1,
+                "INVALID_COMPOSE_TEMPLATE",
+                "Pi-hole Compose template has an invalid image placeholder",
+            )
+            compose.write_text(
+                template.replace("@PIHOLE_IMAGE_REFERENCE@", image_reference),
+                encoding="utf-8",
+            )
+        except (OSError, UnicodeError) as error:
+            raise UpdateError(
+                "INVALID_COMPOSE_TEMPLATE",
+                "Pi-hole Compose template could not be rendered",
+            ) from error
+        run_checked(
+            [DOCKER, "compose", "--file", str(compose), "config", "--quiet"],
+            "INVALID_COMPOSE_TEMPLATE",
+            "Pi-hole Compose template failed validation",
+        )
+
+        nginx_include = str(appliance / "nginx/sovereign.conf").replace(
+            "\\", "\\\\"
+        ).replace('"', '\\"')
+        nginx_config = temporary / "nginx.conf"
+        nginx_config.write_text(
+            f'pid "{temporary / "nginx.pid"}";\n'
+            "error_log stderr;\n"
+            "events {}\n"
+            "http {\n"
+            "  access_log off;\n"
+            "  include /etc/nginx/mime.types;\n"
+            f'  include "{nginx_include}";\n'
+            "}\n",
+            encoding="utf-8",
+        )
+        run_checked(
+            [NGINX, "-t", "-c", str(nginx_config), "-p", "/"],
+            "INVALID_NGINX_CONFIGURATION",
+            "Sovereign Nginx configuration failed validation",
+        )
 
 
 def stage_release(args):
@@ -913,6 +1059,34 @@ def switch_current(target):
     sync_directory(RELEASES_ROOT)
 
 
+def stop_appliance(code="SERVICE_STOP_FAILED"):
+    for service in (
+        "sovereign-local-access.service",
+        "nginx.service",
+        "sovereign-console.service",
+        "sovereign-pihole.service",
+    ):
+        run_checked(
+            [SYSTEMCTL, "stop", service],
+            code,
+            f"Appliance service could not be stopped: {service}",
+        )
+
+
+def start_appliance(code="SERVICE_START_FAILED"):
+    for service in (
+        "sovereign-pihole.service",
+        "sovereign-console.service",
+        "nginx.service",
+        "sovereign-local-access.service",
+    ):
+        run_checked(
+            [SYSTEMCTL, "start", service],
+            code,
+            f"Appliance service could not be started: {service}",
+        )
+
+
 def activate_release(args):
     fail(os.geteuid() == 0 or os.environ.get("SOVEREIGN_UPDATE_TEST_MODE") == "1", "ROOT_REQUIRED", "Activation requires administrator privileges")
     with update_lock():
@@ -937,13 +1111,13 @@ def activate_release(args):
         snapshot = transition(snapshot, "activating", "ACTIVATION_STARTED")
         qualification_interrupt("activating")
         try:
-            run_checked([SYSTEMCTL, "stop", "sovereign-pihole.service"], "SERVICE_STOP_FAILED", "Pi-hole could not be stopped")
+            stop_appliance()
             switch_current(target)
-            run_checked([SYSTEMCTL, "start", "sovereign-pihole.service"], "SERVICE_START_FAILED", "Updated Pi-hole could not be started")
+            start_appliance()
             snapshot = transition(snapshot, "validating", "TARGET_STARTED")
             qualification_interrupt("validating")
             qualification_health_failure()
-            run_checked([HEALTH_CHECK], "POSTUPDATE_HEALTH_FAILED", "Updated appliance failed health checks")
+            run_checked([health_check_command()], "POSTUPDATE_HEALTH_FAILED", "Updated appliance failed health checks")
             snapshot = transition(snapshot, "committed", "UPDATE_COMMITTED", recovery_action="none")
             shutil.rmtree(directory / "release-candidate", ignore_errors=True)
             try:
@@ -957,10 +1131,10 @@ def activate_release(args):
             elif snapshot["state"] == "validating":
                 snapshot = transition(snapshot, "rolling_back", activation_error.code, failure={"code": activation_error.code, "message": str(activation_error), "retryable": False}, recovery_action="rollback")
             try:
-                run_checked([SYSTEMCTL, "stop", "sovereign-pihole.service"], "ROLLBACK_STOP_FAILED", "Pi-hole could not stop for rollback")
+                stop_appliance("ROLLBACK_STOP_FAILED")
                 switch_current(previous)
-                run_checked([SYSTEMCTL, "start", "sovereign-pihole.service"], "ROLLBACK_START_FAILED", "Previous Pi-hole could not restart")
-                run_checked([HEALTH_CHECK], "ROLLBACK_HEALTH_FAILED", "Previous release failed health checks")
+                start_appliance("ROLLBACK_START_FAILED")
+                run_checked([health_check_command()], "ROLLBACK_HEALTH_FAILED", "Previous release failed health checks")
                 transition(snapshot, "rolled_back", "ROLLBACK_HEALTHY", recovery_action="none")
             except UpdateError as rollback_error:
                 transition(snapshot, "recovery_required", rollback_error.code, failure={"code": rollback_error.code, "message": str(rollback_error), "retryable": False}, recovery_action="manual")
