@@ -226,6 +226,12 @@ class UpdateClientTests(unittest.TestCase):
         release = self.directory / "target-release"
         release.mkdir()
         shutil.copytree(APPLIANCE, release / "appliance")
+        console_index = release / "appliance/console/index.html"
+        console_index.write_text(
+            console_index.read_text().replace(
+                "@SOVEREIGN_RELEASE_VERSION@", "0.1.0-preview.6"
+            )
+        )
         (release / "sovereign-release").write_text(
             'VERSION="0.1.0-preview.6"\nCHANNEL="preview"\n'
         )

@@ -1,6 +1,6 @@
 # Versioned Appliance Release Design
 
-**Status:** Accepted for implementation
+**Status:** Implemented; Raspberry Pi qualification pending
 
 **Related milestone:** [Appliance Update Foundation](../roadmap/01-1-update-foundation.md)
 
@@ -152,3 +152,7 @@ Automated tests must prove:
 Physical Raspberry Pi qualification is required after implementation. It must
 use a clean base image containing the stable dispatch boundary and a separate
 target update artifact containing an observable appliance-file change.
+
+The Console footer contains a release-version placeholder rendered independently
+by full-image and update packaging. This gives qualification a static asset to
+observe before activation, after activation, after rollback, and after reboot.

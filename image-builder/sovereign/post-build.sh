@@ -29,8 +29,10 @@ install -m 0644 "${filesystem}/etc/sovereign-release" \
 install -m 0644 "${SRCROOT}/pihole-image.env" \
   "${release_dir}/pihole-image.env"
 install -m 0755 "${SRCROOT}/appliance/bin/"* "${appliance_dir}/bin/"
-install -m 0644 "${SRCROOT}/appliance/console/index.html" \
-  "${appliance_dir}/console/index.html"
+sed "s|@SOVEREIGN_RELEASE_VERSION@|${version}|g" \
+  "${SRCROOT}/appliance/console/index.html" \
+  > "${appliance_dir}/console/index.html"
+chmod 0644 "${appliance_dir}/console/index.html"
 install -m 0644 "${SRCROOT}/appliance/console/assets/"* \
   "${appliance_dir}/console/assets/"
 install -m 0644 "${SRCROOT}/appliance/nginx/sovereign.conf" \

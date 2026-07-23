@@ -50,6 +50,8 @@
 - [ ] Payload is staged outside the active release.
 - [ ] Archive traversal, unsafe links, ownership, and modes are rejected.
 - [ ] Versioned release directory is complete before activation.
+- [ ] Closed appliance file allowlist and required modes validate.
+- [ ] Shell/Python syntax and local-only Console asset checks pass.
 - [ ] Compose configuration validates.
 - [ ] Nginx configuration validates.
 - [ ] systemd unit content and enablement changes are reviewed.
@@ -59,6 +61,7 @@
 ## Activation and Health
 
 - [ ] Active release switches atomically.
+- [ ] Served Console release marker matches the active release.
 - [ ] Expected services stop and start in dependency order.
 - [ ] Pi-hole container runs at the declared digest.
 - [ ] TCP DNS check passes.
@@ -102,4 +105,3 @@
 - [ ] Security review complete.
 - [ ] Real Raspberry Pi verification complete.
 - [ ] Project owner approves publication.
-

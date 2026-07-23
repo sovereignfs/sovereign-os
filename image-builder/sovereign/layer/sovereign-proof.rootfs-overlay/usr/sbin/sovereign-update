@@ -954,6 +954,12 @@ def validate_appliance_configuration(release, pihole):
         "EXTERNAL_CONSOLE_ASSET",
         "Console assets must not load external resources",
     )
+    fail(
+        f"release {manifest_version(release)}" in console
+        and "@sovereign_release_version@" not in console,
+        "INVALID_CONSOLE_ASSETS",
+        "Console release identity does not match the target release",
+    )
 
     image_reference = (
         f"{pihole['repository'].removeprefix('docker.io/')}@{pihole['digest']}"
@@ -1007,6 +1013,10 @@ def validate_appliance_configuration(release, pihole):
             "INVALID_NGINX_CONFIGURATION",
             "Sovereign Nginx configuration failed validation",
         )
+
+
+def manifest_version(release):
+    return read_key_values(release / "sovereign-release").get("VERSION", "")
 
 
 def stage_release(args):

@@ -95,6 +95,15 @@ def create(args):
         release = pathlib.Path(temporary_directory) / "release"
         release.mkdir()
         copy_appliance(args.appliance_dir, release / "appliance")
+        console_index = release / "appliance/console/index.html"
+        console_html = console_index.read_text(encoding="utf-8")
+        if console_html.count("@SOVEREIGN_RELEASE_VERSION@") != 1:
+            raise ValueError("console index has an invalid release-version placeholder")
+        console_index.write_text(
+            console_html.replace("@SOVEREIGN_RELEASE_VERSION@", args.version),
+            encoding="utf-8",
+        )
+        console_index.chmod(0o644)
         shutil.copyfile(pihole_env, release / "pihole-image.env")
         shutil.copyfile(oci, release / "pihole-arm64.oci.tar")
         (release / "sovereign-release").write_text(

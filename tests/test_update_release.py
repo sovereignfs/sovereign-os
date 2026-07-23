@@ -77,6 +77,11 @@ class UpdateReleaseTests(unittest.TestCase):
                     0o644,
                     modes["release/appliance/console/index.html"],
                 )
+                console = archive.extractfile(
+                    "sovereign-update-v1/release/appliance/console/index.html"
+                ).read().decode()
+                self.assertIn("Release 0.1.0-preview.7", console)
+                self.assertNotIn("@SOVEREIGN_RELEASE_VERSION@", console)
             private = temporary / "private.pem"
             public = temporary / "public.pem"
             subprocess.run([OPENSSL, "genpkey", "-algorithm", "Ed25519", "-out", private], check=True)

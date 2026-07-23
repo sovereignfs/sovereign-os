@@ -149,6 +149,7 @@ class ConsoleTests(unittest.TestCase):
         self.assertIn('href="/console/assets/console.css"', html)
         self.assertIn('src="/console/assets/console.js"', html)
         self.assertIn('href="/dns/admin/"', html)
+        self.assertIn("Release @SOVEREIGN_RELEASE_VERSION@", html)
         self.assertIn('fetch("/api/v1/health"', javascript)
         self.assertNotIn("innerhtml", javascript.lower())
         self.assertNotIn("https://", combined)

@@ -1,6 +1,6 @@
 # Milestone 01.1 - Appliance Update Foundation
 
-**Status:** Initial no-migration transaction qualified on Raspberry Pi; restore automation and release operations pending
+**Status:** Versioned appliance transaction implemented; Raspberry Pi qualification and restore automation pending
 **Priority:** Immediate next priority after Phase 01 release  
 **Depends on:** [Phase 01 Flashable Pi-hole Image POC](01-preview-poc.md)  
 **Owner:** Project creator  
@@ -195,18 +195,28 @@ are generated and validated, Pi-hole downtime is bounded to archive creation,
 and local DNS/HTTP health must recover before the transaction can become
 `backed_up`.
 
-Pi-hole-only versioned activation is now implemented: safe bundle extraction,
+Pi-hole-only versioned activation was implemented first: safe bundle extraction,
 immutable release metadata, pinned OCI import, atomic active-release switching,
 local DNS/HTTP validation, health-gated commit, and automatic release-pointer
 rollback. Data migrations remain rejected, and real-device backup/rollback
 qualification passed for preview.7 to preview.8. Persistent-data restore,
 retention cleanup, and production signing operations are still pending.
 
-The next bounded slice is the accepted
-[versioned appliance release design](../design/versioned-appliance-release.md):
-package Console, Nginx, Compose, lifecycle, and health files behind the same
-atomic release pointer now that Pi-hole rollback is qualified. The updater and
-stable recovery/bootstrap units remain part of the flashed base for this slice.
+The accepted
+[versioned appliance release design](../design/versioned-appliance-release.md)
+is now implemented. Full-image and update packaging share a closed canonical
+tree for Console, Nginx, Compose, lifecycle, and health files. Stable services
+dispatch through the atomic active-release pointer. Staging rejects missing,
+extra, unsafe-mode, malformed, externally hosted, or invalid Compose/Nginx
+payloads before service interruption. Activation and rollback coordinate
+Pi-hole, Console, Nginx, and local-access verification as one release.
+
+The immediate qualification boundary is a clean preview.9 base and preview.10
+update built from the same revision. The target must visibly change the
+build-rendered Console release marker, survive reboot, retain credentials and
+DATA, and restore preview.9 after an injected target-health failure and an
+interruption at `validating`. After that evidence is recorded, the next bounded
+implementation slice is persistent-data restore and backup retention policy.
 
 Repeatable hardware qualification tooling is also implemented: exact-byte
 offline kit preparation, explicitly armed interruption hooks at the durable
@@ -302,4 +312,5 @@ This milestone designs the application/appliance updater so it does not prevent 
 2. Approve the update RFC and manifest schema.
 3. Implement signed manifest verification before download/install automation.
 4. Deliver a Pi-hole-only update transaction.
-5. Add appliance-file updates only after Pi-hole update rollback is reliable.
+5. Qualify versioned appliance-file activation and rollback on Raspberry Pi.
+6. Implement and qualify persistent-data restore and bounded backup retention.
