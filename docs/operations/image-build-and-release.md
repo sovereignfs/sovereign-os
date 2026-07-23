@@ -36,6 +36,12 @@ source_date_epoch=$(git show -s --format=%ct HEAD)
 
 The output directory must be empty. The command fails rather than mixing files from different builds.
 
+The workflow uploads the clean-image release bundle as
+`sovereign-os-<version>-rpi5-arm64`. If installed-device update packaging is
+enabled, it separately uploads `sovereign-update-<version>-rpi5-arm64`.
+Operators preparing an installed-device update therefore do not need to
+download the much larger flashable-image artifact.
+
 ## Bundle Contents
 
 ```text

@@ -127,9 +127,20 @@ class UpdateReleaseTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/build-image.yml").read_text()
         self.assertLess(
             workflow.index("Package unsigned appliance update candidate"),
-            workflow.index("Upload workflow artifact"),
+            workflow.index("Upload installed-device update artifact"),
         )
         self.assertIn("build/update-release/", workflow)
+        self.assertIn(
+            "name: sovereign-update-${{ inputs.version }}-rpi5-arm64",
+            workflow,
+        )
+        image_upload = workflow.index("Upload image release artifact")
+        update_upload = workflow.index("Upload installed-device update artifact")
+        self.assertLess(image_upload, update_upload)
+        self.assertNotIn(
+            "build/update-release/",
+            workflow[image_upload:update_upload],
+        )
 
 
 if __name__ == "__main__":

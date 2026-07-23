@@ -25,8 +25,9 @@ not contain the stable versioned dispatch boundary.
 
 ## Prepare the Qualification Kit
 
-On the operator machine, generate an ephemeral engineering key and prepare the
-private-key-free kit from preview.10's downloaded `update-release/` directory:
+Download only the `sovereign-update-0.1.0-preview.10-rpi5-arm64` workflow
+artifact. On the operator machine, generate an ephemeral engineering key and
+prepare the private-key-free kit from its extracted directory:
 
 ```bash
 openssl genpkey -algorithm Ed25519 -out sovereign-preview-local-private.pem

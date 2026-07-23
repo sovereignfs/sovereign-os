@@ -107,13 +107,21 @@ jobs:
             --notes-url "https://github.com/sovereignfs/sovereign-os/releases/tag/v${RELEASE_VERSION}" \
             --source-date-epoch "$source_date_epoch"
 
-      - name: Upload workflow artifact
+      - name: Upload image release artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: sovereign-os-${{ inputs.version }}-rpi5-arm64
-          path: |
-            build/release/
-            build/update-release/
+          path: build/release/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload installed-device update artifact
+        if: inputs.build_update_candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sovereign-update-${{ inputs.version }}-rpi5-arm64
+          path: build/update-release/
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
