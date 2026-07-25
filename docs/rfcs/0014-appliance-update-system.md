@@ -1,9 +1,9 @@
 # RFC-0014: Appliance Update System
 
-**Status:** Draft  
-**Author:** Project creator and Codex  
-**Created:** 2026-07-19  
-**Target:** Milestone 01.1  
+**Status:** Implemented — signed manifests, staging, activation, and rollback are built and hardware-qualified on Pi 5 (see [docs/roadmap/01-1-update-foundation.md](../roadmap/01-1-update-foundation.md) and [Versioned Appliance Release Design](../design/versioned-appliance-release.md)); production key-custody/signing and persistent-data restore remain open
+**Author:** Project creator and Codex
+**Created:** 2026-07-19
+**Target:** Milestone 01.1
 **Related decision:** [ADR-0002](../adrs/0002-install-images-and-update-artifacts.md)
 
 ## Summary

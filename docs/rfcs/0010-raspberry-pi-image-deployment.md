@@ -1,9 +1,9 @@
 # RFC-0010: Raspberry Pi Image Deployment
 
-**Status:** Proposed  
-**Author:** Project creator and Codex  
-**Created:** 2026-07-19  
-**Target phase:** Phase 01  
+**Status:** Implemented — see README.md's "Preview First Login" section and [docs/roadmap/01-preview-poc.md](../roadmap/01-preview-poc.md)
+**Author:** Project creator and Codex
+**Created:** 2026-07-19
+**Target phase:** Phase 01
 **Related decision:** [ADR-0001](../adrs/0001-phase-01-appliance-architecture.md)
 
 ## Summary
