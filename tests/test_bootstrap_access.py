@@ -18,6 +18,17 @@ PIHOLE_PASSWORD_COMMAND = (
 
 
 class BootstrapAccessTests(unittest.TestCase):
+    def test_physical_credentials_do_not_block_or_require_local_access(self):
+        service = (
+            ROOT
+            / "image-builder/sovereign/layer/sovereign-proof.rootfs-overlay"
+            / "etc/systemd/system/sovereign-credentials-console.service"
+        ).read_text()
+        self.assertIn("Wants=sovereign-local-access.service", service)
+        self.assertNotIn("Requires=sovereign-local-access.service", service)
+        self.assertIn("StandardInput=null", service)
+        self.assertIn("TTYForce=yes", service)
+
     def test_preview_account_contract(self):
         hook = HOOK.read_text()
         self.assertIn("username=sovereign", hook)

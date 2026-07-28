@@ -72,6 +72,9 @@ class PhysicalQualificationFixTests(unittest.TestCase):
         self.assertIn("http://127.0.0.1/dns/admin/", verifier)
         self.assertNotIn("^location: /dns/admin/", verifier)
         self.assertIn("dns_redirect=pass", verifier)
+        self.assertIn('until curl --fail --silent --show-error', verifier)
+        self.assertIn('[ "$attempt" -lt 30 ] || exit 1', verifier)
+        self.assertIn("sleep 1", verifier)
         self.assertIn("StartLimitBurst=6", service)
 
 

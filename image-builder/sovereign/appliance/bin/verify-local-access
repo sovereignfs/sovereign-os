@@ -15,9 +15,15 @@ test "$root_redirect" = http://127.0.0.1/console/
 curl --fail --silent --show-error --max-time 10 \
   --output /dev/null http://127.0.0.1/console/
 
-curl --fail --silent --show-error --max-time 10 \
+attempt=0
+until curl --fail --silent --show-error --max-time 10 \
   http://127.0.0.1/api/v1/health | \
   grep -q '"status":"healthy"'
+do
+  attempt=$((attempt + 1))
+  [ "$attempt" -lt 30 ] || exit 1
+  sleep 1
+done
 
 dns_redirect=$(curl --silent --show-error --max-time 10 \
   --output /dev/null --write-out '%{redirect_url}' \

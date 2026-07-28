@@ -110,6 +110,8 @@ class UpdateReleaseTests(unittest.TestCase):
         self.assertIn("Before=sovereign-pihole.service", recovery)
         self.assertIn("After=", pihole)
         self.assertIn("sovereign-update-recovery.service", pihole)
+        wants = next(line for line in pihole.splitlines() if line.startswith("Wants="))
+        self.assertNotIn("sovereign-update-recovery.service", wants)
         self.assertIn(
             "ExecStop=/opt/sovereign/current/appliance/bin/stop-pihole",
             pihole,
