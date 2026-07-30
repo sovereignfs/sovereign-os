@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "backups": { "keep_count": 5, "keep_days": 30 },
+  "releases": { "keep_count": 2 },
+  "transactions": { "keep_count": 20, "keep_days": 90 }
+}

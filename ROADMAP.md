@@ -87,7 +87,12 @@ Planned work:
   deployment, and is not yet wired into automatic update rollback for future
   data migrations;
 - define bounded retention and cleanup for old releases, backups, journals, and
-  failed transactions;
+  failed transactions — `sovereign-update prune [--dry-run]` is implemented
+  and unit-tested against a configurable
+  `/etc/sovereign/retention-policy.json` (see
+  [BACKUP_AND_JOURNAL.md](update/BACKUP_AND_JOURNAL.md)); not yet
+  hardware-qualified, shipped through a signed release, or wired into a
+  periodic timer;
 - establish production signing-key custody, rotation, and revocation;
 - approve the update RFC and production manifest policy;
 - publish release compatibility, rollback limitations, and recovery guidance;

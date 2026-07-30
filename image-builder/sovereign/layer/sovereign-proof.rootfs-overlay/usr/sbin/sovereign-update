@@ -48,6 +48,16 @@ UPDATE_STATUS_PATH = pathlib.Path(
 RELEASES_ROOT = pathlib.Path(
     os.environ.get("SOVEREIGN_RELEASES_ROOT", "/opt/sovereign")
 )
+RETENTION_POLICY_PATH = pathlib.Path(
+    os.environ.get("SOVEREIGN_RETENTION_POLICY", "/etc/sovereign/retention-policy.json")
+)
+DEFAULT_RETENTION_POLICY = {
+    "schema_version": 1,
+    "backups": {"keep_count": 5, "keep_days": 30},
+    "releases": {"keep_count": 2},
+    "transactions": {"keep_count": 20, "keep_days": 90},
+}
+
 APPLIANCE_FILES = {
     "appliance/bin/console-health": 0o755,
     "appliance/bin/start-pihole": 0o755,
@@ -145,11 +155,11 @@ def read_json(path, code="INVALID_JSON"):
         raise UpdateError(code, f"Cannot read valid JSON from {path}") from error
 
 
-def exact_keys(value, required, context):
-    fail(isinstance(value, dict), "INVALID_MANIFEST", f"{context} must be an object")
+def exact_keys(value, required, context, code="INVALID_MANIFEST"):
+    fail(isinstance(value, dict), code, f"{context} must be an object")
     fail(
         set(value) == set(required),
-        "INVALID_MANIFEST",
+        code,
         f"{context} has missing or unknown fields",
     )
 
@@ -1358,11 +1368,12 @@ def validate_backup_manifest(value, backup_id):
         value,
         ["schema_version", "backup_id", "transaction_id", "created_at", "source", "consistency", "artifacts"],
         "backup manifest",
+        code="INVALID_BACKUP_MANIFEST",
     )
     fail(value["schema_version"] == 1, "UNSUPPORTED_BACKUP_SCHEMA", "Only backup manifest schema 1 is supported")
     fail(value["backup_id"] == backup_id, "BACKUP_IDENTITY_MISMATCH", "Backup manifest identity does not match")
     source = value["source"]
-    exact_keys(source, ["appliance_version", "pihole_digest", "data_schema"], "backup source")
+    exact_keys(source, ["appliance_version", "pihole_digest", "data_schema"], "backup source", code="INVALID_BACKUP_MANIFEST")
     parse_version(source["appliance_version"])
     fail(
         isinstance(source["pihole_digest"], str) and OCI_DIGEST.fullmatch(source["pihole_digest"]),
@@ -1387,7 +1398,7 @@ def validate_backup_manifest(value, backup_id):
         "Backup manifest roles are incomplete",
     )
     for artifact in artifacts:
-        exact_keys(artifact, ["role", "file", "size", "sha256"], "backup artifact")
+        exact_keys(artifact, ["role", "file", "size", "sha256"], "backup artifact", code="INVALID_BACKUP_MANIFEST")
         fail(
             isinstance(artifact["file"], str) and artifact["file"] and "/" not in artifact["file"],
             "INVALID_BACKUP_MANIFEST",
@@ -1581,6 +1592,211 @@ def discard_restore(args):
         print(json.dumps({"status": "discarded", "restore_id": args.restore}, sort_keys=True))
 
 
+PROTECTED_UPDATE_STATES = {
+    "available", "downloading", "verified", "backing_up", "backed_up",
+    "staged", "activating", "validating", "rolling_back", "recovery_required",
+}
+PROTECTED_RESTORE_STATES = {
+    "available", "extracting", "extracted", "restoring", "verifying",
+    "rolling_back", "recovery_required",
+}
+PRUNABLE_TRANSACTION_STATES = {"discarded"}
+PRUNABLE_RESTORE_STATES = {"committed", "rolled_back", "discarded"}
+
+
+def read_retention_policy():
+    if not RETENTION_POLICY_PATH.is_file():
+        return DEFAULT_RETENTION_POLICY
+    value = read_json(RETENTION_POLICY_PATH, "INVALID_RETENTION_POLICY")
+    exact_keys(
+        value, ["schema_version", "backups", "releases", "transactions"], "retention policy",
+        code="INVALID_RETENTION_POLICY",
+    )
+    fail(value["schema_version"] == 1, "UNSUPPORTED_RETENTION_POLICY", "Only retention policy schema 1 is supported")
+    for section, keys in (
+        ("backups", ["keep_count", "keep_days"]),
+        ("releases", ["keep_count"]),
+        ("transactions", ["keep_count", "keep_days"]),
+    ):
+        exact_keys(value[section], keys, f"retention policy {section}", code="INVALID_RETENTION_POLICY")
+        for key in keys:
+            fail(
+                isinstance(value[section][key], int) and value[section][key] >= 0,
+                "INVALID_RETENTION_POLICY",
+                f"Invalid retention policy value: {section}.{key}",
+            )
+    return value
+
+
+def parse_timestamp(value, fallback):
+    try:
+        return datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (AttributeError, ValueError):
+        return fallback
+
+
+def iter_journal_snapshots(root):
+    if not root.is_dir():
+        return
+    for state_path in sorted(root.glob("*/state.json")):
+        try:
+            yield state_path.parent, json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            continue
+
+
+def protected_backup_ids():
+    protected = set()
+    for _directory, snapshot in iter_journal_snapshots(UPDATE_ROOT / "transactions"):
+        if snapshot.get("state") in PROTECTED_UPDATE_STATES and snapshot.get("backup_id"):
+            protected.add(snapshot["backup_id"])
+    for _directory, snapshot in iter_journal_snapshots(UPDATE_ROOT / "restores"):
+        if snapshot.get("state") in PROTECTED_RESTORE_STATES and snapshot.get("backup_id"):
+            protected.add(snapshot["backup_id"])
+    return protected
+
+
+def backup_created_at(backup_dir):
+    try:
+        manifest = json.loads((backup_dir / "backup-manifest.json").read_text(encoding="utf-8"))
+        return manifest["created_at"]
+    except (OSError, UnicodeError, json.JSONDecodeError, KeyError):
+        modified = datetime.datetime.fromtimestamp(backup_dir.stat().st_mtime, datetime.timezone.utc)
+        return modified.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def prune_backups(policy, protected, now, dry_run):
+    backups_root = STATE_ROOT / "backups"
+    if not backups_root.is_dir():
+        return []
+    entries = sorted(
+        (
+            (backup_created_at(backup_dir), backup_dir)
+            for backup_dir in backups_root.iterdir()
+            if backup_dir.is_dir()
+        ),
+        reverse=True,
+    )
+    keep_count = max(policy["backups"]["keep_count"], 1)
+    cutoff = now - datetime.timedelta(days=policy["backups"]["keep_days"])
+    removed = []
+    for index, (created_at, backup_dir) in enumerate(entries):
+        if backup_dir.name in protected or index < keep_count:
+            continue
+        if parse_timestamp(created_at, now) >= cutoff:
+            continue
+        removed.append(backup_dir.name)
+        if not dry_run:
+            shutil.rmtree(backup_dir)
+    return removed
+
+
+def prune_releases(policy, dry_run):
+    releases_root = RELEASES_ROOT / "releases"
+    if not releases_root.is_dir():
+        return []
+    current = RELEASES_ROOT / "current"
+    protected = {current.resolve().name} if current.is_symlink() else set()
+    for directory, snapshot in iter_journal_snapshots(UPDATE_ROOT / "transactions"):
+        if snapshot.get("state") not in PROTECTED_UPDATE_STATES:
+            continue
+        if snapshot.get("target_version"):
+            protected.add(snapshot["target_version"])
+        activation_path = directory / "activation.json"
+        if activation_path.is_file():
+            try:
+                activation = json.loads(activation_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            protected.add(activation.get("previous_release"))
+            protected.add(activation.get("target_release"))
+
+    def sort_key(release_dir):
+        try:
+            return parse_version(release_dir.name)[0]
+        except UpdateError:
+            return (0, 0, 0)
+
+    entries = sorted(
+        (path for path in releases_root.iterdir() if path.is_dir() and not path.name.startswith(".")),
+        key=sort_key,
+        reverse=True,
+    )
+    keep_count = policy["releases"]["keep_count"]
+    removed = []
+    for index, release_dir in enumerate(entries):
+        if release_dir.name in protected or index < keep_count:
+            continue
+        removed.append(release_dir.name)
+        if not dry_run:
+            shutil.rmtree(release_dir)
+    return removed
+
+
+def prune_transactions(policy, now, dry_run):
+    keep_count = policy["transactions"]["keep_count"]
+    cutoff = now - datetime.timedelta(days=policy["transactions"]["keep_days"])
+    removed = []
+    for root, prunable_states in (
+        (UPDATE_ROOT / "transactions", PRUNABLE_TRANSACTION_STATES),
+        (UPDATE_ROOT / "restores", PRUNABLE_RESTORE_STATES),
+    ):
+        if not root.is_dir():
+            continue
+        entries = sorted(
+            (
+                (snapshot.get("updated_at", ""), directory)
+                for directory, snapshot in iter_journal_snapshots(root)
+                if snapshot.get("state") in prunable_states
+            ),
+            reverse=True,
+        )
+        for index, (updated_at, directory) in enumerate(entries):
+            if index < keep_count:
+                continue
+            if parse_timestamp(updated_at, now) >= cutoff:
+                continue
+            removed.append(directory.name)
+            if not dry_run:
+                shutil.rmtree(directory)
+    return removed
+
+
+def prune_state(args):
+    fail(
+        os.geteuid() == 0 or os.environ.get("SOVEREIGN_UPDATE_TEST_MODE") == "1",
+        "ROOT_REQUIRED",
+        "Pruning requires administrator privileges",
+    )
+    with update_lock():
+        policy = read_retention_policy()
+        now = datetime.datetime.now(datetime.timezone.utc)
+        protected = protected_backup_ids()
+        removed_backups = prune_backups(policy, protected, now, args.dry_run)
+        removed_releases = prune_releases(policy, args.dry_run)
+        removed_transactions = prune_transactions(policy, now, args.dry_run)
+        if not args.dry_run:
+            for root in (
+                STATE_ROOT / "backups",
+                RELEASES_ROOT / "releases",
+                UPDATE_ROOT / "transactions",
+                UPDATE_ROOT / "restores",
+            ):
+                if root.is_dir():
+                    sync_directory(root)
+        print(
+            json.dumps(
+                {
+                    "status": "dry_run" if args.dry_run else "pruned",
+                    "removed_backups": sorted(removed_backups),
+                    "removed_releases": sorted(removed_releases),
+                    "removed_transactions": sorted(removed_transactions),
+                },
+                sort_keys=True,
+            )
+        )
+
+
 def show_status(_args):
     policy = read_json(POLICY_PATH, "INVALID_POLICY")
     latest = read_json(UPDATE_STATUS_PATH) if UPDATE_STATUS_PATH.is_file() else None
@@ -1640,6 +1856,15 @@ def parser():
     )
     discard_restore_parser.add_argument("restore")
     discard_restore_parser.set_defaults(handler=discard_restore)
+    prune = subcommands.add_parser(
+        "prune", help="remove backups, releases, and transaction journals beyond the retention policy"
+    )
+    prune.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="report what would be removed without deleting anything",
+    )
+    prune.set_defaults(handler=prune_state)
     return command
 
 

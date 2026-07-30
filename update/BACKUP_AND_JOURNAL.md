@@ -69,6 +69,39 @@ rollback boundary are retained. Cleanup never removes a backup referenced by a
 non-terminal transaction. Concrete byte/count quotas remain a release-policy
 decision.
 
+**Retention status:** Implemented as `sovereign-update prune [--dry-run]`,
+driven by `/etc/sovereign/retention-policy.json` (schema below; falls back to
+these defaults if the file is missing). It prunes three things in one pass:
+
+```json
+{
+  "schema_version": 1,
+  "backups": { "keep_count": 5, "keep_days": 30 },
+  "releases": { "keep_count": 2 },
+  "transactions": { "keep_count": 20, "keep_days": 90 }
+}
+```
+
+- **Backups:** a backup is deletable only once it is both older than
+  `keep_days` *and* outside the `keep_count` most recent — whichever bound is
+  more generous wins. The single newest backup is always retained regardless
+  of policy (`keep_count: 0` cannot delete it). A backup referenced by any
+  update or restore transaction that has not yet reached a safe terminal
+  state (`committed`, `rolled_back`, or `discarded` for updates;
+  `committed`, `rolled_back`, or `discarded` for restores — but never while
+  `recovery_required`) is never removed regardless of age or count.
+- **Releases:** the currently active release, and any release referenced by
+  an in-flight transaction's `activation.json` (`previous_release` or
+  `target_release`), is always kept; among the rest, the `keep_count` newest
+  by version are kept and older ones removed.
+- **Transaction journals:** only `discarded` update transactions and
+  `committed`/`rolled_back`/`discarded` restore transactions are eligible —
+  never a transaction still awaiting manual `recovery_required` resolution —
+  and only beyond the configured `keep_count`/`keep_days`.
+
+`--dry-run` reports what would be removed without deleting anything. Not yet
+wired into a periodic timer; it is an operator-invoked command today.
+
 **Status:** Implemented (`sovereign-update restore <backup-id> [--force]` and
 `sovereign-update discard-restore <restore-id>`) and hardware-qualified
 against real Pi-hole state on Raspberry Pi 5 — see the
