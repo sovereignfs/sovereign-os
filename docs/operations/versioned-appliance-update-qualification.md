@@ -1,31 +1,35 @@
 # Versioned Appliance Update Qualification
 
-**Status:** Ready for Raspberry Pi execution
+**Status:** Passed for preview.11 to preview.12 on Raspberry Pi 5. See the
+[preview.12 appliance update qualification report](../research/preview-12-appliance-update-qualification-report.md)
+for evidence. This procedure is written so the next candidate pair can be
+qualified the same way; substitute the new base and target versions
+throughout before the next run.
 
 ## Purpose
 
-Qualify the first update in which Console assets, Nginx routing, Compose,
-lifecycle programs, and health checks are activated behind the same release
-pointer as the Pi-hole image metadata. This procedure verifies the new stable
-dispatch boundary; it does not qualify persistent-data restore or base-OS
-replacement.
+Qualify an update in which Console assets, Nginx routing, Compose, lifecycle
+programs, and health checks are activated behind the same release pointer as
+the Pi-hole image metadata. This procedure verifies the stable dispatch
+boundary; it does not qualify persistent-data restore or base-OS replacement.
 
 ## Candidates
 
 Build both candidates from the same `main` revision:
 
-1. `0.1.0-preview.9`: full image, without an update candidate. Flash this image.
-2. `0.1.0-preview.10`: build with an update candidate, source minimum
-   `0.1.0-preview.9`, source maximum exclusive `0.2.0`, and key ID
+1. `0.1.0-preview.11`: full image, without an update candidate. Flash this
+   image.
+2. `0.1.0-preview.12`: build with an update candidate, source minimum
+   `0.1.0-preview.11`, source maximum exclusive `0.2.0`, and key ID
    `preview-local`.
 
 The separate versions render different static Console footers even though the
-source is identical. The preview.9 image is mandatory because older images do
-not contain the stable versioned dispatch boundary.
+source is identical. The base image version must already contain the stable
+versioned dispatch boundary (introduced before preview.9).
 
 ## Prepare the Qualification Kit
 
-Download only the `sovereign-update-0.1.0-preview.10-rpi5-arm64` workflow
+Download only the `sovereign-update-0.1.0-preview.12-rpi5-arm64` workflow
 artifact. On the operator machine, generate an ephemeral engineering key and
 prepare the private-key-free kit from its extracted directory:
 
@@ -36,13 +40,13 @@ chmod 600 sovereign-preview-local-private.pem
 ./scripts/prepare-update-qualification.py \
   --update-dir update-release \
   --private-key sovereign-preview-local-private.pem \
-  --output-dir preview-10-qualification-kit \
+  --output-dir preview-12-qualification-kit \
   --key-id preview-local
 
-cd preview-10-qualification-kit
+cd preview-12-qualification-kit
 shasum -a 256 --check SHA256SUMS
 cd ..
-scp -r preview-10-qualification-kit \
+scp -r preview-12-qualification-kit \
   sovereign@sovereign.local:~/update-qualification
 ```
 
@@ -59,14 +63,14 @@ bundle=$(python3 -c \
 
 ## Baseline
 
-The flashed base must expose preview.9 through both release metadata and the
+The flashed base must expose preview.11 through both release metadata and the
 static versioned Console asset:
 
 ```bash
 test "$(readlink -f /opt/sovereign/current)" = \
-  /opt/sovereign/releases/0.1.0-preview.9
+  /opt/sovereign/releases/0.1.0-preview.11
 curl -fsS http://sovereign.local/console/ | \
-  grep -F 'Release 0.1.0-preview.9'
+  grep -F 'Release 0.1.0-preview.11'
 curl -fsS http://sovereign.local/api/v1/health | python3 -m json.tool
 curl -fsS http://sovereign.local/dns/admin/ >/dev/null
 sudo /opt/sovereign/current/appliance/bin/verify-update-health
@@ -97,13 +101,13 @@ prepare_and_stage() {
 ```
 
 After staging, the inactive target must contain the rendered asset while the
-served Console remains preview.9:
+served Console remains preview.11:
 
 ```bash
-grep -F 'Release 0.1.0-preview.10' \
-  /opt/sovereign/releases/0.1.0-preview.10/appliance/console/index.html
+grep -F 'Release 0.1.0-preview.12' \
+  /opt/sovereign/releases/0.1.0-preview.12/appliance/console/index.html
 curl -fsS http://sovereign.local/console/ | \
-  grep -F 'Release 0.1.0-preview.9'
+  grep -F 'Release 0.1.0-preview.11'
 ```
 
 ## Interrupted Validation Recovery
@@ -120,16 +124,16 @@ test "$result" -eq 75
 sudo reboot
 ```
 
-After reconnecting, boot recovery must restore preview.9 before normal services
-start:
+After reconnecting, boot recovery must restore preview.11 before normal
+services start:
 
 ```bash
 cd ~/update-qualification
 transaction=$(cat .qualification-transaction)
 test "$(readlink -f /opt/sovereign/current)" = \
-  /opt/sovereign/releases/0.1.0-preview.9
+  /opt/sovereign/releases/0.1.0-preview.11
 curl -fsS http://sovereign.local/console/ | \
-  grep -F 'Release 0.1.0-preview.9'
+  grep -F 'Release 0.1.0-preview.11'
 sudo /opt/sovereign/current/appliance/bin/verify-update-health
 sudo sovereign-update discard "$transaction"
 ```
@@ -146,15 +150,15 @@ result=$?
 set -e
 test "$result" -eq 2
 test "$(readlink -f /opt/sovereign/current)" = \
-  /opt/sovereign/releases/0.1.0-preview.9
+  /opt/sovereign/releases/0.1.0-preview.11
 curl -fsS http://sovereign.local/console/ | \
-  grep -F 'Release 0.1.0-preview.9'
+  grep -F 'Release 0.1.0-preview.11'
 sudo /opt/sovereign/current/appliance/bin/verify-update-health
 sudo sovereign-update discard "$transaction"
 ```
 
 The transaction must end at `rolled_back`. Pi-hole, Console, Nginx, and the
-local-access verifier must all run through preview.9 again.
+local-access verifier must all run through preview.11 again.
 
 ## Successful Activation and Reboot
 
@@ -162,9 +166,9 @@ local-access verifier must all run through preview.9 again.
 transaction=$(prepare_and_stage)
 sudo sovereign-update activate "$transaction"
 test "$(readlink -f /opt/sovereign/current)" = \
-  /opt/sovereign/releases/0.1.0-preview.10
+  /opt/sovereign/releases/0.1.0-preview.12
 curl -fsS http://sovereign.local/console/ | \
-  grep -F 'Release 0.1.0-preview.10'
+  grep -F 'Release 0.1.0-preview.12'
 sudo /opt/sovereign/current/appliance/bin/verify-update-health
 sudo sha256sum --check \
   /data/sovereign/update-state/qualification-password.sha256

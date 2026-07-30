@@ -1,6 +1,6 @@
 # Milestone 01.1 - Appliance Update Foundation
 
-**Status:** Versioned appliance transaction implemented; Raspberry Pi qualification and restore automation pending
+**Status:** Versioned appliance transaction implemented and qualified on Raspberry Pi (preview.11 to preview.12); restore automation pending
 **Priority:** Immediate next priority after Phase 01 release  
 **Depends on:** [Phase 01 Flashable Pi-hole Image POC](01-preview-poc.md)  
 **Owner:** Project creator  
@@ -211,12 +211,13 @@ extra, unsafe-mode, malformed, externally hosted, or invalid Compose/Nginx
 payloads before service interruption. Activation and rollback coordinate
 Pi-hole, Console, Nginx, and local-access verification as one release.
 
-The immediate qualification boundary is a clean preview.9 base and preview.10
-update built from the same revision. The target must visibly change the
-build-rendered Console release marker, survive reboot, retain credentials and
-DATA, and restore preview.9 after an injected target-health failure and an
-interruption at `validating`. After that evidence is recorded, the next bounded
-implementation slice is persistent-data restore and backup retention policy.
+The preview.9-to-preview.10 qualification exposed service-readiness and
+systemd dependency races. The fixes were re-qualified in a clean preview.11
+base to preview.12 update built from the same revision: the target visibly
+changed the build-rendered Console release marker, survived reboot, retained
+credentials and DATA, and preview.11 was restored after an injected
+target-health failure and an interruption at `validating`. See the
+[preview.12 appliance update qualification report](../research/preview-12-appliance-update-qualification-report.md).
 
 Repeatable hardware qualification tooling is also implemented: exact-byte
 offline kit preparation, explicitly armed interruption hooks at the durable

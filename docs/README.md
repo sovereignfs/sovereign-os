@@ -20,7 +20,8 @@ This directory contains the planning, design, research, and operational record f
 - [Local AI options](research/local-ai-options.md): the provider-neutral inference direction and Raspberry Pi benchmark plan.
 - [Preview.6 Console qualification](research/preview-6-console-qualification-report.md): hardware findings, root causes, and live-hotfix evidence.
 - [Preview.8 appliance update qualification](research/preview-8-appliance-update-qualification-report.md): signed preview.7-to-preview.8 update, interruption recovery, rollback, commit, reboot, and persistence evidence.
-- [Versioned appliance update qualification](operations/versioned-appliance-update-qualification.md): preview.9-to-preview.10 hardware procedure for versioned Console, routing, Compose, lifecycle, and health payloads.
+- [Preview.12 appliance update qualification](research/preview-12-appliance-update-qualification-report.md): signed preview.11-to-preview.12 update qualifying the service-readiness and systemd dependency fixes, with interruption recovery, forced rollback, commit, and reboot evidence.
+- [Versioned appliance update qualification](operations/versioned-appliance-update-qualification.md): hardware procedure for versioned Console, routing, Compose, lifecycle, and health payloads.
 
 ## Documentation Areas
 

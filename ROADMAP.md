@@ -24,9 +24,13 @@ Raspberry Pi qualification.
 
 The first fully versioned appliance-release qualification, from preview.9 to
 preview.10, exposed service-readiness and systemd dependency races. Automatic
-rollback worked and restored preview.9. Fixes are implemented and locally
-verified; a clean preview.11 base and preview.12 update must qualify them on the
-Raspberry Pi before the updater is considered ready for normal users.
+rollback worked and restored preview.9. The fixes were qualified on Raspberry
+Pi 5 hardware in a clean preview.11 base to preview.12 update campaign: an
+interrupted-at-`validating` recovery, a forced target-health rollback, and a
+successful activation all held with reboot persistence and no regression to
+Console, DNS, Pi-hole, Nginx, SSH, credentials, or the dedicated DATA
+partition. See the
+[preview.12 appliance update qualification report](docs/research/preview-12-appliance-update-qualification-report.md).
 
 Unattended automatic installation remains disabled until the manual,
 health-gated update path and its operational controls are qualified.
@@ -35,28 +39,33 @@ health-gated update path and its operational controls are qualified.
 
 ### 1. Complete Appliance Update Qualification
 
-**Status:** 🟡 In progress
+**Status:** ✅ Complete
 
 **User outcome:** Install a compatible Sovereign appliance release without
 reflashing or losing persistent data.
 
-Next qualification pair:
+Qualification pair:
 
 - preview.11: clean flashable base containing the systemd and readiness fixes;
 - preview.12: signed, versioned installed-device update built from the same
   source revision.
 
-The physical qualification must prove:
+The physical qualification on Raspberry Pi 5 proved:
 
 - update compatibility and signature verification;
 - staging without changing the active release;
-- interruption recovery;
+- interruption recovery (interrupted at `validating`, automatic boot-time
+  restore of preview.11);
 - forced health-check failure and automatic rollback;
 - successful activation and commit;
 - reboot persistence;
 - preservation of Pi-hole configuration, credentials, update state, and the
   dedicated DATA mount; and
-- no regression to Console, DNS, Pi-hole, Nginx, SSH, or first-login behavior.
+- no regression to Console, DNS, Pi-hole, Nginx, or SSH.
+
+See the
+[preview.12 appliance update qualification report](docs/research/preview-12-appliance-update-qualification-report.md)
+for full evidence.
 
 ### 2. Production Update Operations
 
@@ -173,7 +182,8 @@ This milestone closes the remaining “flash once” gap.
 - ✅ Sovereign Console read-only health page qualified on Raspberry Pi 5
 - ✅ Signed update transaction, interruption recovery, rollback, and persistence
   demonstrated on Raspberry Pi 5
-- 🟡 Fully versioned appliance-release qualification and updater hardening
+- ✅ Fully versioned appliance-release qualification (preview.11 to
+  preview.12), including readiness hardening
 - ⚪ Persistent restore automation, retention, and production signing operations
 - ⚪ Update discovery and Sovereign Console update controls
 - ⏳ Local inference benchmark and conversation/capability RFCs
@@ -206,3 +216,4 @@ This milestone closes the remaining “flash once” gap.
 - [ADR-0004: Provider-neutral assistant and web search](docs/adrs/0004-provider-neutral-assistant-and-web-search.md)
 - [ADR-0005: Sovereign Console namespace and health boundary](docs/adrs/0005-sovereign-console-and-health-boundary.md)
 - [RFC-0014: Appliance update system](docs/rfcs/0014-appliance-update-system.md)
+- [Preview.12 appliance update qualification report](docs/research/preview-12-appliance-update-qualification-report.md)
