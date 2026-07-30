@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "channel": "preview",
+  "published_at": "2026-07-30T00:00:00Z",
+  "operations": [
+    {
+      "action": "add",
+      "key_id": "preview-2026-02",
+      "algorithm": "Ed25519",
+      "channels": ["preview"],
+      "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\n-----END PUBLIC KEY-----\n"
+    },
+    {
+      "action": "revoke",
+      "key_id": "preview-2026-01"
+    }
+  ],
+  "signing": {
+    "algorithm": "Ed25519",
+    "key_id": "preview-2026-01"
+  }
+}

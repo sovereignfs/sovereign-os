@@ -119,7 +119,46 @@ Trusted public keys live under `/etc/sovereign/update-trust.d/` as matching
 `<key-id>.pem` and `<key-id>.json` files. The preview image intentionally ships
 with an empty trust store until release-key custody and rotation are approved;
 this fails closed instead of embedding a development private key or silently
-trusting an unapproved publisher.
+trusting an unapproved publisher. Custody is decided in
+[ADR-0006](../docs/adrs/0006-production-signing-key-custody.md).
+
+## Trust Rotation v1
+
+`sudo sovereign-update rotate-trust --manifest trust-rotation.json --signature
+trust-rotation.sig` lets an already-trusted key sign new trust-store changes,
+so routine key rotation ships through the same signed channel as any other
+release instead of requiring a manual per-device file copy. The signed
+artifact's schema is
+[`schema/trust-rotation-v1.schema.json`](schema/trust-rotation-v1.schema.json)
+(fixture at
+[`examples/trust-rotation-v1.example.json`](examples/trust-rotation-v1.example.json)).
+
+A manifest declares 1-5 `add`/`revoke` operations against a `channel`, signed
+by a `key_id` that must already be trusted, non-revoked, and scoped to that
+channel — the same `load_trusted_key`/`verify_signature` path every other
+signed artifact uses. `add` refuses to reuse an already-installed `key_id`
+(public keys are immutable identities once trusted) and validates the
+supplied PEM is a real Ed25519 public key before writing anything. `revoke`
+refuses to target a `key_id` that isn't installed. The device's own
+configured channel must match the manifest's `channel`.
+
+Everything is validated — including simulating every operation against the
+current trust store — before anything is written, and applied atomically.
+The one hard safety invariant: after all operations apply, at least one
+non-revoked key must remain trusted for that channel, or the whole rotation
+is rejected (`TRUST_LOCKOUT_REJECTED`) with nothing changed. This is what
+makes the realistic single-key rotation pattern — the outgoing key signing
+one manifest that both adds its replacement and revokes itself — safe: a
+rotation that would leave a channel with no trusted key can never commit.
+Applied rotations are appended to a non-secret audit log at
+`/data/sovereign/update-state/trust-rotations.jsonl`.
+
+This command does not itself fetch a rotation manifest — an operator (or,
+once it exists, the Console/update-discovery mechanism) still has to deliver
+the two files to the device. What it removes is the need to hand-copy raw,
+unverified public key material via `sudo install`, the way qualification
+sessions have done to date: rotation is now a single verifiable, signed
+command instead of an ad hoc file copy.
 
 ## Backup and Journal v1
 

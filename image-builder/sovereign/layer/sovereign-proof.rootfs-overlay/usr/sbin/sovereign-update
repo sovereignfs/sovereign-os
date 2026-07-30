@@ -1797,6 +1797,205 @@ def prune_state(args):
         )
 
 
+TRUST_ROTATION_MAX_OPERATIONS = 5
+TRUST_ROTATION_MAX_KEY_BYTES = 4096
+
+
+def validate_trust_rotation_manifest(value):
+    exact_keys(
+        value,
+        ["schema_version", "channel", "published_at", "operations", "signing"],
+        "trust rotation manifest",
+        code="INVALID_TRUST_ROTATION",
+    )
+    fail(value["schema_version"] == 1, "UNSUPPORTED_TRUST_ROTATION_SCHEMA", "Only trust rotation schema 1 is supported")
+    fail(value["channel"] in ("preview", "stable"), "INVALID_TRUST_ROTATION", "Invalid trust rotation channel")
+    fail(
+        isinstance(value["published_at"], str) and value["published_at"].endswith("Z"),
+        "INVALID_TRUST_ROTATION",
+        "Invalid publication time",
+    )
+    operations = value["operations"]
+    fail(
+        isinstance(operations, list) and 0 < len(operations) <= TRUST_ROTATION_MAX_OPERATIONS,
+        "INVALID_TRUST_ROTATION",
+        "Trust rotation must declare between 1 and 5 operations",
+    )
+    seen_key_ids = set()
+    for operation in operations:
+        fail(isinstance(operation, dict) and "action" in operation, "INVALID_TRUST_ROTATION", "Invalid trust rotation operation")
+        action = operation["action"]
+        fail(action in ("add", "revoke"), "INVALID_TRUST_ROTATION", "Unknown trust rotation action")
+        if action == "add":
+            exact_keys(
+                operation,
+                ["action", "key_id", "algorithm", "channels", "public_key"],
+                "trust rotation add operation",
+                code="INVALID_TRUST_ROTATION",
+            )
+            fail(operation["algorithm"] == "Ed25519", "INVALID_TRUST_ROTATION", "Only Ed25519 keys can be added")
+            fail(
+                isinstance(operation["channels"], list)
+                and operation["channels"]
+                and all(item in ("preview", "stable") for item in operation["channels"]),
+                "INVALID_TRUST_ROTATION",
+                "Invalid trust rotation channels",
+            )
+            fail(
+                isinstance(operation["public_key"], str) and 0 < len(operation["public_key"]) <= TRUST_ROTATION_MAX_KEY_BYTES,
+                "INVALID_TRUST_ROTATION",
+                "Invalid trust rotation public key size",
+            )
+        else:
+            exact_keys(operation, ["action", "key_id"], "trust rotation revoke operation", code="INVALID_TRUST_ROTATION")
+        key_id = operation.get("key_id")
+        fail(isinstance(key_id, str) and SAFE_KEY_ID.fullmatch(key_id), "INVALID_TRUST_ROTATION", "Invalid trust rotation key id")
+        fail(key_id not in seen_key_ids, "INVALID_TRUST_ROTATION", "Duplicate trust rotation key id")
+        seen_key_ids.add(key_id)
+    signing = value["signing"]
+    exact_keys(signing, ["algorithm", "key_id"], "signing", code="INVALID_TRUST_ROTATION")
+    fail(signing["algorithm"] == "Ed25519", "INVALID_TRUST_ROTATION", "Only Ed25519 is supported")
+    fail(isinstance(signing["key_id"], str) and SAFE_KEY_ID.fullmatch(signing["key_id"]), "INVALID_TRUST_ROTATION", "Invalid signing key id")
+
+
+def validate_ed25519_public_key(text):
+    descriptor, temporary_name = tempfile.mkstemp(prefix="sovereign-trust-key-")
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as temporary:
+            temporary.write(text)
+            temporary.flush()
+        completed = subprocess.run(
+            [OPENSSL, "pkey", "-pubin", "-noout", "-in", temporary_name],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        raise UpdateError("TRUST_KEY_TOOL_FAILED", "Public key validation could not run") from error
+    finally:
+        try:
+            os.unlink(temporary_name)
+        except OSError:
+            pass
+    fail(completed.returncode == 0, "INVALID_TRUST_KEY", "Trust rotation public key is not a valid PEM public key")
+
+
+def rotate_trust(args):
+    fail(
+        os.geteuid() == 0 or os.environ.get("SOVEREIGN_UPDATE_TEST_MODE") == "1",
+        "ROOT_REQUIRED",
+        "Trust rotation requires administrator privileges",
+    )
+    with update_lock():
+        policy = read_json(POLICY_PATH, "INVALID_POLICY")
+        manifest_path = pathlib.Path(args.manifest)
+        try:
+            manifest_bytes = manifest_path.read_bytes()
+            manifest = json.loads(manifest_bytes)
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            raise UpdateError("INVALID_TRUST_ROTATION", "Trust rotation manifest is not valid UTF-8 JSON") from error
+        fail(manifest_bytes.endswith(b"\n"), "INVALID_TRUST_ROTATION_BYTES", "Signed trust rotation manifest must end with a newline")
+        validate_trust_rotation_manifest(manifest)
+        fail(policy["channel"] == manifest["channel"], "WRONG_CHANNEL", "Trust rotation channel does not match device policy")
+        signing_public_key = load_trusted_key(policy, manifest["signing"]["key_id"], manifest["channel"])
+        verify_signature(manifest_path, args.signature, signing_public_key)
+
+        trust_store = pathlib.Path(policy["trust_store"])
+        for operation in manifest["operations"]:
+            if operation["action"] == "add":
+                fail(
+                    not (trust_store / f"{operation['key_id']}.pem").exists()
+                    and not (trust_store / f"{operation['key_id']}.json").exists(),
+                    "TRUST_KEY_EXISTS",
+                    "A trust rotation cannot replace an already-installed key id",
+                )
+                validate_ed25519_public_key(operation["public_key"])
+            else:
+                fail(
+                    (trust_store / f"{operation['key_id']}.json").is_file(),
+                    "REVOKE_UNKNOWN_KEY",
+                    "Cannot revoke a key id that is not installed",
+                )
+
+        simulated = {}
+        for path in sorted(trust_store.glob("*.json")):
+            try:
+                simulated[path.stem] = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, json.JSONDecodeError):
+                continue
+        for operation in manifest["operations"]:
+            if operation["action"] == "add":
+                simulated[operation["key_id"]] = {
+                    "schema_version": 1,
+                    "key_id": operation["key_id"],
+                    "algorithm": "Ed25519",
+                    "channels": operation["channels"],
+                    "revoked": False,
+                }
+            else:
+                simulated[operation["key_id"]] = {**simulated[operation["key_id"]], "revoked": True}
+        fail(
+            any(
+                manifest["channel"] in metadata.get("channels", []) and metadata.get("revoked") is False
+                for metadata in simulated.values()
+            ),
+            "TRUST_LOCKOUT_REJECTED",
+            "Trust rotation would leave no trusted key for this channel",
+        )
+
+        applied = []
+        for operation in manifest["operations"]:
+            key_id = operation["key_id"]
+            if operation["action"] == "add":
+                pem_path = trust_store / f"{key_id}.pem"
+                descriptor = os.open(pem_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+                with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+                    stream.write(operation["public_key"])
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                atomic_json(
+                    trust_store / f"{key_id}.json",
+                    {
+                        "schema_version": 1,
+                        "key_id": key_id,
+                        "algorithm": "Ed25519",
+                        "channels": operation["channels"],
+                        "revoked": False,
+                    },
+                    mode=0o644,
+                )
+            else:
+                metadata_path = trust_store / f"{key_id}.json"
+                metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                metadata["revoked"] = True
+                atomic_json(metadata_path, metadata, mode=0o644)
+            applied.append({"action": operation["action"], "key_id": key_id})
+        sync_directory(trust_store)
+
+        log_path = UPDATE_ROOT / "trust-rotations.jsonl"
+        log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        descriptor = os.open(log_path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        with os.fdopen(descriptor, "a", encoding="utf-8") as stream:
+            stream.write(
+                json.dumps(
+                    {
+                        "timestamp": timestamp(),
+                        "signed_by": manifest["signing"]["key_id"],
+                        "channel": manifest["channel"],
+                        "operations": applied,
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                + "\n"
+            )
+            stream.flush()
+            os.fsync(stream.fileno())
+        sync_directory(log_path.parent)
+        print(json.dumps({"status": "rotated", "operations": applied}, sort_keys=True))
+
+
 def show_status(_args):
     policy = read_json(POLICY_PATH, "INVALID_POLICY")
     latest = read_json(UPDATE_STATUS_PATH) if UPDATE_STATUS_PATH.is_file() else None
@@ -1865,6 +2064,12 @@ def parser():
         help="report what would be removed without deleting anything",
     )
     prune.set_defaults(handler=prune_state)
+    rotate_trust_parser = subcommands.add_parser(
+        "rotate-trust", help="apply a signed trust rotation (add or revoke a signing key)"
+    )
+    rotate_trust_parser.add_argument("--manifest", required=True)
+    rotate_trust_parser.add_argument("--signature", required=True)
+    rotate_trust_parser.set_defaults(handler=rotate_trust)
     return command
 
 

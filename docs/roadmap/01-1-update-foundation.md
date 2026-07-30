@@ -235,9 +235,21 @@ health-failure correctly triggered an automatic rollback. See the
 [restore hardware qualification report](../research/restore-hardware-qualification-report.md).
 That campaign also found and fixed a diagnostic-only bug where a shared
 qualification helper reported restore failures under the update
-transaction's failure code. Backup retention policy, production signing-key
-custody, and shipping `restore` through a real signed release (it was
-manually deployed for this qualification) remain the next bounded work.
+transaction's failure code.
+
+Backup, release, and transaction-journal retention is also implemented as
+`sovereign-update prune [--dry-run]`, driven by a configurable
+`/etc/sovereign/retention-policy.json`; unit-tested, not yet hardware-
+qualified. Production signing-key custody is decided
+([ADR-0006](../adrs/0006-production-signing-key-custody.md):
+password-manager-held key, hardware key as a future upgrade), and routine
+rotation/revocation now ships through the same signed channel as any other
+release as `sovereign-update rotate-trust` (see
+[update/README.md](../../update/README.md)'s "Trust Rotation v1" section);
+also unit-tested, not yet hardware-qualified. None of restore, prune, or
+rotate-trust have shipped through a real signed release yet — all three
+were manually deployed for their respective qualification/development
+sessions — and the production signing key itself has not been generated.
 
 Repeatable hardware qualification tooling is also implemented: exact-byte
 offline kit preparation, explicitly armed interruption hooks at the durable

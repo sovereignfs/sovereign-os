@@ -1,6 +1,6 @@
 # RFC-0014: Appliance Update System
 
-**Status:** Implemented — signed manifests, staging, activation, rollback, and persistent-data restore are built and hardware-qualified on Pi 5 (see [docs/roadmap/01-1-update-foundation.md](../roadmap/01-1-update-foundation.md), [Versioned Appliance Release Design](../design/versioned-appliance-release.md), and [BACKUP_AND_JOURNAL.md](../../update/BACKUP_AND_JOURNAL.md)); restore has not yet shipped through a real signed release, and production key-custody/signing remain open
+**Status:** Implemented — signed manifests, staging, activation, rollback, persistent-data restore, and signed trust-key rotation (`sovereign-update rotate-trust`, see `update/README.md`) are built and unit-tested, with restore and the appliance-update path hardware-qualified on Pi 5 (see [docs/roadmap/01-1-update-foundation.md](../roadmap/01-1-update-foundation.md), [Versioned Appliance Release Design](../design/versioned-appliance-release.md), and [BACKUP_AND_JOURNAL.md](../../update/BACKUP_AND_JOURNAL.md)); restore and trust rotation have not yet shipped through a real signed release or been hardware-qualified; production key custody is decided (see [ADR-0006](../adrs/0006-production-signing-key-custody.md)) but the key itself is not yet generated; and fetching/applying updates or rotations without an operator's manual command remains open (Update Discovery and Console Controls milestone)
 **Author:** Project creator and Codex
 **Created:** 2026-07-19
 **Target:** Milestone 01.1
@@ -258,6 +258,10 @@ No device account, telemetry, or inbound connection is required. Update checks a
 - Restrict updater state and backups.
 - Protect against downgrade unless explicitly authorized for recovery.
 - Bound download, staging, backup, and log storage.
+- Trust-key rotation and revocation are themselves signed artifacts, verified
+  by an already-trusted key before any trust-store file is touched, and can
+  never apply if doing so would leave zero trusted keys for the device's
+  channel (`sovereign-update rotate-trust`).
 
 ## Testing Strategy
 

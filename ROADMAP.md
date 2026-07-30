@@ -32,6 +32,10 @@ Console, DNS, Pi-hole, Nginx, SSH, credentials, or the dedicated DATA
 partition. See the
 [preview.12 appliance update qualification report](docs/research/preview-12-appliance-update-qualification-report.md).
 
+Persistent-data restore automation, bounded retention, and production
+signing-key custody are the remaining gaps before the updater is considered
+ready for normal users.
+
 Unattended automatic installation remains disabled until the manual,
 health-gated update path and its operational controls are qualified.
 
@@ -93,7 +97,16 @@ Planned work:
   [BACKUP_AND_JOURNAL.md](update/BACKUP_AND_JOURNAL.md)); not yet
   hardware-qualified, shipped through a signed release, or wired into a
   periodic timer;
-- establish production signing-key custody, rotation, and revocation;
+- establish production signing-key custody, rotation, and revocation —
+  decided in [ADR-0006](docs/adrs/0006-production-signing-key-custody.md)
+  (password-manager-held key, hardware key as a future upgrade). Routine
+  rotation/revocation is implemented as `sovereign-update rotate-trust`
+  (signed, atomic, refuses any change that would leave a channel with no
+  trusted key — see [update/README.md](update/README.md)'s "Trust Rotation
+  v1" section), unit-tested but not yet hardware-qualified. The production
+  key itself has not yet been generated, and getting a rotation manifest
+  onto already-flashed devices without an operator manually running the
+  command still depends on the Update Discovery work in item 3 below;
 - approve the update RFC and production manifest policy;
 - publish release compatibility, rollback limitations, and recovery guidance;
   and
