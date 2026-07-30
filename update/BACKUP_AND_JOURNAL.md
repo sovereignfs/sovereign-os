@@ -69,6 +69,45 @@ rollback boundary are retained. Cleanup never removes a backup referenced by a
 non-terminal transaction. Concrete byte/count quotas remain a release-policy
 decision.
 
+**Status:** Implemented (`sovereign-update restore <backup-id> [--force]` and
+`sovereign-update discard-restore <restore-id>`) and hardware-qualified
+against real Pi-hole state on Raspberry Pi 5 — see the
+[restore hardware qualification report](../docs/research/restore-hardware-qualification-report.md).
+It has not yet shipped through a real signed release; the qualified device
+had the updater manually deployed and reverted for the campaign.
+
+`restore` verifies the backup manifest and all four archive digests before
+creating any transaction or touching live data, then extracts the
+`pihole_state`, `sovereign_configuration`, and `secrets` roles into an
+isolated staging directory (`release_pointer` is verified for integrity and
+compatibility only; it is not written back to disk). Extraction never trusts
+archive-embedded ownership or permission bits: every file is re-created under
+a fixed per-role mode (`0755`/`0644`, or `0700`/`0600` for secrets),
+regardless of what the archive itself declares. By default `restore` refuses
+a backup whose recorded source appliance version does not match the
+currently installed release; `--force` overrides this.
+
+Once staging is verified, `sovereign-pihole.service` is stopped, each live
+directory is renamed aside (`.<name>.pre-restore.<restore-id>`) only if it
+exists, the staged directory takes its place, and the service restarts.
+Health failure at this point (or an explicitly armed
+`SOVEREIGN_UPDATE_QUALIFICATION_FAIL_HEALTH` during future hardware
+qualification) rolls the swap back: the just-installed data moves aside to
+`<name>.rollback-failed.<restore-id>` and the retained pre-restore directory
+moves back into place. If the rollback's own health check then also fails,
+the restore ends in `recovery_required` with both trees left on disk for
+manual inspection — matching the "never recursively delete both copies"
+requirement above. `discard-restore` only removes a finished restore's
+transient staging; it never deletes `recovery_required` data automatically.
+
+The restore journal follows the same `state.json` / `events.jsonl` pattern as
+update transactions, at
+`/data/sovereign/update-state/restores/<restore-id>/`, with its own state
+machine: `available -> extracting -> extracted -> restoring -> verifying ->
+committed`, with `rolling_back -> rolled_back` or `recovery_required` on
+failure. It is not yet wired into automatic update rollback for migrations;
+today it is a standalone administrator command.
+
 ## Durable Journal
 
 Transactions live at:

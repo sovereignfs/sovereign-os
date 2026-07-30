@@ -48,7 +48,6 @@ UPDATE_STATUS_PATH = pathlib.Path(
 RELEASES_ROOT = pathlib.Path(
     os.environ.get("SOVEREIGN_RELEASES_ROOT", "/opt/sovereign")
 )
-
 APPLIANCE_FILES = {
     "appliance/bin/console-health": 0o755,
     "appliance/bin/start-pihole": 0o755,
@@ -68,6 +67,14 @@ RELEASE_FILES = {
     "sovereign-release": 0o644,
 }
 
+# role, path relative to STATE_ROOT, backup archive filename, top-level tar
+# entry name, restored directory mode, restored file mode.
+BACKUP_ROLES = (
+    ("pihole_state", "apps/pihole/etc-pihole", "pihole-state.tar.zst", "etc-pihole", 0o755, 0o644),
+    ("sovereign_configuration", "configuration", "sovereign-configuration.tar.zst", "configuration", 0o755, 0o644),
+    ("secrets", "secrets", "secrets.tar.zst", "secrets", 0o700, 0o600),
+)
+
 SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
 SAFE_KEY_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 VERSION = re.compile(
@@ -76,7 +83,7 @@ VERSION = re.compile(
 )
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 OCI_DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
-QUALIFICATION_BOUNDARIES = {"backing_up", "activating", "validating"}
+QUALIFICATION_BOUNDARIES = {"backing_up", "activating", "validating", "restoring", "verifying"}
 QUALIFICATION_EXIT = 75
 
 
@@ -123,10 +130,10 @@ def qualification_interrupt(boundary):
         os._exit(QUALIFICATION_EXIT)
 
 
-def qualification_health_failure():
+def qualification_health_failure(code="POSTUPDATE_HEALTH_FAILED"):
     fail(
         os.environ.get("SOVEREIGN_UPDATE_QUALIFICATION_FAIL_HEALTH") != "1",
-        "POSTUPDATE_HEALTH_FAILED",
+        code,
         "Qualification forced the target health check to fail",
     )
 
@@ -741,11 +748,9 @@ def create_backup(args):
             stopped = True
             release_source = release_pointer_source(directory, snapshot, manifest)
             sources = [
-                ("pihole_state", STATE_ROOT / "apps/pihole/etc-pihole", "pihole-state.tar.zst"),
-                ("sovereign_configuration", STATE_ROOT / "configuration", "sovereign-configuration.tar.zst"),
-                ("secrets", STATE_ROOT / "secrets", "secrets.tar.zst"),
-                ("release_pointer", release_source, "release-pointer.tar.zst"),
-            ]
+                (role, STATE_ROOT / relative, filename)
+                for role, relative, filename, *_ in BACKUP_ROLES
+            ] + [("release_pointer", release_source, "release-pointer.tar.zst")]
             artifacts = []
             for role, source, filename in sources:
                 details = archive_directory(source, backup / filename)
@@ -1257,6 +1262,325 @@ def discard_transaction(args):
         )
 
 
+RESTORE_TRANSITIONS = {
+    "available": {"extracting", "recovery_required"},
+    "extracting": {"extracted", "recovery_required"},
+    "extracted": {"restoring", "recovery_required"},
+    "restoring": {"verifying", "rolling_back", "recovery_required"},
+    "verifying": {"committed", "rolling_back", "recovery_required"},
+    "rolling_back": {"rolled_back", "recovery_required"},
+    "rolled_back": {"discarded"},
+    "recovery_required": {"discarded"},
+}
+
+
+def backup_path(backup_id):
+    fail(bool(SAFE_ID.fullmatch(backup_id)), "INVALID_BACKUP", "Invalid backup id")
+    return STATE_ROOT / "backups" / backup_id
+
+
+def restore_path(restore_id):
+    fail(bool(SAFE_ID.fullmatch(restore_id)), "INVALID_RESTORE", "Invalid restore id")
+    return UPDATE_ROOT / "restores" / restore_id
+
+
+def load_restore(restore_id):
+    snapshot = read_json(restore_path(restore_id) / "state.json", "INVALID_RESTORE")
+    fail(
+        snapshot.get("restore_id") == restore_id,
+        "INVALID_RESTORE",
+        "Restore identity does not match",
+    )
+    return snapshot
+
+
+def append_restore_event(directory, previous, snapshot, reason):
+    event = {
+        "restore_id": snapshot["restore_id"],
+        "sequence": snapshot["sequence"],
+        "previous_state": previous,
+        "next_state": snapshot["state"],
+        "timestamp": snapshot["updated_at"],
+        "reason": reason,
+    }
+    path = directory / "events.jsonl"
+    descriptor = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    with os.fdopen(descriptor, "a", encoding="utf-8") as stream:
+        stream.write(json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+    sync_directory(directory)
+
+
+def transition_restore(snapshot, next_state, reason, **changes):
+    fail(
+        next_state in RESTORE_TRANSITIONS.get(snapshot["state"], set()),
+        "INVALID_TRANSITION",
+        f"Cannot move from {snapshot['state']} to {next_state}",
+    )
+    previous = snapshot["state"]
+    snapshot = dict(snapshot)
+    snapshot.update(changes)
+    snapshot["state"] = next_state
+    snapshot["sequence"] += 1
+    snapshot["updated_at"] = timestamp()
+    directory = restore_path(snapshot["restore_id"])
+    atomic_json(directory / "state.json", snapshot)
+    append_restore_event(directory, previous, snapshot, reason)
+    return snapshot
+
+
+def create_restore(backup_id, backup_source_version):
+    now = timestamp()
+    compact = now.replace("-", "").replace(":", "").lower()
+    restore_id = f"restore-{compact}-{secrets.token_hex(4)}"
+    directory = restore_path(restore_id)
+    directory.mkdir(parents=True, mode=0o700)
+    snapshot = {
+        "schema_version": 1,
+        "restore_id": restore_id,
+        "sequence": 0,
+        "state": "available",
+        "backup_id": backup_id,
+        "backup_source_version": backup_source_version,
+        "created_at": now,
+        "updated_at": now,
+        "failure": None,
+        "recovery_action": "resume",
+    }
+    atomic_json(directory / "state.json", snapshot)
+    append_restore_event(directory, None, snapshot, "RESTORE_ACCEPTED")
+    return snapshot
+
+
+def validate_backup_manifest(value, backup_id):
+    exact_keys(
+        value,
+        ["schema_version", "backup_id", "transaction_id", "created_at", "source", "consistency", "artifacts"],
+        "backup manifest",
+    )
+    fail(value["schema_version"] == 1, "UNSUPPORTED_BACKUP_SCHEMA", "Only backup manifest schema 1 is supported")
+    fail(value["backup_id"] == backup_id, "BACKUP_IDENTITY_MISMATCH", "Backup manifest identity does not match")
+    source = value["source"]
+    exact_keys(source, ["appliance_version", "pihole_digest", "data_schema"], "backup source")
+    parse_version(source["appliance_version"])
+    fail(
+        isinstance(source["pihole_digest"], str) and OCI_DIGEST.fullmatch(source["pihole_digest"]),
+        "INVALID_BACKUP_MANIFEST",
+        "Invalid Pi-hole digest in backup manifest",
+    )
+    fail(
+        isinstance(source["data_schema"], int) and source["data_schema"] >= 0,
+        "INVALID_BACKUP_MANIFEST",
+        "Invalid data schema in backup manifest",
+    )
+    artifacts = value["artifacts"]
+    fail(
+        isinstance(artifacts, list) and len(artifacts) == 4,
+        "INVALID_BACKUP_MANIFEST",
+        "Backup manifest must declare exactly four artifacts",
+    )
+    roles = {artifact.get("role") for artifact in artifacts}
+    fail(
+        roles == {"pihole_state", "sovereign_configuration", "secrets", "release_pointer"},
+        "INVALID_BACKUP_MANIFEST",
+        "Backup manifest roles are incomplete",
+    )
+    for artifact in artifacts:
+        exact_keys(artifact, ["role", "file", "size", "sha256"], "backup artifact")
+        fail(
+            isinstance(artifact["file"], str) and artifact["file"] and "/" not in artifact["file"],
+            "INVALID_BACKUP_MANIFEST",
+            "Invalid backup artifact filename",
+        )
+        fail(
+            isinstance(artifact["size"], int) and artifact["size"] > 0,
+            "INVALID_BACKUP_MANIFEST",
+            "Invalid backup artifact size",
+        )
+        fail(
+            isinstance(artifact["sha256"], str) and SHA256.fullmatch(artifact["sha256"]),
+            "INVALID_BACKUP_MANIFEST",
+            "Invalid backup artifact digest",
+        )
+
+
+def backup_role_artifact(manifest, role):
+    for artifact in manifest["artifacts"]:
+        if artifact["role"] == role:
+            return artifact
+    raise UpdateError("BACKUP_ROLE_MISSING", f"Backup manifest is missing role: {role}")
+
+
+def extract_backup_role(archive, destination, dirname, dir_mode, file_mode):
+    fail(not destination.exists(), "RESTORE_STAGING_EXISTS", "Restore staging target already exists")
+    transaction_directory = destination.parent
+    transaction_directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    decompressed = transaction_directory / pathlib.Path(archive.name).stem
+    run_checked(
+        [ZSTD, "--decompress", "--quiet", "--force", "--output-dir-flat", str(transaction_directory), str(archive)],
+        "BACKUP_DECOMPRESSION_FAILED",
+        f"Backup archive could not be decompressed: {archive.name}",
+        timeout=600,
+    )
+    fail(decompressed.is_file(), "BACKUP_DECOMPRESSION_FAILED", "Decompressed backup archive is missing")
+    try:
+        with tarfile.open(decompressed, "r:") as archive_handle:
+            members = archive_handle.getmembers()
+            fail(0 < len(members) <= 100000, "BACKUP_ARCHIVE_INVALID", "Backup archive has an invalid entry count")
+            names = [member.name for member in members]
+            fail(len(names) == len(set(names)), "BACKUP_ARCHIVE_INVALID", "Backup archive contains duplicate entries")
+            for member in members:
+                path = pathlib.PurePosixPath(member.name)
+                fail(not path.is_absolute() and ".." not in path.parts, "BACKUP_ARCHIVE_UNSAFE", "Backup archive contains an unsafe path")
+                fail(path.parts and path.parts[0] == dirname, "BACKUP_ARCHIVE_UNSAFE", "Backup archive escaped its role prefix")
+                fail(member.isfile() or member.isdir(), "BACKUP_ARCHIVE_UNSAFE", "Backup archive contains an unsupported entry type")
+            destination.mkdir(mode=dir_mode)
+            for member in sorted(members, key=lambda item: item.name):
+                relative = pathlib.PurePosixPath(member.name).relative_to(dirname)
+                if relative == pathlib.PurePosixPath("."):
+                    continue
+                output = destination.joinpath(*relative.parts)
+                if member.isdir():
+                    output.mkdir(mode=dir_mode, exist_ok=True)
+                    continue
+                output.parent.mkdir(parents=True, exist_ok=True, mode=dir_mode)
+                descriptor = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, file_mode)
+                with archive_handle.extractfile(member) as source, os.fdopen(descriptor, "wb") as target:
+                    for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                        target.write(chunk)
+                    target.flush()
+                    os.fsync(target.fileno())
+                os.chmod(output, file_mode)
+    except (OSError, tarfile.TarError, KeyError) as error:
+        raise UpdateError("BACKUP_ARCHIVE_INVALID", f"Backup archive structure is invalid: {archive.name}") from error
+    finally:
+        try:
+            decompressed.unlink()
+        except OSError:
+            pass
+
+
+def restore_backup(args):
+    fail(
+        os.geteuid() == 0 or os.environ.get("SOVEREIGN_UPDATE_TEST_MODE") == "1",
+        "ROOT_REQUIRED",
+        "Restore requires administrator privileges",
+    )
+    with update_lock():
+        backup_directory = backup_path(args.backup)
+        backup_manifest = read_json(backup_directory / "backup-manifest.json", "BACKUP_MANIFEST_UNAVAILABLE")
+        validate_backup_manifest(backup_manifest, args.backup)
+        current_version = read_release_version()
+        source_version = backup_manifest["source"]["appliance_version"]
+        fail(
+            args.force or source_version == current_version,
+            "RESTORE_VERSION_MISMATCH",
+            "Backup source version does not match the installed release; pass --force to override",
+        )
+        for role, _relative, filename, _dirname, _dir_mode, _file_mode in BACKUP_ROLES:
+            artifact = backup_role_artifact(backup_manifest, role)
+            fail(artifact["file"] == filename, "INVALID_BACKUP_MANIFEST", f"Unexpected archive filename for role: {role}")
+            verify_artifact(backup_directory / filename, artifact)
+        release_pointer_artifact = backup_role_artifact(backup_manifest, "release_pointer")
+        verify_artifact(backup_directory / release_pointer_artifact["file"], release_pointer_artifact)
+
+        snapshot = create_restore(args.backup, source_version)
+        directory = restore_path(snapshot["restore_id"])
+        candidate_root = directory / "restore-candidate"
+        candidate_root.mkdir(mode=0o700)
+        snapshot = transition_restore(snapshot, "extracting", "RESTORE_EXTRACTION_STARTED")
+        try:
+            for role, _relative, filename, dirname, dir_mode, file_mode in BACKUP_ROLES:
+                extract_backup_role(backup_directory / filename, candidate_root / dirname, dirname, dir_mode, file_mode)
+            snapshot = transition_restore(snapshot, "extracted", "RESTORE_EXTRACTION_VERIFIED")
+        except UpdateError as error:
+            transition_restore(
+                snapshot,
+                "recovery_required",
+                error.code,
+                failure={"code": error.code, "message": str(error), "retryable": False},
+                recovery_action="manual",
+            )
+            raise
+
+        snapshot = transition_restore(snapshot, "restoring", "RESTORE_STARTED")
+        qualification_interrupt("restoring")
+        swapped = []
+        try:
+            run_checked([SYSTEMCTL, "stop", "sovereign-pihole.service"], "SERVICE_STOP_FAILED", "Pi-hole could not be stopped for restore")
+            for role, relative, _filename, dirname, _dir_mode, _file_mode in BACKUP_ROLES:
+                live = STATE_ROOT / relative
+                candidate = candidate_root / dirname
+                old = live.with_name(f".{live.name}.pre-restore.{snapshot['restore_id']}") if live.exists() else None
+                if old is not None:
+                    live.rename(old)
+                candidate.rename(live)
+                swapped.append((live, old))
+            run_checked([SYSTEMCTL, "start", "sovereign-pihole.service"], "SERVICE_RESTART_FAILED", "Pi-hole could not be restarted after restore")
+            snapshot = transition_restore(snapshot, "verifying", "RESTORE_TARGET_STARTED")
+            qualification_interrupt("verifying")
+            qualification_health_failure("POSTRESTORE_HEALTH_FAILED")
+            run_checked([health_check_command()], "POSTRESTORE_HEALTH_FAILED", "Restored appliance failed health checks")
+            snapshot = transition_restore(snapshot, "committed", "RESTORE_COMMITTED", recovery_action="none")
+            for _live, old in swapped:
+                if old is not None:
+                    shutil.rmtree(old, ignore_errors=True)
+            shutil.rmtree(candidate_root, ignore_errors=True)
+            print(json.dumps({"status": "committed", "restore_id": snapshot["restore_id"], "backup_id": args.backup}, sort_keys=True))
+        except UpdateError as restore_error:
+            if snapshot["state"] in {"restoring", "verifying"}:
+                snapshot = transition_restore(
+                    snapshot,
+                    "rolling_back",
+                    restore_error.code,
+                    failure={"code": restore_error.code, "message": str(restore_error), "retryable": False},
+                    recovery_action="rollback",
+                )
+            try:
+                for live, old in reversed(swapped):
+                    failed = live.with_name(f"{live.name}.rollback-failed.{snapshot['restore_id']}")
+                    if live.exists():
+                        live.rename(failed)
+                    if old is not None:
+                        old.rename(live)
+                run_checked([SYSTEMCTL, "start", "sovereign-pihole.service"], "ROLLBACK_START_FAILED", "Pi-hole could not be restarted after restore rollback")
+                run_checked([health_check_command()], "ROLLBACK_HEALTH_FAILED", "Previous data failed health checks after restore rollback")
+                transition_restore(snapshot, "rolled_back", "RESTORE_ROLLBACK_HEALTHY", recovery_action="none")
+                for live, _old in swapped:
+                    shutil.rmtree(live.with_name(f"{live.name}.rollback-failed.{snapshot['restore_id']}"), ignore_errors=True)
+                shutil.rmtree(candidate_root, ignore_errors=True)
+            except (UpdateError, OSError) as rollback_error:
+                code = rollback_error.code if isinstance(rollback_error, UpdateError) else "ROLLBACK_FAILED"
+                transition_restore(
+                    snapshot,
+                    "recovery_required",
+                    code,
+                    failure={"code": code, "message": str(rollback_error), "retryable": False},
+                    recovery_action="manual",
+                )
+            raise
+
+
+def discard_restore(args):
+    fail(
+        os.geteuid() == 0 or os.environ.get("SOVEREIGN_UPDATE_TEST_MODE") == "1",
+        "ROOT_REQUIRED",
+        "Discarding a restore requires administrator privileges",
+    )
+    with update_lock():
+        snapshot = load_restore(args.restore)
+        fail(
+            snapshot["state"] in {"rolled_back", "recovery_required"},
+            "INVALID_RESTORE_STATE",
+            "Only rolled-back or recovery-required restores can be discarded",
+        )
+        directory = restore_path(args.restore)
+        shutil.rmtree(directory / "restore-candidate", ignore_errors=True)
+        transition_restore(snapshot, "discarded", "RESTORE_DISCARDED", recovery_action="none")
+        print(json.dumps({"status": "discarded", "restore_id": args.restore}, sort_keys=True))
+
+
 def show_status(_args):
     policy = read_json(POLICY_PATH, "INVALID_POLICY")
     latest = read_json(UPDATE_STATUS_PATH) if UPDATE_STATUS_PATH.is_file() else None
@@ -1301,6 +1625,21 @@ def parser():
     )
     discard.add_argument("transaction")
     discard.set_defaults(handler=discard_transaction)
+    restore = subcommands.add_parser(
+        "restore", help="restore persistent data from a completed backup"
+    )
+    restore.add_argument("backup")
+    restore.add_argument(
+        "--force",
+        action="store_true",
+        help="restore even if the backup's source version differs from the installed release",
+    )
+    restore.set_defaults(handler=restore_backup)
+    discard_restore_parser = subcommands.add_parser(
+        "discard-restore", help="remove transient staging from a finished restore"
+    )
+    discard_restore_parser.add_argument("restore")
+    discard_restore_parser.set_defaults(handler=discard_restore)
     return command
 
 

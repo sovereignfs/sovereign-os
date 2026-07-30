@@ -69,7 +69,7 @@ for full evidence.
 
 ### 2. Production Update Operations
 
-**Status:** ⚪ Planned
+**Status:** 🟡 In progress
 
 **Depends on:** Completed preview.11 to preview.12 qualification
 
@@ -78,7 +78,14 @@ recovery operations.
 
 Planned work:
 
-- automate persistent-data restore verification;
+- automate persistent-data restore verification — `sovereign-update restore`
+  is implemented, unit-tested, and hardware-qualified against real Pi-hole
+  state on Raspberry Pi 5, including a forced-health-failure rollback path
+  (see [BACKUP_AND_JOURNAL.md](update/BACKUP_AND_JOURNAL.md) and the
+  [restore hardware qualification report](docs/research/restore-hardware-qualification-report.md));
+  it still needs to ship through a real signed release rather than manual
+  deployment, and is not yet wired into automatic update rollback for future
+  data migrations;
 - define bounded retention and cleanup for old releases, backups, journals, and
   failed transactions;
 - establish production signing-key custody, rotation, and revocation;

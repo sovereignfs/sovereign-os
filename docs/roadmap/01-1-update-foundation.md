@@ -1,6 +1,6 @@
 # Milestone 01.1 - Appliance Update Foundation
 
-**Status:** Versioned appliance transaction implemented and qualified on Raspberry Pi (preview.11 to preview.12); restore automation pending
+**Status:** Versioned appliance transaction and persistent-data restore implemented and hardware-qualified on Raspberry Pi (preview.11 to preview.12; restore separately); retention policy and production signing custody pending
 **Priority:** Immediate next priority after Phase 01 release  
 **Depends on:** [Phase 01 Flashable Pi-hole Image POC](01-preview-poc.md)  
 **Owner:** Project creator  
@@ -218,6 +218,26 @@ changed the build-rendered Console release marker, survived reboot, retained
 credentials and DATA, and preview.11 was restored after an injected
 target-health failure and an interruption at `validating`. See the
 [preview.12 appliance update qualification report](../research/preview-12-appliance-update-qualification-report.md).
+
+Persistent-data restore is now implemented: `sovereign-update restore
+<backup-id>` verifies a backup's manifest and archive digests, extracts the
+Pi-hole state, Sovereign configuration, and secrets roles into isolated
+staging, and only then quiesces Pi-hole to swap the live directories in,
+retaining the pre-restore copies until a health check passes. A failed
+health check rolls the swap back automatically; a failed rollback health
+check leaves both trees on disk in `recovery_required` rather than guessing.
+See [BACKUP_AND_JOURNAL.md](../../update/BACKUP_AND_JOURNAL.md) for the
+contract and journal layout. This has unit-test coverage against real signed
+backups and has now been qualified on Raspberry Pi 5 against real Pi-hole
+state: a full restore recovered the live gravity database, configuration,
+and administrator secret byte-for-byte, and a forced post-restore
+health-failure correctly triggered an automatic rollback. See the
+[restore hardware qualification report](../research/restore-hardware-qualification-report.md).
+That campaign also found and fixed a diagnostic-only bug where a shared
+qualification helper reported restore failures under the update
+transaction's failure code. Backup retention policy, production signing-key
+custody, and shipping `restore` through a real signed release (it was
+manually deployed for this qualification) remain the next bounded work.
 
 Repeatable hardware qualification tooling is also implemented: exact-byte
 offline kit preparation, explicitly armed interruption hooks at the durable
