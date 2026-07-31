@@ -139,11 +139,15 @@ Planned work:
   real regression: `sovereign-proof.service` failing on any boot after
   `prune` removes the base image's own (now-inactive) release directory
   — `proof-init` now only performs that check during first-boot
-  bootstrap. `restore`/`prune`/`rotate-trust` still haven't been
-  exercised as part of an actual signed-release install (only
-  `prepare`/`backup`/`stage`/`activate` have, since `.17` shares its
-  source with `.14` — no migration, retention pass, or trust rotation was
-  part of this transaction). Getting a rotation manifest onto
+  bootstrap. `restore` has since also been qualified against the real
+  pre-activation backup that install created: correctly rejected a
+  version-mismatched restore by default, then recovered an injected
+  canary correctly under `--force` with no regression — see the
+  [production-signed restore qualification report](docs/research/production-signed-restore-qualification-report.md).
+  `prune`/`rotate-trust` still haven't been exercised as part of an
+  actual signed-release install cycle — doing so meaningfully needs
+  either a second real release or a genuine key rotation, not a
+  manufactured scenario. Getting a rotation manifest onto
   already-flashed devices without an operator manually running the
   command still depends on the
   Update Discovery work in item 3 below;

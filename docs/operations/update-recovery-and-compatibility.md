@@ -27,8 +27,10 @@ Be clear-eyed about the current state before relying on this:
   the first release signed with it, and it has now been genuinely
   *installed* on real Raspberry Pi 5 hardware through
   `prepare`/`backup`/`stage`/`activate`, confirmed committed across a
-  reboot. `restore`, `prune`, and `rotate-trust` still haven't been
-  exercised as part of a real signed-release install.
+  reboot. `restore` has since also been qualified against that install's
+  real backup, correctly enforcing its version-match safety check and
+  recovering data under `--force`. `prune` and `rotate-trust` still
+  haven't been exercised as part of a real signed-release install cycle.
 - There is **no Console button** yet — installing, backing up, restoring,
   and pruning are still commands you run yourself over SSH. `sovereign-update
   check` *does* run automatically once a day now (see below) and will tell

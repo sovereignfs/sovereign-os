@@ -123,8 +123,11 @@ genuinely *installed* on that same device via a full
 across a reboot — see the
 [install qualification report](../research/first-production-signed-release-install-qualification-report.md),
 which also documents a real `sovereign-proof.service` regression found
-and fixed along the way. `restore`, `prune`, and `rotate-trust` still
-haven't been exercised as part of an actual signed-release install.
+and fixed along the way. `restore` was then qualified against that
+install's own pre-activation backup — see the
+[production-signed restore qualification report](../research/production-signed-restore-qualification-report.md).
+`prune` and `rotate-trust` still haven't been exercised as part of an
+actual signed-release install cycle.
 
 ## Options
 
