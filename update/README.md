@@ -165,6 +165,44 @@ unverified public key material via `sudo install`, the way qualification
 sessions have done to date: rotation is now a single verifiable, signed
 command instead of an ad hoc file copy.
 
+## Update Discovery v1
+
+Design accepted in [RFC-0015](../docs/rfcs/0015-update-discovery.md);
+hardware-verified on Raspberry Pi 5 against the real live GitHub API.
+`sudo sovereign-update check` queries this repository's public GitHub
+releases, tries candidates from the highest tag version down until one
+passes the *exact same, unmodified* `inspect_update()` verification a real
+`prepare` would run — no new trust logic — and reports the result. It never
+downloads the multi-hundred-MB update bundle, only the small manifest and
+signature for whichever release it's evaluating, and it never
+stages/activates/mutates anything beyond writing its own status file.
+
+Every outcome — no releases, only drafts, network failure, oversized or
+malformed response, a candidate whose signature/channel/device/version
+doesn't check out — is caught and reported as a status field rather than a
+process failure, so `check` always exits `0`. Result:
+`/data/sovereign/update-check.json` (world-readable, `0644`, matching
+`update-status.json`'s own placement directly under `/data/sovereign`),
+and the same content surfaces in `sovereign-update status` as
+`update_check`.
+
+Runs automatically once a day (jittered, catches up on a missed run) via
+`sovereign-update-check.timer`/`.service`, same hardened-sandbox shape as
+the prune timer.
+
+**What this deliberately does not do:** download or install anything
+automatically (see RFC-0015's Non-Goals — the milestone's stated policy is
+notify and require approval), or add any Console surface (blocked on
+Console gaining an authentication story, per
+[ADR-0005](../docs/adrs/0005-sovereign-console-and-health-boundary.md)).
+It also has nothing real to find yet — no non-draft release has ever
+actually been published for this project, so every hardware check so far
+has correctly reported `up_to_date` against live GitHub, not because the
+mechanism doesn't work, but because there is genuinely nothing to
+discover. The positive "here's a real signed update" path is covered by
+11 unit tests against a local HTTP server fixture, not yet observed
+against a real published release.
+
 ## Backup and Journal v1
 
 The [backup and transaction journal contract](BACKUP_AND_JOURNAL.md) defines

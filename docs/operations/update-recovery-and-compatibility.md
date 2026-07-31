@@ -26,8 +26,11 @@ Be clear-eyed about the current state before relying on this:
   you can install today is signed with an ephemeral engineering key you (or
   someone you trust) generated yourself for that purpose — the trust store
   ships empty by design.
-- There is **no Console button or automatic checker** yet. Every update,
-  backup, restore, and prune action is a command you run yourself over SSH.
+- There is **no Console button** yet — installing, backing up, restoring,
+  and pruning are still commands you run yourself over SSH. `sovereign-update
+  check` *does* run automatically once a day now (see below) and will tell
+  you if a compatible update exists, but nothing downloads or installs
+  itself; you still trigger `prepare`/`backup`/`stage`/`activate` by hand.
 - Everything here applies to the **preview channel** on **Raspberry Pi 5**
   only. Nothing about a `stable` channel or other hardware is implied.
 
@@ -50,6 +53,29 @@ In practice, this means updates are qualified and intended to be applied
 and are several versions behind, expect to need an intermediate update
 rather than a single jump, until a broader compatibility range has been
 qualified.
+
+## Learning about updates
+
+You don't have to already know a new version exists. `sovereign-update
+check` runs automatically once a day (with some random jitter, and it
+catches up on the next boot if the device was off at the scheduled time)
+and reports what it found:
+
+```bash
+sudo sovereign-update check
+sudo sovereign-update status   # includes the last check result as "update_check"
+```
+
+It only ever *looks* — it verifies any candidate release through the same
+signature/compatibility check `prepare` uses, and reports `up_to_date`,
+`update_available` (with the version and release-notes URL), or
+`check_failed` (network trouble, nothing to worry about — it tries again
+next scheduled run). It never downloads the update bundle itself, and
+never starts an update on its own; you still decide when to run
+`prepare`/`backup`/`stage`/`activate`. See
+[RFC-0015](../rfcs/0015-update-discovery.md) and
+[update/README.md](../../update/README.md)'s "Update Discovery v1"
+section for the full design.
 
 ## What an update actually does to your device
 

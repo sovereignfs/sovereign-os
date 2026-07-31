@@ -135,9 +135,12 @@ Planned work:
 
 ### 3. Update Discovery and Console Controls
 
-**Status:** ⚪ Planned
+**Status:** 🟡 In progress
 
-**Depends on:** Production Update Operations
+**Depends on:** Production Update Operations for the Console-facing and
+installation-triggering bullets below; the device-side check-and-notify
+bullet was deliberately scoped in RFC-0015 to not depend on it (no
+Console change, no production key) and has already started.
 
 **User outcome:** Learn about and install `x+1` from Sovereign Console without
 using the command line or reflashing.
@@ -146,9 +149,17 @@ Planned work:
 
 - publish signed update-channel metadata over HTTPS, and periodically check
   for compatible updates without sending household data — accepted in
-  [RFC-0015](docs/rfcs/0015-update-discovery.md), deliberately scoped to
-  device-side check-and-notify only, with no Console change and no
-  production key required; implementation in progress;
+  [RFC-0015](docs/rfcs/0015-update-discovery.md) and implemented as
+  `sovereign-update check`, reusing the existing signed-manifest
+  verification unchanged, with no new trust logic, no Console change, and
+  no production key required. Runs daily via
+  `sovereign-update-check.timer`, hardware-verified on Raspberry Pi 5
+  against the real live GitHub API (correctly reports `up_to_date`, since
+  no non-draft release has ever actually been published for this project
+  yet — see [update/README.md](update/README.md)'s "Update Discovery v1"
+  section). The positive "update found" path is covered by unit tests
+  against a local server fixture, not yet observed against a real
+  published release;
 - show version, channel, release notes, download size, reboot requirements, and
   rollback limitations in Console;
 - provide user-triggered download and installation;
@@ -233,8 +244,8 @@ This milestone closes the remaining “flash once” gap.
   demonstrated on Raspberry Pi 5
 - ✅ Fully versioned appliance-release qualification (preview.11 to
   preview.12), including readiness hardening
-- ⚪ Persistent restore automation, retention, and production signing operations
-- ⚪ Update discovery and Sovereign Console update controls
+- 🟡 Persistent restore automation, retention, and production signing operations
+- 🟡 Update discovery and Sovereign Console update controls
 - ⏳ Local inference benchmark and conversation/capability RFCs
 - ⚪ SearXNG-backed web-search capability
 - ⚪ Home Assistant capability integration
