@@ -172,7 +172,8 @@ Commands that mutate state require appropriate administrator privilege. The upda
 
 - Manifest schema defined: v1 JSON Schema and example committed
 - Signing and verification format defined: detached Ed25519 over exact bytes;
-  production key custody remains pending
+  production key custody decided ([ADR-0006](../adrs/0006-production-signing-key-custody.md))
+  and the key generated
 - Compatibility and version rules defined
 - Test signing key workflow established without exposing production keys
 
@@ -182,8 +183,8 @@ Implementation and real-device restore validation remain part of U2-U5.
 **Implementation status:** The installed `sovereign-update inspect` verifier
 now enforces exact-byte Ed25519 signatures, local key/channel/revocation trust,
 manifest structure, compatibility, downgrade, free-space, and bundle digest
-rules without mutating the appliance. Production preview-key provisioning is
-still blocked on the documented key-custody decision.
+rules without mutating the appliance. The production key is now generated
+and its public half provisioned into the image-builder trust store.
 
 Authenticated local inputs can also be durably prepared under an exclusive
 lock. The updater records atomic, fsynced transaction snapshots and append-only
@@ -249,7 +250,10 @@ release as `sovereign-update rotate-trust` (see
 also unit-tested, not yet hardware-qualified. None of restore, prune, or
 rotate-trust have shipped through a real signed release yet — all three
 were manually deployed for their respective qualification/development
-sessions — and the production signing key itself has not been generated.
+sessions. The production signing key (`sovereign-production-1`, scoped to
+both channels) has since been generated under the ADR-0006 custody
+decision and its public half baked into the image-builder trust store,
+but no real release has been signed with it yet.
 
 Repeatable hardware qualification tooling is also implemented: exact-byte
 offline kit preparation, explicitly armed interruption hooks at the durable

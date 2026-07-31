@@ -96,6 +96,22 @@ path** rather than a required starting point.
   into the trust chain, which the project owner weighed against the
   project's self-hosted values as described in the Options section below.
 
+## Key Generated
+
+**2026-07-31.** The production key exists: `sovereign-production-1`,
+Ed25519, scoped to both `preview` and `stable` channels (one key, both
+channels — chosen over separate per-channel keys for simplicity at
+solo-maintainer scale; splitting later via `rotate-trust` needs no code
+change). The private key was generated locally and is held as an
+encrypted secret in the maintainer's password manager per the Decision
+above; it was never committed to this repository. The public half
+(`sovereign-production-1.pem`/`.json`) is now baked into
+`image-builder/sovereign/layer/sovereign-proof.rootfs-overlay/etc/sovereign/update-trust.d/`,
+so future base images trust it out of the box instead of shipping an
+empty trust store. No real release has been signed with it yet — that is
+the next step once a release is ready to leave engineering-candidate
+status.
+
 ## Options
 
 ### Option A — Offline, air-gapped signing device

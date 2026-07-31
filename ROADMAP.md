@@ -122,7 +122,12 @@ Planned work:
   realistic single-key rotation handoff, immediate enforcement of
   revocation, and the lockout protection (see the
   [prune and trust rotation qualification report](docs/research/prune-and-rotate-trust-hardware-qualification-report.md)).
-  The production key itself has not yet been generated, and getting a
+  The production key (`sovereign-production-1`, Ed25519, scoped to both
+  `preview` and `stable`) has now been generated under that custody
+  decision and its public half is baked into the image-builder overlay's
+  trust store, so future base images trust it out of the box; the private
+  half lives only as an encrypted secret in the maintainer's password
+  manager. No real release has been signed with it yet. Getting a
   rotation manifest onto already-flashed devices without an operator
   manually running the command still depends on the Update Discovery work
   in item 3 below;

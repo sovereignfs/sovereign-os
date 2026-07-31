@@ -21,11 +21,12 @@ Raspberry Pi 5.
 
 Be clear-eyed about the current state before relying on this:
 
-- There is **no production signing key yet** (see
-  [ADR-0006](../adrs/0006-production-signing-key-custody.md)). Every update
-  you can install today is signed with an ephemeral engineering key you (or
-  someone you trust) generated yourself for that purpose — the trust store
-  ships empty by design.
+- A **production signing key exists** (`sovereign-production-1`, see
+  [ADR-0006](../adrs/0006-production-signing-key-custody.md)) and its public
+  half now ships baked into the image trust store, but **no real release
+  has been signed with it yet**. Every update you can install today is
+  still signed with an ephemeral engineering key you (or someone you
+  trust) generated yourself for that purpose.
 - There is **no Console button** yet — installing, backing up, restoring,
   and pruning are still commands you run yourself over SSH. `sovereign-update
   check` *does* run automatically once a day now (see below) and will tell

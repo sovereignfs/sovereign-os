@@ -5,12 +5,13 @@ Each key uses two files with the same safe key identifier:
   <key-id>.pem   Ed25519 public key in PEM SubjectPublicKeyInfo format
   <key-id>.json  trusted metadata with algorithm, channels, and revoked status
 
-No preview key is installed until a production key is generated under the
-custody decided in ADR-0006 (see docs/adrs/0006-production-signing-key-custody.md
-in the source repository). An empty trust store fails closed and prevents
-update installation.
+`sovereign-production-1` is the production key generated under the custody
+decided in ADR-0006 (see docs/adrs/0006-production-signing-key-custody.md
+in the source repository): an Ed25519 keypair whose private half is held
+as an encrypted secret in the maintainer's password manager, never
+committed to this repository or baked into any image. It is trusted for
+both the `preview` and `stable` channels.
 
-Once a key exists and this directory is no longer empty, routine rotation
-does not require manually copying files here again: `sovereign-update
-rotate-trust` applies signed rotation manifests (see
+Routine rotation does not require manually copying files here again:
+`sovereign-update rotate-trust` applies signed rotation manifests (see
 update/README.md's "Trust Rotation v1" section in the source repository).

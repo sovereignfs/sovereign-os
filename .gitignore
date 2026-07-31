@@ -11,6 +11,7 @@
 .env.*
 !.env.example
 *.pem
+!image-builder/sovereign/layer/sovereign-proof.rootfs-overlay/etc/sovereign/update-trust.d/*.pem
 *.key
 *.p12
 *.pfx
