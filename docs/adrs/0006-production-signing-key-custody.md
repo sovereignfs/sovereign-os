@@ -108,9 +108,16 @@ above; it was never committed to this repository. The public half
 (`sovereign-production-1.pem`/`.json`) is now baked into
 `image-builder/sovereign/layer/sovereign-proof.rootfs-overlay/etc/sovereign/update-trust.d/`,
 so future base images trust it out of the box instead of shipping an
-empty trust store. No real release has been signed with it yet — that is
-the next step once a release is ready to leave engineering-candidate
-status.
+empty trust store.
+
+**2026-07-31, same day.** `v0.1.0-preview.17` became the first release
+signed with this key: built via the normal workflow, signed offline by
+the maintainer (private key never handled by the assistant), and
+verified end-to-end by `sovereign-update check` against the real GitHub
+API on physical Raspberry Pi 5 hardware — see the
+[first production-signed release qualification report](../research/first-production-signed-release-qualification-report.md).
+It has not yet been installed through `prepare`/`stage`/`activate` on any
+device.
 
 ## Options
 

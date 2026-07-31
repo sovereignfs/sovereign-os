@@ -23,10 +23,12 @@ Be clear-eyed about the current state before relying on this:
 
 - A **production signing key exists** (`sovereign-production-1`, see
   [ADR-0006](../adrs/0006-production-signing-key-custody.md)) and its public
-  half now ships baked into the image trust store, but **no real release
-  has been signed with it yet**. Every update you can install today is
-  still signed with an ephemeral engineering key you (or someone you
-  trust) generated yourself for that purpose.
+  half now ships baked into the image trust store. `v0.1.0-preview.17` is
+  the first release signed with it and hardware-verified via
+  `sovereign-update check`, but it has not yet been *installed* on any
+  device through `prepare`/`stage`/`activate` — that path is still
+  exercised only with ephemeral engineering keys you (or someone you
+  trust) generate yourself.
 - There is **no Console button** yet — installing, backing up, restoring,
   and pruning are still commands you run yourself over SSH. `sovereign-update
   check` *does* run automatically once a day now (see below) and will tell

@@ -127,10 +127,15 @@ Planned work:
   decision and its public half is baked into the image-builder overlay's
   trust store, so future base images trust it out of the box; the private
   half lives only as an encrypted secret in the maintainer's password
-  manager. No real release has been signed with it yet. Getting a
-  rotation manifest onto already-flashed devices without an operator
-  manually running the command still depends on the Update Discovery work
-  in item 3 below;
+  manager. `v0.1.0-preview.17` is the first release signed with it,
+  published, and hardware-verified: `sovereign-update check` on a real
+  Raspberry Pi 5 running `0.1.0-preview.14` correctly discovered and
+  verified it under the real production key — see the
+  [first production-signed release qualification report](docs/research/first-production-signed-release-qualification-report.md).
+  It has not yet been *installed* through `prepare`/`stage`/`activate` on
+  any device. Getting a rotation manifest onto already-flashed devices
+  without an operator manually running the command still depends on the
+  Update Discovery work in item 3 below;
 - approve the update RFC and production manifest policy;
 - publish release compatibility, rollback limitations, and recovery
   guidance — published as
