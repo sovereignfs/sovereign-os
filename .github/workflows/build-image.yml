@@ -132,8 +132,20 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_VERSION: ${{ inputs.version }}
           RELEASE_CHANNEL: ${{ inputs.channel }}
+          BUILD_UPDATE_CANDIDATE: ${{ inputs.build_update_candidate }}
         run: |
-          gh release create "v${RELEASE_VERSION}" build/release/* \
+          assets=(build/release/*)
+          if [ "$BUILD_UPDATE_CANDIDATE" = "true" ]; then
+            # The update candidate's release-manifest.json is unsigned here —
+            # CI never holds the signing key. sovereign-update check only
+            # treats a release as a candidate once both release-manifest.json
+            # and release-manifest.sig are present, so this alone does not
+            # make the release discoverable; an operator still has to sign
+            # the manifest offline and upload the resulting .sig before
+            # publishing.
+            assets+=(build/update-release/*)
+          fi
+          gh release create "v${RELEASE_VERSION}" "${assets[@]}" \
             --draft \
             --target "$GITHUB_SHA" \
             --title "Sovereign OS ${RELEASE_VERSION} (${RELEASE_CHANNEL})" \

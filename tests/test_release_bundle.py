@@ -75,7 +75,7 @@ class ReleaseBundleTests(unittest.TestCase):
     def test_creates_versioned_bundle_and_checksums(self):
         MODULE.create_bundle(self.arguments())
 
-        manifest = json.loads((self.output / "release-manifest.json").read_text())
+        manifest = json.loads((self.output / "image-manifest.json").read_text())
         self.assertEqual(manifest["release"]["version"], "0.1.0")
         self.assertEqual(manifest["release"]["created"], "2023-11-14T22:13:20Z")
         self.assertEqual(manifest["components"]["packages"]["nginx"], "1.0")

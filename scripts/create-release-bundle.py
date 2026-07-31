@@ -182,7 +182,7 @@ def create_bundle(args):
             ],
         },
     }
-    manifest_path = output_dir / "release-manifest.json"
+    manifest_path = output_dir / "image-manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
     checksum_paths = sorted(output_dir.iterdir(), key=lambda path: path.name)

@@ -154,12 +154,18 @@ Planned work:
   verification unchanged, with no new trust logic, no Console change, and
   no production key required. Runs daily via
   `sovereign-update-check.timer`, hardware-verified on Raspberry Pi 5
-  against the real live GitHub API (correctly reports `up_to_date`, since
-  no non-draft release has ever actually been published for this project
-  yet — see [update/README.md](update/README.md)'s "Update Discovery v1"
-  section). The positive "update found" path is covered by unit tests
-  against a local server fixture, not yet observed against a real
-  published release;
+  against the real live GitHub API, including the positive "update found"
+  path against a genuinely published (non-draft) release — see
+  [update/README.md](update/README.md)'s "Update Discovery v1" section and
+  the
+  [positive-path qualification report](docs/research/update-discovery-positive-path-qualification-report.md).
+  That campaign also surfaced a real gap, now fixed: `build-image.yml`'s
+  release-publish step never uploaded the update-candidate manifest/bundle
+  at all, and its filename collided with the image's own provenance file
+  (now `image-manifest.json`). The workflow now conditionally uploads the
+  unsigned update-candidate assets when `build_update_candidate` is
+  selected; an operator still has to sign and upload the `.sig` offline
+  before a release becomes discoverable;
 - show version, channel, release notes, download size, reboot requirements, and
   rollback limitations in Console;
 - provide user-triggered download and installation;

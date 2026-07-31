@@ -47,19 +47,28 @@ download the much larger flashable-image artifact.
 ```text
 SHA256SUMS
 create-imager-manifest.py
-release-manifest.json
+image-manifest.json
 sovereign-os-<version>-rpi5-arm64.img.zst
 sovereign-os-<version>-rpi5-arm64.packages.tsv.zst
 sovereign-os-<version>-rpi5-arm64.provenance.json
 sovereign-os-<version>-rpi5-arm64.sbom.zst
 ```
 
+Named `image-manifest.json`, deliberately distinct from the signed update
+system's `release-manifest.json`/`release-manifest.sig`
+([RFC-0014](../rfcs/0014-appliance-update-system.md),
+[update/README.md](../../update/README.md)) — the two are unrelated
+documents with unrelated schemas, and earlier both being named
+`release-manifest.json` caused a real collision when both were attached to
+the same GitHub release (see the
+[update discovery positive-path qualification report](../research/update-discovery-positive-path-qualification-report.md)).
+
 The helper creates a local Raspberry Pi Imager catalog that enables Wi-Fi and
 SSH customization for this third-party image. Follow the
 [Imager provisioning guide](raspberry-pi-imager-provisioning.md); loading only
 the raw image through **Use custom** does not enable customization in Imager 2.
 
-`release-manifest.json` records:
+`image-manifest.json` records:
 
 - release version, channel, and source-derived timestamp;
 - source repository and full Git revision;
@@ -78,7 +87,17 @@ sha256sum --check SHA256SUMS
 
 ## Draft Publication
 
-When `publish_draft_release` is selected, the workflow creates `v<version>` as a draft GitHub release targeting the exact built commit and uploads the complete bundle. Draft status is mandatory at this stage: the artifact has not yet passed Raspberry Pi 5 qualification.
+When `publish_draft_release` is selected, the workflow creates `v<version>` as a draft GitHub release targeting the exact built commit and uploads the image bundle. Draft status is mandatory at this stage: the artifact has not yet passed Raspberry Pi 5 qualification.
+
+If `build_update_candidate` was also selected, the workflow additionally
+uploads the *unsigned* update-candidate `release-manifest.json` and its
+update bundle to the same draft release. CI never holds the signing key, so
+this alone does not make the release discoverable by
+`sovereign-update check` — that requires both `release-manifest.json` *and*
+`release-manifest.sig` to be present, and the signature only exists once an
+operator signs the manifest offline (`scripts/sign-update-manifest.py`,
+same as every other qualification in this project) and uploads the
+resulting `.sig` as an additional release asset before publishing.
 
 Before making a release public:
 

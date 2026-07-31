@@ -195,13 +195,21 @@ automatically (see RFC-0015's Non-Goals — the milestone's stated policy is
 notify and require approval), or add any Console surface (blocked on
 Console gaining an authentication story, per
 [ADR-0005](../docs/adrs/0005-sovereign-console-and-health-boundary.md)).
-It also has nothing real to find yet — no non-draft release has ever
-actually been published for this project, so every hardware check so far
-has correctly reported `up_to_date` against live GitHub, not because the
-mechanism doesn't work, but because there is genuinely nothing to
-discover. The positive "here's a real signed update" path is covered by
-11 unit tests against a local HTTP server fixture, not yet observed
-against a real published release.
+
+Both the negative and positive discovery paths are now hardware-verified
+against real, live GitHub data — see the
+[positive-path qualification report](../docs/research/update-discovery-positive-path-qualification-report.md).
+That campaign also found a real bug, now fixed:
+`.github/workflows/build-image.yml`'s release-publish step never uploaded
+the update-candidate manifest/bundle at all (only the image's own build
+artifacts), and its `release-manifest.json` filename collided with the
+image's own differently-schemaed provenance file of the same name (now
+`image-manifest.json`, see
+[Bundle Contents](../docs/operations/image-build-and-release.md#bundle-contents)).
+The workflow now conditionally uploads the unsigned update-candidate
+assets alongside the image bundle when `build_update_candidate` is
+selected; an operator still has to sign the manifest offline and upload
+the resulting `.sig` before a release becomes discoverable by `check`.
 
 ## Backup and Journal v1
 
