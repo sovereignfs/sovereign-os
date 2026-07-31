@@ -29,6 +29,7 @@ This directory contains the planning, design, research, and operational record f
 - [Preview.14 appliance update qualification](research/preview-14-appliance-update-qualification-report.md): first update-transaction campaign run against a real base image that shipped restore/prune/rotate-trust natively, rather than a manually patched device.
 - [Prune and trust rotation hardware qualification](research/prune-and-rotate-trust-hardware-qualification-report.md): `sovereign-update prune` and `rotate-trust` qualified against real on-device backups, releases, transactions, and a real signed single-key rotation handoff.
 - [Versioned appliance update qualification](operations/versioned-appliance-update-qualification.md): hardware procedure for versioned Console, routing, Compose, lifecycle, and health payloads.
+- [Update compatibility, rollback limitations, and recovery](operations/update-recovery-and-compatibility.md): plain-language guidance for a device owner — supported update paths, what rollback does and doesn't restore, and what to do if something goes wrong.
 
 ## Documentation Areas
 

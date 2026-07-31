@@ -102,8 +102,16 @@ It prunes three things in one pass:
   never a transaction still awaiting manual `recovery_required` resolution —
   and only beyond the configured `keep_count`/`keep_days`.
 
-`--dry-run` reports what would be removed without deleting anything. Not yet
-wired into a periodic timer; it is an operator-invoked command today.
+`--dry-run` reports what would be removed without deleting anything. It also
+runs automatically once a day, with up to an hour of random jitter, via
+`sovereign-update-prune.timer` / `.service` (`Persistent=true`, so a missed
+run catches up on next boot rather than waiting for the next scheduled
+time). Hardware-verified on Raspberry Pi 5: `systemd-analyze verify` passed,
+`systemctl list-timers` scheduled it correctly, and a manual `systemctl
+start` of the service ran successfully end to end under its own hardening
+(`ProtectSystem=full`, `ReadWritePaths`, `NoNewPrivileges`) rather than an
+unrestricted shell. An actual unattended timer-elapsed run has not been
+separately observed.
 
 **Status:** Implemented (`sovereign-update restore <backup-id> [--force]` and
 `sovereign-update discard-restore <restore-id>`) and hardware-qualified

@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodically prune Sovereign backups, releases, and transaction journals
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

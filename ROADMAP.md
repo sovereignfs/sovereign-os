@@ -106,9 +106,12 @@ Planned work:
   and transaction journals, including confirming the live device stays
   healthy through an aggressive real deletion pass (see
   [BACKUP_AND_JOURNAL.md](update/BACKUP_AND_JOURNAL.md) and the
-  [prune and trust rotation qualification report](docs/research/prune-and-rotate-trust-hardware-qualification-report.md));
-  not yet shipped through a release beyond qualification, or wired into a
-  periodic timer;
+  [prune and trust rotation qualification report](docs/research/prune-and-rotate-trust-hardware-qualification-report.md)).
+  Now wired into a daily `sovereign-update-prune.timer` (jittered, catches
+  up on boot if a run was missed), hardware-verified running under its own
+  hardened sandbox on Raspberry Pi 5; not yet shipped through a release
+  beyond qualification, and an actual unattended timer-elapsed run has not
+  been separately observed;
 - establish production signing-key custody, rotation, and revocation —
   decided in [ADR-0006](docs/adrs/0006-production-signing-key-custody.md)
   (password-manager-held key, hardware key as a future upgrade). Routine
@@ -124,8 +127,10 @@ Planned work:
   manually running the command still depends on the Update Discovery work
   in item 3 below;
 - approve the update RFC and production manifest policy;
-- publish release compatibility, rollback limitations, and recovery guidance;
-  and
+- publish release compatibility, rollback limitations, and recovery
+  guidance — published as
+  [docs/operations/update-recovery-and-compatibility.md](docs/operations/update-recovery-and-compatibility.md),
+  written for the device operator rather than a contributor; and
 - qualify every supported source-to-target update path on real hardware.
 
 ### 3. Update Discovery and Console Controls

@@ -1,0 +1,16 @@
+[Unit]
+Description=Prune Sovereign backups, releases, and transaction journals beyond retention policy
+RequiresMountsFor=/data
+After=sovereign-data-expand.service sovereign-proof.service
+ConditionPathIsMountPoint=/data
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/sovereign-update prune
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=full
+ReadWritePaths=/data/sovereign/backups /data/sovereign/update-state /opt/sovereign/releases
+CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_FOWNER
+UMask=0077

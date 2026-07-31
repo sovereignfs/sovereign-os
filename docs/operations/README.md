@@ -11,11 +11,11 @@ Operational guides will be written alongside the preview implementation and veri
 - [Appliance update release checklist](appliance-update-checklist.md)
 - [Combined Console and update qualification](combined-console-update-qualification.md)
 - [Versioned appliance update qualification](versioned-appliance-update-qualification.md)
+- [Update compatibility, rollback limitations, and recovery](update-recovery-and-compatibility.md)
 - Development and image-build environment
 - Stable-IP and router DNS configuration
 - Service lifecycle and reboot behavior
 - Troubleshooting and diagnostics
-- Recovery and reflash procedure
 - Known limitations
 
 Commands must be tested against the documented OS and release before publication.
