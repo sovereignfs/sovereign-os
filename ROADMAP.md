@@ -39,9 +39,18 @@ built and flashed with all three shipped in for the first time — see the
 [preview.14 appliance update qualification report](docs/research/preview-14-appliance-update-qualification-report.md)
 and the
 [prune and trust rotation hardware qualification report](docs/research/prune-and-rotate-trust-hardware-qualification-report.md).
-Production signing-key custody is decided (ADR-0006) but the production
-key has not yet been generated, and none of these three commands have
-shipped through a release used by anyone beyond this qualification work.
+Production signing-key custody is decided (ADR-0006), and the production
+key (`sovereign-production-1`) is now generated, provisioned into the
+image-builder trust store, and proven end-to-end: `v0.1.0-preview.17` is
+a real production-signed release that has been built, published,
+discovered, installed, and restored from on Raspberry Pi 5 hardware —
+see the
+[first production-signed release](docs/research/first-production-signed-release-qualification-report.md),
+[install](docs/research/first-production-signed-release-install-qualification-report.md),
+and
+[restore](docs/research/production-signed-restore-qualification-report.md)
+qualification reports. `prune` and `rotate-trust` have not yet been
+exercised as part of a real signed-release install cycle.
 
 Unattended automatic installation remains disabled until the manual,
 health-gated update path and its operational controls are qualified.
