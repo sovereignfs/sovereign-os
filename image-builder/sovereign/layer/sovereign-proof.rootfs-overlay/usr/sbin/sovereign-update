@@ -2143,12 +2143,14 @@ def check_updates(_args):
 def show_status(_args):
     policy = read_json(POLICY_PATH, "INVALID_POLICY")
     latest = read_json(UPDATE_STATUS_PATH) if UPDATE_STATUS_PATH.is_file() else None
+    check = read_json(UPDATE_CHECK_STATUS_PATH) if UPDATE_CHECK_STATUS_PATH.is_file() else None
     result = {
         "installed_version": read_release_version(),
         "channel": policy.get("channel"),
         "device": policy.get("device"),
         "update_state": latest["state"] if latest else "idle",
         "target_version": latest["target_version"] if latest else None,
+        "update_check": check,
     }
     print(json.dumps(result, sort_keys=True))
 

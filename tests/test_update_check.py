@@ -313,6 +313,27 @@ class UpdateCheckTests(unittest.TestCase):
         self.assertEqual("check_failed", status["status"])
         self.assertEqual("UPDATE_CHECK_NETWORK_FAILED", status["error"])
 
+    def test_status_reflects_check_result(self):
+        completed = subprocess.run(
+            [str(CLIENT), "status"], env=self.environment(), capture_output=True, text=True
+        )
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertIsNone(json.loads(completed.stdout)["update_check"])
+
+        manifest, signature = self.sign_manifest(self.make_manifest("0.1.0-preview.15"))
+        release = self.add_release("0.1.0-preview.15", manifest=manifest, signature=signature)
+        self.server.set_route("/releases", json.dumps([release]).encode())
+        checked = self.run_check()
+        self.assertEqual(0, checked.returncode, checked.stderr)
+
+        completed = subprocess.run(
+            [str(CLIENT), "status"], env=self.environment(), capture_output=True, text=True
+        )
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        status = json.loads(completed.stdout)
+        self.assertEqual("update_available", status["update_check"]["status"])
+        self.assertEqual("0.1.0-preview.15", status["update_check"]["available_version"])
+
     def test_check_requires_root(self):
         environment = self.environment() | {"SOVEREIGN_UPDATE_TEST_MODE": "0"}
         completed = subprocess.run(
