@@ -128,13 +128,24 @@ Planned work:
   trust store, so future base images trust it out of the box; the private
   half lives only as an encrypted secret in the maintainer's password
   manager. `v0.1.0-preview.17` is the first release signed with it,
-  published, and hardware-verified: `sovereign-update check` on a real
-  Raspberry Pi 5 running `0.1.0-preview.14` correctly discovered and
-  verified it under the real production key — see the
-  [first production-signed release qualification report](docs/research/first-production-signed-release-qualification-report.md).
-  It has not yet been *installed* through `prepare`/`stage`/`activate` on
-  any device. Getting a rotation manifest onto already-flashed devices
-  without an operator manually running the command still depends on the
+  published, discovered, and — as of a full `prepare`/`backup`/`stage`/
+  `activate` run on the same Raspberry Pi 5 — genuinely **installed**:
+  the device now runs `0.1.0-preview.17`, `update_state: committed`,
+  confirmed across a cold reboot. See the
+  [discovery](docs/research/first-production-signed-release-qualification-report.md)
+  and
+  [install](docs/research/first-production-signed-release-install-qualification-report.md)
+  qualification reports. That install campaign also found and fixed a
+  real regression: `sovereign-proof.service` failing on any boot after
+  `prune` removes the base image's own (now-inactive) release directory
+  — `proof-init` now only performs that check during first-boot
+  bootstrap. `restore`/`prune`/`rotate-trust` still haven't been
+  exercised as part of an actual signed-release install (only
+  `prepare`/`backup`/`stage`/`activate` have, since `.17` shares its
+  source with `.14` — no migration, retention pass, or trust rotation was
+  part of this transaction). Getting a rotation manifest onto
+  already-flashed devices without an operator manually running the
+  command still depends on the
   Update Discovery work in item 3 below;
 - approve the update RFC and production manifest policy;
 - publish release compatibility, rollback limitations, and recovery

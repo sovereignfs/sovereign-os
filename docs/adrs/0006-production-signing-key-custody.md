@@ -116,8 +116,15 @@ the maintainer (private key never handled by the assistant), and
 verified end-to-end by `sovereign-update check` against the real GitHub
 API on physical Raspberry Pi 5 hardware — see the
 [first production-signed release qualification report](../research/first-production-signed-release-qualification-report.md).
-It has not yet been installed through `prepare`/`stage`/`activate` on any
-device.
+
+**2026-07-31, later the same day.** `v0.1.0-preview.17` was then
+genuinely *installed* on that same device via a full
+`prepare`/`backup`/`stage`/`activate` transaction, confirmed committed
+across a reboot — see the
+[install qualification report](../research/first-production-signed-release-install-qualification-report.md),
+which also documents a real `sovereign-proof.service` regression found
+and fixed along the way. `restore`, `prune`, and `rotate-trust` still
+haven't been exercised as part of an actual signed-release install.
 
 ## Options
 
