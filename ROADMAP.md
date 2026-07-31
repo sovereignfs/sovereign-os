@@ -206,10 +206,14 @@ Planned work:
   Console-specific credential (`sovereign-console-password`), a
   loopback-only, systemd-hardened login backend (`sovereign-console-auth`,
   `/api/v1/auth/*`), session cookies with CSRF protection, and per-source
-  rate limiting without lockout. Unit-tested
-  (`tests/test_console_auth.py`); not yet hardware-qualified, not yet wired
-  into any Console frontend UI, and nothing mutating exists yet for it to
-  gate — see the ADR's own "Explicitly not yet done" section;
+  rate limiting without lockout, with a sign-in UI wired into Console's
+  topbar. Unit-tested (`tests/test_console_auth.py`) and
+  hardware-qualified on Raspberry Pi 5 — see the
+  [console authentication hardware qualification report](docs/research/console-authentication-hardware-qualification-report.md).
+  Nothing mutating exists yet for it to gate, and it has only ever been
+  deployed manually for qualification, never shipped through a real
+  signed release install — see the ADR's own "Explicitly not yet done"
+  section;
 - show version, channel, release notes, download size, reboot requirements, and
   rollback limitations in Console;
 - provide user-triggered download and installation;

@@ -166,21 +166,29 @@ Implemented as:
   to the credential file without widening the existing, separately-owned
   `/data/sovereign/secrets/` directory Pi-hole's own credential lives under.
 
+A Console sign-in UI (login form, session restore on page load, sign-out)
+now calls this backend from the topbar, always through same-origin `fetch`
+with `preventDefault()`, respecting the page's `form-action 'none'` CSP.
+
+Hardware-qualified on Raspberry Pi 5: the full login/session/CSRF/logout/
+rate-limiting flow, and the interactive `sovereign-console-password` script
+under a real pty, both verified against the real deployed service behind
+the real Nginx proxy, with the device fully reverted to its exact prior
+state (all four modified files restored byte-identical from the real
+`v0.1.0-preview.17` release bundle) afterward — see the
+[hardware qualification report](../research/console-authentication-hardware-qualification-report.md).
+
 **Explicitly not yet done, and deliberately out of this pass's scope** per
 this ADR's own boundary ("this ADR addresses who's allowed to ask, not how
 the ask reaches root"):
 
-- No Console frontend login UI exists yet — the backend and credential
-  mechanism are complete and tested, but nothing in Console's static page
-  calls `/api/v1/auth/*` yet.
 - No mutating action exists yet for this auth layer to gate — Console
   remains read-only in practice until the "Update Discovery and Console
   Controls" milestone wires an actual `sovereign-update` action behind it,
   which needs its own follow-up design work for the privilege-escalation
   path from this unprivileged backend to a root update action.
-- Not yet hardware-qualified on Raspberry Pi 5 — verified so far only by
-  unit tests (`tests/test_console_auth.py`) against a live local instance
-  of the same server code.
+- Has only ever been deployed manually for qualification — has not yet
+  shipped through an actual signed release install.
 
 ## Options
 
