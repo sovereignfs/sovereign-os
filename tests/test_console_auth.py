@@ -124,7 +124,7 @@ class AuthEndpointTests(unittest.TestCase):
 
     def test_session_endpoint_reflects_cookie_state(self):
         self.live.set_password("correct horse battery staple")
-        _, login_body = self._login("correct horse battery staple")
+        login_response, login_body = self._login("correct horse battery staple")
 
         connection = self.live.connection()
         connection.request("GET", "/api/v1/auth/session")
@@ -134,6 +134,20 @@ class AuthEndpointTests(unittest.TestCase):
         self.assertFalse(anonymous_body["authenticated"])
 
         self.assertIn("csrf_token", login_body)
+
+    def test_session_endpoint_returns_csrf_token_for_a_reloaded_page(self):
+        self.live.set_password("correct horse battery staple")
+        login_response, login_body = self._login("correct horse battery staple")
+        cookie = login_response.getheader("Set-Cookie").split(";")[0]
+
+        connection = self.live.connection()
+        connection.request("GET", "/api/v1/auth/session", headers={"Cookie": cookie})
+        response = connection.getresponse()
+        body = json.loads(response.read())
+        connection.close()
+
+        self.assertTrue(body["authenticated"])
+        self.assertEqual(login_body["csrf_token"], body["csrf_token"])
 
     def test_logout_requires_matching_csrf_token(self):
         self.live.set_password("correct horse battery staple")

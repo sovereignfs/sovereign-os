@@ -154,8 +154,36 @@ class ConsoleTests(unittest.TestCase):
         self.assertNotIn("innerhtml", javascript.lower())
         self.assertNotIn("https://", combined)
         self.assertNotIn("http://", combined)
-        for forbidden in ("password", "secret", "query history"):
+        for forbidden in ("secret", "query history"):
             self.assertNotIn(forbidden, combined)
+        # "password" itself is now legitimate as sign-in UI copy (see
+        # test_console_auth.py), but no literal credential value should ever
+        # be baked into the static bundle: the password input must stay
+        # empty in markup and only ever be populated by the person typing
+        # into it.
+        self.assertIn('id="auth-credential"', html)
+        self.assertIn('type="password"', html)
+        self.assertNotRegex(html, r'id="auth-credential"[^>]*value="[^"]')
+        self.assertIn("autocomplete=\"current-password\"", html)
+
+    def test_console_auth_ui_respects_the_page_csp(self):
+        javascript = JAVASCRIPT.read_text()
+        html = HTML.read_text()
+
+        # Content-Security-Policy on this page sets form-action 'none'
+        # (see NGINX.read_text()); the sign-in form must never be allowed to
+        # fall back to a native browser submission, only a same-origin
+        # fetch() call after preventDefault().
+        self.assertNotIn(' action=', html)
+        self.assertIn('addEventListener("submit"', javascript)
+        self.assertIn("event.preventDefault()", javascript)
+        self.assertIn('fetch("/api/v1/auth/login"', javascript)
+        self.assertIn('fetch("/api/v1/auth/logout"', javascript)
+        self.assertIn('fetch("/api/v1/auth/session"', javascript)
+        self.assertIn('credentials: "same-origin"', javascript)
+        self.assertIn("X-CSRF-Token", javascript)
+        self.assertNotIn("onclick=", html.lower())
+        self.assertNotIn("onsubmit=", html.lower())
 
 
 if __name__ == "__main__":

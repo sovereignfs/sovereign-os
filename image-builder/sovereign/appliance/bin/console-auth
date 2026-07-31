@@ -283,7 +283,11 @@ class AuthHandler(BaseHTTPRequestHandler):
             return
         self._send_json(
             200,
-            {"authenticated": True, "expires_at": _isoformat(session["expires_at"])},
+            {
+                "authenticated": True,
+                "csrf_token": session["csrf_token"],
+                "expires_at": _isoformat(session["expires_at"]),
+            },
         )
 
     def log_message(self, format_string, *arguments):

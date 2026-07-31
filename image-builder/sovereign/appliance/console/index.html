@@ -21,6 +21,16 @@
       <nav aria-label="Console navigation">
         <a class="active" href="/console/health/">Health</a>
       </nav>
+      <div class="auth-panel" id="auth-panel">
+        <button id="auth-toggle" type="button" aria-expanded="false" aria-controls="auth-form">Sign in</button>
+        <button id="auth-signout" type="button" hidden>Sign out</button>
+        <form id="auth-form" class="auth-form" hidden>
+          <label for="auth-credential">Console credential</label>
+          <input id="auth-credential" name="password" type="password" autocomplete="current-password" required>
+          <button id="auth-submit" type="submit">Sign in</button>
+          <p id="auth-message" role="status" aria-live="polite"></p>
+        </form>
+      </div>
     </header>
 
     <main id="main">

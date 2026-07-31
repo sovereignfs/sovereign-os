@@ -121,3 +121,108 @@ async function loadHealth() {
 
 retry.addEventListener("click", loadHealth);
 loadHealth();
+
+let csrfToken = null;
+
+const authToggle = document.querySelector("#auth-toggle");
+const authSignout = document.querySelector("#auth-signout");
+const authForm = document.querySelector("#auth-form");
+const authCredential = document.querySelector("#auth-credential");
+const authSubmit = document.querySelector("#auth-submit");
+const authMessage = document.querySelector("#auth-message");
+
+function setAuthMessage(text, isError) {
+  authMessage.textContent = text;
+  authMessage.classList.toggle("error", Boolean(isError));
+}
+
+function showSignedIn() {
+  authToggle.hidden = true;
+  authForm.hidden = true;
+  authSignout.hidden = false;
+  setAuthMessage("");
+}
+
+function showSignedOut() {
+  csrfToken = null;
+  authToggle.hidden = false;
+  authForm.hidden = true;
+  authToggle.setAttribute("aria-expanded", "false");
+  authSignout.hidden = true;
+  setAuthMessage("");
+}
+
+async function loadSession() {
+  try {
+    const response = await fetch("/api/v1/auth/session", {cache: "no-store", credentials: "same-origin"});
+    if (!response.ok) return;
+    const data = await response.json();
+    if (data.authenticated) {
+      csrfToken = data.csrf_token;
+      showSignedIn();
+    }
+  } catch (error) {
+    // Console remains usable without a restored session; the sign-in
+    // affordance is still available.
+  }
+}
+
+authToggle.addEventListener("click", () => {
+  const expanded = authToggle.getAttribute("aria-expanded") === "true";
+  authToggle.setAttribute("aria-expanded", String(!expanded));
+  authForm.hidden = expanded;
+  if (!expanded) authCredential.focus();
+});
+
+authForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  authSubmit.disabled = true;
+  setAuthMessage("Signing in…");
+  try {
+    const response = await fetch("/api/v1/auth/login", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({password: authCredential.value}),
+    });
+    const data = await response.json();
+    authCredential.value = "";
+    if (response.ok && data.authenticated) {
+      csrfToken = data.csrf_token;
+      showSignedIn();
+      return;
+    }
+    if (response.status === 429) {
+      setAuthMessage("Too many attempts. Try again shortly.", true);
+    } else if (response.status === 503) {
+      setAuthMessage("No Console credential is set yet.", true);
+    } else {
+      setAuthMessage("Incorrect credential.", true);
+    }
+  } catch (error) {
+    setAuthMessage("Could not reach the device.", true);
+  } finally {
+    authSubmit.disabled = false;
+  }
+});
+
+authSignout.addEventListener("click", async () => {
+  authSignout.disabled = true;
+  try {
+    await fetch("/api/v1/auth/logout", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: csrfToken ? {"X-CSRF-Token": csrfToken} : {},
+    });
+  } catch (error) {
+    // Fall through to a signed-out UI regardless; the session cookie has
+    // either been cleared or was already invalid.
+  } finally {
+    authSignout.disabled = false;
+    showSignedOut();
+  }
+});
+
+loadSession();
