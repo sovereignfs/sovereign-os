@@ -144,6 +144,26 @@ class UpdateReleaseTests(unittest.TestCase):
         self.assertIn("sovereign-update-prune.timer", enablement)
         self.assertNotIn("sovereign-update-prune.service", enablement)
 
+    def test_check_timer_is_enabled_and_hardened(self):
+        overlay = ROOT / "image-builder/sovereign/layer/sovereign-proof.rootfs-overlay"
+        service = (overlay / "etc/systemd/system/sovereign-update-check.service").read_text()
+        timer = (overlay / "etc/systemd/system/sovereign-update-check.timer").read_text()
+        enablement = (
+            ROOT
+            / "image-builder/sovereign/image/sovereign-data/bdebstrap/customize90-sovereign"
+        ).read_text()
+        self.assertIn("ExecStart=/usr/sbin/sovereign-update check", service)
+        self.assertIn("ConditionPathIsMountPoint=/data", service)
+        self.assertIn("Wants=network-online.target", service)
+        self.assertIn("NoNewPrivileges=yes", service)
+        self.assertIn("ProtectHome=yes", service)
+        self.assertNotIn("[Install]", service)
+        self.assertIn("OnCalendar=", timer)
+        self.assertIn("Persistent=true", timer)
+        self.assertIn("WantedBy=timers.target", timer)
+        self.assertIn("sovereign-update-check.timer", enablement)
+        self.assertNotIn("sovereign-update-check.service", enablement)
+
     def test_workflow_packages_update_before_upload(self):
         workflow = (ROOT / ".github/workflows/build-image.yml").read_text()
         self.assertLess(
