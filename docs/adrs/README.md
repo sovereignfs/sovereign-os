@@ -12,4 +12,4 @@ Use the [ADR template](../templates/adr.md) and zero-padded sequential identifie
 - [ADR-0004: Provider-neutral assistant and web search](0004-provider-neutral-assistant-and-web-search.md) - Accepted
 - [ADR-0005: Sovereign Console namespace and health boundary](0005-sovereign-console-and-health-boundary.md) - Accepted
 - [ADR-0006: Production update signing-key custody](0006-production-signing-key-custody.md) - Accepted
-- [ADR-0007: Sovereign Console authentication](0007-console-authentication.md) - Proposed
+- [ADR-0007: Sovereign Console authentication](0007-console-authentication.md) - Accepted

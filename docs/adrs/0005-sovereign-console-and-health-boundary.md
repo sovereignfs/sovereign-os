@@ -36,6 +36,10 @@ Pi-hole is degraded and must not require broad root, systemd, or Docker access.
   history, unrestricted logs, or mutating operations.
 - Authentication is required before settings, restarts, updates, credential
   changes, detailed logs, or other state-changing operations are added.
+  Decided and implemented in
+  [ADR-0007](0007-console-authentication.md): a separate Console credential
+  delivered via session-based login. Not yet wired into any Console
+  frontend or mutating action — this boundary still holds until it is.
 
 ## Consequences
 

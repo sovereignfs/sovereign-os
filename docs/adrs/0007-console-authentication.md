@@ -1,6 +1,6 @@
 # ADR-0007: Sovereign Console Authentication
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-07-31
 **Decision owner:** Project creator
 **Related ADR:** [ADR-0005](0005-sovereign-console-and-health-boundary.md)
@@ -136,7 +136,51 @@ complexity toward "solid and standard," not maximal.
 
 ## Decision
 
-*(To be filled in by the project owner.)*
+The project owner accepted the Initial Recommendation below: **Option B
+(separate Console-specific credential) delivered as Option C (session-based
+login)**, with Option D (mTLS) left open as a future defense-in-depth layer
+rather than a starting requirement.
+
+Implemented as:
+
+- A distinct credential, `pbkdf2_sha256`-hashed (600,000 iterations, stdlib
+  `hashlib.pbkdf2_hmac`, no external dependency) at
+  `/data/sovereign/console/admin-password.hash`, set via a new
+  `sovereign-console-password` command mirroring `sovereign-pihole-password`'s
+  interactive, minimum-12-character, atomic-replace pattern.
+- A new loopback-only, systemd-hardened backend, `console-auth`
+  (`sovereign-console-auth.service`, port 8091), proxied by Nginx at
+  `/api/v1/auth/login`, `/api/v1/auth/logout`, and `/api/v1/auth/session` —
+  the same shape as the existing `console-health` service.
+- Session-based login: an `HttpOnly`, `SameSite=Strict` cookie (no `Secure`
+  attribute, since Nginx has no TLS listener to protect against — see the
+  service's own comment on this), an 8-hour default session lifetime, and a
+  CSRF token returned at login and required via `X-CSRF-Token` on mutating
+  requests (currently just `logout`).
+- Rate limiting without lockout, per the Session Length and Brute-Force
+  Considerations above: 5 failed attempts per source IP within 5 minutes
+  triggers an increasing `Retry-After` delay rather than blocking the
+  legitimate owner out.
+- A dedicated `sovereign-console` system group (declared via
+  `systemd-sysusers.d`) grants the auth service's `DynamicUser` read access
+  to the credential file without widening the existing, separately-owned
+  `/data/sovereign/secrets/` directory Pi-hole's own credential lives under.
+
+**Explicitly not yet done, and deliberately out of this pass's scope** per
+this ADR's own boundary ("this ADR addresses who's allowed to ask, not how
+the ask reaches root"):
+
+- No Console frontend login UI exists yet — the backend and credential
+  mechanism are complete and tested, but nothing in Console's static page
+  calls `/api/v1/auth/*` yet.
+- No mutating action exists yet for this auth layer to gate — Console
+  remains read-only in practice until the "Update Discovery and Console
+  Controls" milestone wires an actual `sovereign-update` action behind it,
+  which needs its own follow-up design work for the privilege-escalation
+  path from this unprivileged backend to a root update action.
+- Not yet hardware-qualified on Raspberry Pi 5 — verified so far only by
+  unit tests (`tests/test_console_auth.py`) against a live local instance
+  of the same server code.
 
 ## Options
 

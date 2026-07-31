@@ -200,6 +200,16 @@ Planned work:
   unsigned update-candidate assets when `build_update_candidate` is
   selected; an operator still has to sign and upload the `.sig` offline
   before a release becomes discoverable;
+- **Console authentication** — the prerequisite ADR-0005 itself named before
+  any mutating Console action can exist. Decided and implemented in
+  [ADR-0007](docs/adrs/0007-console-authentication.md): a separate
+  Console-specific credential (`sovereign-console-password`), a
+  loopback-only, systemd-hardened login backend (`sovereign-console-auth`,
+  `/api/v1/auth/*`), session cookies with CSRF protection, and per-source
+  rate limiting without lockout. Unit-tested
+  (`tests/test_console_auth.py`); not yet hardware-qualified, not yet wired
+  into any Console frontend UI, and nothing mutating exists yet for it to
+  gate — see the ADR's own "Explicitly not yet done" section;
 - show version, channel, release notes, download size, reboot requirements, and
   rollback limitations in Console;
 - provide user-triggered download and installation;

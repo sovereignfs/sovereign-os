@@ -35,6 +35,7 @@ pointer:
 ├── pihole-image.env
 └── appliance/
     ├── bin/
+    │   ├── console-auth
     │   ├── console-health
     │   ├── start-pihole
     │   ├── stop-pihole
@@ -88,9 +89,9 @@ Staging remains hostile until every declared file passes the closed bundle
 manifest. Before any service interruption, the updater additionally requires:
 
 - the complete appliance allowlist and no unknown file types;
-- executable mode only for the five declared programs;
-- Python compilation of `console-health`;
-- POSIX shell syntax checks for lifecycle and health scripts;
+- executable mode only for the six declared programs;
+- Python compilation of `console-health` and `console-auth`;
+- POSIX shell syntax checks for lifecycle scripts;
 - successful rendering and `docker compose config` validation of the target
   Pi-hole template using the signed image digest;
 - target Nginx syntax validation through a temporary top-level configuration
