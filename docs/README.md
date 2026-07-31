@@ -15,6 +15,7 @@ This directory contains the planning, design, research, and operational record f
 - [Image release checklist](operations/image-release-checklist.md): the required verification before publication.
 - [Appliance update milestone](roadmap/01-1-update-foundation.md): the immediate priority after the POC release.
 - [Appliance update RFC](rfcs/0014-appliance-update-system.md): signed, staged, health-gated updates without reflashing.
+- [Update discovery RFC](rfcs/0015-update-discovery.md): proposed device-side check-and-notify mechanism, deliberately scoped away from Console and production signing.
 - [Production signing-key custody decision](adrs/0006-production-signing-key-custody.md): password-manager-held production release-signing key, hardware key as a future upgrade path, plus rotation and revocation procedure.
 - [Trust rotation v1](../update/README.md): `sovereign-update rotate-trust` delivers routine signing-key rotation and revocation through the same signed channel as any other release, instead of a manual per-device file copy.
 - [Console Foundation](roadmap/01-console-foundation.md): the Sovereign UI entry point and first read-only system health vertical slice.

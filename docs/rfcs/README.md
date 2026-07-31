@@ -11,6 +11,7 @@ RFCs are proposals, not decisions. Start with the [RFC template](../templates/rf
 - [RFC-0010: Raspberry Pi image deployment](0010-raspberry-pi-image-deployment.md) - Proposed
 - RFC-0006: Pi-hole integration
 - [RFC-0014: Appliance update system](0014-appliance-update-system.md) - Implemented
+- [RFC-0015: Update discovery - channel metadata and device-side checking](0015-update-discovery.md) - Accepted
 
 RFC-0001 through RFC-0004 and RFC-0006 refer to the later platform and AI capability work. They are deferred until the Phase 01 image foundation is complete. Later proposals for authentication, configuration, logging, backup, updates, general plugin lifecycle, and voice should be created only when their problem and evidence are mature enough for a concrete proposal.
 

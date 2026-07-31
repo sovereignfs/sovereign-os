@@ -144,8 +144,11 @@ using the command line or reflashing.
 
 Planned work:
 
-- publish signed update-channel metadata over HTTPS;
-- periodically check for compatible updates without sending household data;
+- publish signed update-channel metadata over HTTPS, and periodically check
+  for compatible updates without sending household data — accepted in
+  [RFC-0015](docs/rfcs/0015-update-discovery.md), deliberately scoped to
+  device-side check-and-notify only, with no Console change and no
+  production key required; implementation in progress;
 - show version, channel, release notes, download size, reboot requirements, and
   rollback limitations in Console;
 - provide user-triggered download and installation;
