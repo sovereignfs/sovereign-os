@@ -2,10 +2,14 @@
 
 The project is currently owner-directed. Governance should remain lightweight until there is a useful implementation and active contributors.
 
+The [contribution guide](../../CONTRIBUTING.md) covers development setup,
+branching/commit conventions, pull requests, and how to propose a change
+(research notes, RFCs, ADRs). Agent-specific instructions live in
+[AGENTS.md](../../AGENTS.md).
+
 Future documents include:
 
 - Decision-making process
-- Contribution guide
 - Code of conduct
 - Security policy and vulnerability reporting
 - Licensing rationale

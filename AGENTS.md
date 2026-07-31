@@ -1,6 +1,10 @@
 # Repository Agent Instructions
 
-These instructions apply to all work in this repository.
+These instructions apply to all work in this repository. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for the fuller human-facing guide
+(development setup, running tests, proposing changes via research
+notes/RFCs/ADRs, and hardware qualification) — the conventions below are the
+condensed, agent-facing subset of it.
 
 ## Commit and PR Conventions
 

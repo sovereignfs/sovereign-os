@@ -6,6 +6,8 @@ This directory contains the planning, design, research, and operational record f
 
 - [Concept paper](../CONCEPT.md): why the project exists and the principles it protects.
 - [Public roadmap](../ROADMAP.md): the current phase and public progress summary.
+- [Contributing guide](../CONTRIBUTING.md): development setup, branching/commit conventions, pull requests, and how to propose a change.
+- [Development workflow](development/workflow.md): the specification-driven planning chain, roles, document types, and definition of done.
 - [Master plan](roadmap/00-master-plan.md): the internal source of truth for the complete project plan.
 - [Preview POC plan](roadmap/01-preview-poc.md): the operational plan for the current phase.
 - [Phase 01 architecture decision](adrs/0001-phase-01-appliance-architecture.md): the accepted appliance boundary.
