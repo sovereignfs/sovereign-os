@@ -17,6 +17,7 @@ VERSION = re.compile(
 )
 SAFE_KEY = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 APPLIANCE_FILES = {
+    "bin/console-auth": 0o755,
     "bin/console-health": 0o755,
     "bin/start-pihole": 0o755,
     "bin/stop-pihole": 0o755,

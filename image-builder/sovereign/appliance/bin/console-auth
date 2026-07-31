@@ -1,0 +1,295 @@
+#!/usr/bin/python3
+
+import base64
+import binascii
+import datetime
+import hashlib
+import hmac
+import http.cookies
+import json
+import os
+import pathlib
+import secrets
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+LISTEN_ADDRESS = os.environ.get("SOVEREIGN_CONSOLE_AUTH_ADDRESS", "127.0.0.1")
+LISTEN_PORT = int(os.environ.get("SOVEREIGN_CONSOLE_AUTH_PORT", "8091"))
+CREDENTIAL_PATH = pathlib.Path(
+    os.environ.get(
+        "SOVEREIGN_CONSOLE_CREDENTIAL_PATH",
+        "/data/sovereign/console/admin-password.hash",
+    )
+)
+SESSION_COOKIE_NAME = "sovereign_console_session"
+SESSION_LIFETIME_SECONDS = int(
+    os.environ.get("SOVEREIGN_CONSOLE_SESSION_SECONDS", str(8 * 60 * 60))
+)
+RATE_LIMIT_WINDOW_SECONDS = 300
+RATE_LIMIT_THRESHOLD = 5
+PBKDF2_ITERATIONS = 600_000
+MAX_REQUEST_BODY_BYTES = 4096
+
+_SESSIONS_LOCK = threading.Lock()
+_SESSIONS = {}
+
+_FAILURES_LOCK = threading.Lock()
+_FAILURES = {}
+
+
+def hash_password(password, iterations=PBKDF2_ITERATIONS):
+    salt = secrets.token_bytes(16)
+    derived = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, iterations)
+    return "pbkdf2_sha256${}${}${}".format(
+        iterations,
+        base64.b64encode(salt).decode(),
+        base64.b64encode(derived).decode(),
+    )
+
+
+def verify_password(password, encoded):
+    try:
+        algorithm, iterations, salt_b64, hash_b64 = encoded.split("$")
+    except ValueError:
+        return False
+    if algorithm != "pbkdf2_sha256":
+        return False
+    try:
+        iterations = int(iterations)
+        salt = base64.b64decode(salt_b64, validate=True)
+        expected = base64.b64decode(hash_b64, validate=True)
+    except (ValueError, binascii.Error):
+        return False
+    derived = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, iterations)
+    return hmac.compare_digest(derived, expected)
+
+
+def read_credential():
+    try:
+        content = CREDENTIAL_PATH.read_text().strip()
+    except (OSError, UnicodeError):
+        return None
+    return content or None
+
+
+def _sweep_sessions_locked():
+    now = time.time()
+    expired = [token for token, record in _SESSIONS.items() if record["expires_at"] <= now]
+    for token in expired:
+        del _SESSIONS[token]
+
+
+def create_session():
+    token = secrets.token_urlsafe(32)
+    csrf_token = secrets.token_urlsafe(32)
+    expires_at = time.time() + SESSION_LIFETIME_SECONDS
+    with _SESSIONS_LOCK:
+        _sweep_sessions_locked()
+        _SESSIONS[token] = {"csrf_token": csrf_token, "expires_at": expires_at}
+    return token, csrf_token, expires_at
+
+
+def lookup_session(token):
+    if not token:
+        return None
+    with _SESSIONS_LOCK:
+        _sweep_sessions_locked()
+        record = _SESSIONS.get(token)
+        return dict(record) if record is not None else None
+
+
+def destroy_session(token):
+    with _SESSIONS_LOCK:
+        _SESSIONS.pop(token, None)
+
+
+def rate_limited(source_ip):
+    now = time.time()
+    with _FAILURES_LOCK:
+        attempts = [
+            when for when in _FAILURES.get(source_ip, []) if now - when < RATE_LIMIT_WINDOW_SECONDS
+        ]
+        _FAILURES[source_ip] = attempts
+        if len(attempts) < RATE_LIMIT_THRESHOLD:
+            return None
+        overflow = len(attempts) - RATE_LIMIT_THRESHOLD + 1
+        wait_seconds = min(2**overflow, RATE_LIMIT_WINDOW_SECONDS)
+        elapsed_since_last = now - attempts[-1]
+        remaining = wait_seconds - elapsed_since_last
+        return max(1, int(remaining)) if remaining > 0 else None
+
+
+def record_failure(source_ip):
+    with _FAILURES_LOCK:
+        _FAILURES.setdefault(source_ip, []).append(time.time())
+
+
+def clear_failures(source_ip):
+    with _FAILURES_LOCK:
+        _FAILURES.pop(source_ip, None)
+
+
+def _isoformat(epoch_seconds):
+    return (
+        datetime.datetime.fromtimestamp(epoch_seconds, datetime.timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+
+
+def _session_cookie(token, max_age_seconds):
+    # No `Secure` attribute: Nginx currently serves Console over plain HTTP
+    # only, on the trusted household LAN (see ADR-0007's Threat Model and
+    # docs/design/console-health.md's Constraints) — there is no TLS listener
+    # for `Secure` to protect anything against. `HttpOnly` keeps the token
+    # out of reach of any script running on the page regardless; `SameSite`
+    # is the primary defense against the cookie being sent cross-site, backed
+    # by the separate CSRF-token check on mutating requests below.
+    return (
+        f"{SESSION_COOKIE_NAME}={token}; Path=/; HttpOnly; SameSite=Strict; "
+        f"Max-Age={max_age_seconds}"
+    )
+
+
+def _expired_session_cookie():
+    return f"{SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0"
+
+
+class AuthHandler(BaseHTTPRequestHandler):
+    server_version = "SovereignConsoleAuth/1"
+    sys_version = ""
+
+    def _client_ip(self):
+        # Only Nginx can reach this loopback-only backend, so a forwarded
+        # header it sets is trustworthy here the same way /dns/ already
+        # relies on Nginx-set X-Real-IP.
+        forwarded = self.headers.get("X-Real-IP")
+        return forwarded.strip() if forwarded else self.client_address[0]
+
+    def _send_json(self, status, payload, extra_headers=()):
+        body = json.dumps(payload, separators=(",", ":")).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        for name, value in extra_headers:
+            self.send_header(name, value)
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _read_json_body(self):
+        try:
+            length = int(self.headers.get("Content-Length", "0") or "0")
+        except ValueError:
+            return None
+        if length <= 0 or length > MAX_REQUEST_BODY_BYTES:
+            return None
+        raw = self.rfile.read(length)
+        try:
+            return json.loads(raw)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return None
+
+    def _session_token(self):
+        cookie_header = self.headers.get("Cookie")
+        if not cookie_header:
+            return None
+        jar = http.cookies.SimpleCookie()
+        try:
+            jar.load(cookie_header)
+        except http.cookies.CookieError:
+            return None
+        morsel = jar.get(SESSION_COOKIE_NAME)
+        return morsel.value if morsel else None
+
+    def do_POST(self):
+        if self.path == "/api/v1/auth/login":
+            self._handle_login()
+        elif self.path == "/api/v1/auth/logout":
+            self._handle_logout()
+        else:
+            self.send_error(404)
+
+    def do_GET(self):
+        if self.path == "/api/v1/auth/session":
+            self._handle_session()
+        else:
+            self.send_error(404)
+
+    def _handle_login(self):
+        source_ip = self._client_ip()
+        retry_after = rate_limited(source_ip)
+        if retry_after is not None:
+            self._send_json(
+                429,
+                {"authenticated": False, "error": "rate_limited"},
+                extra_headers=[("Retry-After", str(retry_after))],
+            )
+            return
+
+        credential = read_credential()
+        if credential is None:
+            self._send_json(503, {"authenticated": False, "error": "not_configured"})
+            return
+
+        body = self._read_json_body()
+        password = body.get("password") if isinstance(body, dict) else None
+        if not isinstance(password, str) or not password:
+            self._send_json(400, {"authenticated": False, "error": "invalid_request"})
+            return
+
+        if not verify_password(password, credential):
+            record_failure(source_ip)
+            self._send_json(401, {"authenticated": False, "error": "invalid_credentials"})
+            return
+
+        clear_failures(source_ip)
+        token, csrf_token, expires_at = create_session()
+        self._send_json(
+            200,
+            {
+                "authenticated": True,
+                "csrf_token": csrf_token,
+                "expires_at": _isoformat(expires_at),
+            },
+            extra_headers=[("Set-Cookie", _session_cookie(token, SESSION_LIFETIME_SECONDS))],
+        )
+
+    def _handle_logout(self):
+        token = self._session_token()
+        session = lookup_session(token)
+        if session is None:
+            self._send_json(200, {"authenticated": False})
+            return
+        csrf_header = self.headers.get("X-CSRF-Token")
+        if not csrf_header or not hmac.compare_digest(csrf_header, session["csrf_token"]):
+            self._send_json(403, {"error": "csrf_mismatch"})
+            return
+        destroy_session(token)
+        self._send_json(
+            200,
+            {"authenticated": False},
+            extra_headers=[("Set-Cookie", _expired_session_cookie())],
+        )
+
+    def _handle_session(self):
+        session = lookup_session(self._session_token())
+        if session is None:
+            self._send_json(200, {"authenticated": False})
+            return
+        self._send_json(
+            200,
+            {"authenticated": True, "expires_at": _isoformat(session["expires_at"])},
+        )
+
+    def log_message(self, format_string, *arguments):
+        return
+
+
+if __name__ == "__main__":
+    server = ThreadingHTTPServer((LISTEN_ADDRESS, LISTEN_PORT), AuthHandler)
+    server.serve_forever()

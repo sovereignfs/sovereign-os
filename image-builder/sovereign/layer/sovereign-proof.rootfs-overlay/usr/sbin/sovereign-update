@@ -71,7 +71,9 @@ UPDATE_CHECK_MAX_RELEASES_BYTES = 2 * 1024 * 1024
 UPDATE_CHECK_MAX_ASSET_BYTES = 65536
 UPDATE_CHECK_MAX_CANDIDATES = 20
 
+PYTHON_APPLIANCE_SCRIPTS = {"console-auth", "console-health"}
 APPLIANCE_FILES = {
+    "appliance/bin/console-auth": 0o755,
     "appliance/bin/console-health": 0o755,
     "appliance/bin/start-pihole": 0o755,
     "appliance/bin/stop-pihole": 0o755,
@@ -938,7 +940,7 @@ def validate_release_payload(release, manifest):
 def validate_appliance_configuration(release, pihole):
     appliance = release / "appliance"
     for script in sorted((appliance / "bin").iterdir()):
-        if script.name == "console-health":
+        if script.name in PYTHON_APPLIANCE_SCRIPTS:
             try:
                 compile(
                     script.read_text(encoding="utf-8"),
@@ -948,7 +950,7 @@ def validate_appliance_configuration(release, pihole):
             except (OSError, UnicodeError, SyntaxError) as error:
                 raise UpdateError(
                     "INVALID_APPLIANCE_SCRIPT",
-                    "Console health service has invalid Python syntax",
+                    f"{script.name} has invalid Python syntax",
                 ) from error
         else:
             run_checked(

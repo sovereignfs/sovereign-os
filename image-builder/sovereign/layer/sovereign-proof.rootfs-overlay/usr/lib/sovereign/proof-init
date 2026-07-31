@@ -4,6 +4,7 @@ set -eu
 
 install -d -m 0755 /data/sovereign /data/sovereign/configuration
 install -d -m 0700 /data/sovereign/backups /data/sovereign/update-state
+install -d -m 0750 -o root -g sovereign-console /data/sovereign/console
 if [ ! -L /opt/sovereign/current ]; then
   version=$(sed -n 's/^VERSION="\(.*\)"$/\1/p' /etc/sovereign-release)
   test -n "$version"
@@ -14,6 +15,7 @@ if [ ! -L /opt/sovereign/current ]; then
   test -x "$release_dir/appliance/bin/start-pihole"
   test -x "$release_dir/appliance/bin/stop-pihole"
   test -x "$release_dir/appliance/bin/console-health"
+  test -x "$release_dir/appliance/bin/console-auth"
   test -x "$release_dir/appliance/bin/verify-local-access"
   test -x "$release_dir/appliance/bin/verify-update-health"
   test -f "$release_dir/appliance/pihole/compose.yaml.in"

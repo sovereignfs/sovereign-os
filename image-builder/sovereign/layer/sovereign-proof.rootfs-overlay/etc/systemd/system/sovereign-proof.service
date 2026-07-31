@@ -2,7 +2,7 @@
 Description=Initialize the Sovereign proof data directory
 Requires=sovereign-data-expand.service
 RequiresMountsFor=/data
-After=local-fs.target sovereign-data-expand.service
+After=local-fs.target sovereign-data-expand.service systemd-sysusers.service
 ConditionPathIsMountPoint=/data
 
 [Service]
