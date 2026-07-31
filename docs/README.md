@@ -26,6 +26,8 @@ This directory contains the planning, design, research, and operational record f
 - [Preview.8 appliance update qualification](research/preview-8-appliance-update-qualification-report.md): signed preview.7-to-preview.8 update, interruption recovery, rollback, commit, reboot, and persistence evidence.
 - [Preview.12 appliance update qualification](research/preview-12-appliance-update-qualification-report.md): signed preview.11-to-preview.12 update qualifying the service-readiness and systemd dependency fixes, with interruption recovery, forced rollback, commit, and reboot evidence.
 - [Restore hardware qualification](research/restore-hardware-qualification-report.md): `sovereign-update restore` qualified against real Pi-hole state on Raspberry Pi 5, including a forced-health-failure rollback path.
+- [Preview.14 appliance update qualification](research/preview-14-appliance-update-qualification-report.md): first update-transaction campaign run against a real base image that shipped restore/prune/rotate-trust natively, rather than a manually patched device.
+- [Prune and trust rotation hardware qualification](research/prune-and-rotate-trust-hardware-qualification-report.md): `sovereign-update prune` and `rotate-trust` qualified against real on-device backups, releases, transactions, and a real signed single-key rotation handoff.
 - [Versioned appliance update qualification](operations/versioned-appliance-update-qualification.md): hardware procedure for versioned Console, routing, Compose, lifecycle, and health payloads.
 
 ## Documentation Areas

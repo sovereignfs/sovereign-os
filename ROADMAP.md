@@ -32,9 +32,16 @@ Console, DNS, Pi-hole, Nginx, SSH, credentials, or the dedicated DATA
 partition. See the
 [preview.12 appliance update qualification report](docs/research/preview-12-appliance-update-qualification-report.md).
 
-Persistent-data restore automation, bounded retention, and production
-signing-key custody are the remaining gaps before the updater is considered
-ready for normal users.
+Persistent-data restore, bounded retention (`prune`), and signed trust
+rotation (`rotate-trust`) are all implemented and hardware-qualified on
+Raspberry Pi 5, most recently against a real `0.1.0-preview.13` base image
+built and flashed with all three shipped in for the first time — see the
+[preview.14 appliance update qualification report](docs/research/preview-14-appliance-update-qualification-report.md)
+and the
+[prune and trust rotation hardware qualification report](docs/research/prune-and-rotate-trust-hardware-qualification-report.md).
+Production signing-key custody is decided (ADR-0006) but the production
+key has not yet been generated, and none of these three commands have
+shipped through a release used by anyone beyond this qualification work.
 
 Unattended automatic installation remains disabled until the manual,
 health-gated update path and its operational controls are qualified.
@@ -83,19 +90,24 @@ recovery operations.
 Planned work:
 
 - automate persistent-data restore verification — `sovereign-update restore`
-  is implemented, unit-tested, and hardware-qualified against real Pi-hole
-  state on Raspberry Pi 5, including a forced-health-failure rollback path
-  (see [BACKUP_AND_JOURNAL.md](update/BACKUP_AND_JOURNAL.md) and the
-  [restore hardware qualification report](docs/research/restore-hardware-qualification-report.md));
-  it still needs to ship through a real signed release rather than manual
-  deployment, and is not yet wired into automatic update rollback for future
-  data migrations;
+  is implemented and hardware-qualified against real Pi-hole state on
+  Raspberry Pi 5, including a forced-health-failure rollback path, twice
+  now: once manually deployed, and again on a real `preview.13` base image
+  that shipped it natively (see
+  [BACKUP_AND_JOURNAL.md](update/BACKUP_AND_JOURNAL.md) and the
+  [restore](docs/research/restore-hardware-qualification-report.md) and
+  [preview.14](docs/research/preview-14-appliance-update-qualification-report.md)
+  qualification reports); it still has not shipped through a release used
+  by anyone beyond qualification, and is not yet wired into automatic
+  update rollback for future data migrations;
 - define bounded retention and cleanup for old releases, backups, journals, and
   failed transactions — `sovereign-update prune [--dry-run]` is implemented
-  and unit-tested against a configurable
-  `/etc/sovereign/retention-policy.json` (see
-  [BACKUP_AND_JOURNAL.md](update/BACKUP_AND_JOURNAL.md)); not yet
-  hardware-qualified, shipped through a signed release, or wired into a
+  and hardware-qualified on Raspberry Pi 5 against real backups, releases,
+  and transaction journals, including confirming the live device stays
+  healthy through an aggressive real deletion pass (see
+  [BACKUP_AND_JOURNAL.md](update/BACKUP_AND_JOURNAL.md) and the
+  [prune and trust rotation qualification report](docs/research/prune-and-rotate-trust-hardware-qualification-report.md));
+  not yet shipped through a release beyond qualification, or wired into a
   periodic timer;
 - establish production signing-key custody, rotation, and revocation —
   decided in [ADR-0006](docs/adrs/0006-production-signing-key-custody.md)
@@ -103,10 +115,14 @@ Planned work:
   rotation/revocation is implemented as `sovereign-update rotate-trust`
   (signed, atomic, refuses any change that would leave a channel with no
   trusted key — see [update/README.md](update/README.md)'s "Trust Rotation
-  v1" section), unit-tested but not yet hardware-qualified. The production
-  key itself has not yet been generated, and getting a rotation manifest
-  onto already-flashed devices without an operator manually running the
-  command still depends on the Update Discovery work in item 3 below;
+  v1" section) and hardware-qualified on Raspberry Pi 5, including the
+  realistic single-key rotation handoff, immediate enforcement of
+  revocation, and the lockout protection (see the
+  [prune and trust rotation qualification report](docs/research/prune-and-rotate-trust-hardware-qualification-report.md)).
+  The production key itself has not yet been generated, and getting a
+  rotation manifest onto already-flashed devices without an operator
+  manually running the command still depends on the Update Discovery work
+  in item 3 below;
 - approve the update RFC and production manifest policy;
 - publish release compatibility, rollback limitations, and recovery guidance;
   and

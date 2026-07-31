@@ -71,7 +71,10 @@ decision.
 
 **Retention status:** Implemented as `sovereign-update prune [--dry-run]`,
 driven by `/etc/sovereign/retention-policy.json` (schema below; falls back to
-these defaults if the file is missing). It prunes three things in one pass:
+these defaults if the file is missing), and hardware-qualified on Raspberry
+Pi 5 — see the
+[prune and trust rotation qualification report](../docs/research/prune-and-rotate-trust-hardware-qualification-report.md).
+It prunes three things in one pass:
 
 ```json
 {
@@ -104,10 +107,13 @@ wired into a periodic timer; it is an operator-invoked command today.
 
 **Status:** Implemented (`sovereign-update restore <backup-id> [--force]` and
 `sovereign-update discard-restore <restore-id>`) and hardware-qualified
-against real Pi-hole state on Raspberry Pi 5 — see the
-[restore hardware qualification report](../docs/research/restore-hardware-qualification-report.md).
-It has not yet shipped through a real signed release; the qualified device
-had the updater manually deployed and reverted for the campaign.
+against real Pi-hole state on Raspberry Pi 5 twice — once manually
+deployed, and again on a `0.1.0-preview.13` base image that shipped it
+natively — see the
+[restore](../docs/research/restore-hardware-qualification-report.md) and
+[preview.14](../docs/research/preview-14-appliance-update-qualification-report.md)
+qualification reports. It has not yet shipped through a release used by
+anyone beyond qualification.
 
 `restore` verifies the backup manifest and all four archive digests before
 creating any transaction or touching live data, then extracts the

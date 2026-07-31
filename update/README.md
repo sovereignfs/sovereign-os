@@ -124,6 +124,11 @@ trusting an unapproved publisher. Custody is decided in
 
 ## Trust Rotation v1
 
+Hardware-qualified on Raspberry Pi 5, including the realistic single-key
+rotation handoff, immediate enforcement of revocation against the old key,
+and the lockout protection — see the
+[prune and trust rotation qualification report](../docs/research/prune-and-rotate-trust-hardware-qualification-report.md).
+
 `sudo sovereign-update rotate-trust --manifest trust-rotation.json --signature
 trust-rotation.sig` lets an already-trusted key sign new trust-store changes,
 so routine key rotation ships through the same signed channel as any other
