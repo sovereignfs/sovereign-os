@@ -18,6 +18,8 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import urllib.error
+import urllib.request
 
 
 POLICY_PATH = pathlib.Path(
@@ -57,6 +59,17 @@ DEFAULT_RETENTION_POLICY = {
     "releases": {"keep_count": 2},
     "transactions": {"keep_count": 20, "keep_days": 90},
 }
+UPDATE_CHECK_RELEASES_URL = os.environ.get(
+    "SOVEREIGN_UPDATE_CHECK_RELEASES_URL",
+    "https://api.github.com/repos/sovereignfs/sovereign-os/releases",
+)
+UPDATE_CHECK_STATUS_PATH = pathlib.Path(
+    os.environ.get("SOVEREIGN_UPDATE_CHECK_STATUS", str(STATE_ROOT / "update-check.json"))
+)
+UPDATE_CHECK_TIMEOUT_SECONDS = 10
+UPDATE_CHECK_MAX_RELEASES_BYTES = 2 * 1024 * 1024
+UPDATE_CHECK_MAX_ASSET_BYTES = 65536
+UPDATE_CHECK_MAX_CANDIDATES = 20
 
 APPLIANCE_FILES = {
     "appliance/bin/console-health": 0o755,
@@ -1996,6 +2009,137 @@ def rotate_trust(args):
         print(json.dumps({"status": "rotated", "operations": applied}, sort_keys=True))
 
 
+def http_get_bytes(url, max_bytes, timeout):
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "sovereign-update",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+            data = response.read(max_bytes + 1)
+    except (urllib.error.URLError, OSError, ValueError) as error:
+        raise UpdateError(
+            "UPDATE_CHECK_NETWORK_FAILED", "Could not reach the update check endpoint"
+        ) from error
+    fail(
+        len(data) <= max_bytes,
+        "UPDATE_CHECK_RESPONSE_TOO_LARGE",
+        "Update check response exceeded the size limit",
+    )
+    return data
+
+
+def fetch_release_candidates():
+    data = http_get_bytes(
+        UPDATE_CHECK_RELEASES_URL, UPDATE_CHECK_MAX_RELEASES_BYTES, UPDATE_CHECK_TIMEOUT_SECONDS
+    )
+    try:
+        releases = json.loads(data)
+    except (UnicodeError, json.JSONDecodeError) as error:
+        raise UpdateError(
+            "UPDATE_CHECK_INVALID_RESPONSE", "Update check response was not valid JSON"
+        ) from error
+    fail(
+        isinstance(releases, list),
+        "UPDATE_CHECK_INVALID_RESPONSE",
+        "Update check response was not a list",
+    )
+    candidates = []
+    for entry in releases:
+        if not isinstance(entry, dict) or entry.get("draft"):
+            continue
+        tag = entry.get("tag_name")
+        if not isinstance(tag, str) or not tag.startswith("v"):
+            continue
+        try:
+            version = tag[1:]
+            parse_version(version)
+        except UpdateError:
+            continue
+        assets = entry.get("assets")
+        if not isinstance(assets, list):
+            continue
+        urls = {}
+        for asset in assets:
+            if not isinstance(asset, dict):
+                continue
+            name = asset.get("name")
+            url = asset.get("browser_download_url")
+            if name in ("release-manifest.json", "release-manifest.sig") and isinstance(url, str):
+                urls[name] = url
+        if "release-manifest.json" in urls and "release-manifest.sig" in urls:
+            candidates.append((version, urls["release-manifest.json"], urls["release-manifest.sig"]))
+    candidates.sort(key=lambda item: parse_version(item[0])[0], reverse=True)
+    return candidates[:UPDATE_CHECK_MAX_CANDIDATES]
+
+
+def evaluate_release_candidate(manifest_url, signature_url):
+    manifest_bytes = http_get_bytes(manifest_url, UPDATE_CHECK_MAX_ASSET_BYTES, UPDATE_CHECK_TIMEOUT_SECONDS)
+    signature_bytes = http_get_bytes(signature_url, UPDATE_CHECK_MAX_ASSET_BYTES, UPDATE_CHECK_TIMEOUT_SECONDS)
+    with tempfile.TemporaryDirectory(prefix="sovereign-update-check-") as directory:
+        directory = pathlib.Path(directory)
+        manifest_path = directory / "release-manifest.json"
+        signature_path = directory / "release-manifest.sig"
+        manifest_path.write_bytes(manifest_bytes)
+        signature_path.write_bytes(signature_bytes)
+        return inspect_update(
+            argparse.Namespace(manifest=manifest_path, signature=signature_path, artifact=None),
+            emit=False,
+        )
+
+
+def check_updates(_args):
+    fail(
+        os.geteuid() == 0 or os.environ.get("SOVEREIGN_UPDATE_TEST_MODE") == "1",
+        "ROOT_REQUIRED",
+        "Checking for updates requires administrator privileges",
+    )
+    now = timestamp()
+    policy = read_json(POLICY_PATH, "INVALID_POLICY")
+    current_version = read_release_version()
+    status = {
+        "schema_version": 1,
+        "checked_at": now,
+        "status": "up_to_date",
+        "current_version": current_version,
+        "available_version": None,
+        "channel": policy.get("channel"),
+        "notes_url": None,
+        "reboot_required": False,
+        "error": None,
+    }
+    try:
+        candidates = fetch_release_candidates()
+        last_error = None
+        for _version, manifest_url, signature_url in candidates:
+            try:
+                manifest, result = evaluate_release_candidate(manifest_url, signature_url)
+            except UpdateError as error:
+                last_error = error
+                continue
+            status.update(
+                {
+                    "status": "update_available",
+                    "available_version": result["target_version"],
+                    "channel": result["channel"],
+                    "notes_url": manifest["release"]["notes_url"],
+                    "reboot_required": result["reboot_required"],
+                    "error": None,
+                }
+            )
+            break
+        else:
+            status["error"] = last_error.code if last_error else None
+    except UpdateError as error:
+        status["status"] = "check_failed"
+        status["error"] = error.code
+    atomic_json(UPDATE_CHECK_STATUS_PATH, status, mode=0o644)
+    print(json.dumps(status, sort_keys=True))
+
+
 def show_status(_args):
     policy = read_json(POLICY_PATH, "INVALID_POLICY")
     latest = read_json(UPDATE_STATUS_PATH) if UPDATE_STATUS_PATH.is_file() else None
@@ -2070,6 +2214,10 @@ def parser():
     rotate_trust_parser.add_argument("--manifest", required=True)
     rotate_trust_parser.add_argument("--signature", required=True)
     rotate_trust_parser.set_defaults(handler=rotate_trust)
+    check = subcommands.add_parser(
+        "check", help="check whether a compatible signed update is available"
+    )
+    check.set_defaults(handler=check_updates)
     return command
 
 
