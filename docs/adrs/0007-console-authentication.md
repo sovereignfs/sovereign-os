@@ -187,13 +187,16 @@ the ask reaches root"):
   Controls" milestone wires an actual `sovereign-update` action behind it,
   which needs its own follow-up design work for the privilege-escalation
   path from this unprivileged backend to a root update action.
-- Has only ever been deployed manually for qualification — a real signed
-  release attempt (`v0.1.0-preview.18`) was rejected at `stage`, not
-  because of anything specific to Console auth, but because it's the
-  first release to add a new appliance file since the installed
-  updater's file allowlist was fixed at flash time — see
-  [the finding](../research/appliance-file-set-update-ceiling-finding.md).
-  Console auth cannot ship through a real install until that's resolved.
+- A real signed-release install attempt (`v0.1.0-preview.18`) initially
+  hit a structural gap unrelated to Console auth specifically — see
+  [the finding](../research/appliance-file-set-update-ceiling-finding.md)
+  — since fixed and hardware-qualified: `.18` is now genuinely installed
+  via a real update, `console-auth`'s binary included, confirmed
+  persistent across a reboot. It still cannot actually **run** without a
+  reflash: the systemd unit, `sysusers.d` group, and directory bootstrap
+  it needs are base-image content no update delivers, confirmed by
+  `sovereign-console-auth.service` not existing on the device after this
+  install.
 
 ## Options
 

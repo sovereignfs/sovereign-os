@@ -286,11 +286,58 @@ class UpdateClientTests(unittest.TestCase):
         )
         return transaction_id, staged
 
-    def test_stage_rejects_unknown_appliance_file(self):
-        def add_unknown(release):
-            (release / "appliance/console/unknown.js").write_text("fixture\n")
+    def test_stage_accepts_a_file_this_updater_does_not_recognize(self):
+        # The installed updater is never itself replaced by an update (see
+        # docs/design/versioned-appliance-release.md), so its static
+        # RELEASE_FILES allowlist cannot know about a file a newer release
+        # legitimately introduces. A file beyond what this updater
+        # recognizes must not be rejected outright — see
+        # docs/research/appliance-file-set-update-ceiling-finding.md.
+        def add_new_appliance_script(release):
+            script = release / "appliance/bin/future-feature"
+            script.write_text("#!/bin/sh\necho ok\n")
+            script.chmod(0o755)
 
-        transaction_id, staged = self.stage_mutated_bundle(add_unknown)
+        transaction_id, staged = self.stage_mutated_bundle(add_new_appliance_script)
+        self.assertEqual(0, staged.returncode, staged.stderr)
+        self.assertEqual("staged", json.loads(staged.stdout)["status"])
+        self.assertTrue(
+            self.releases.joinpath(
+                "releases/0.1.0-preview.6/appliance/bin/future-feature"
+            ).is_file()
+        )
+
+    def test_stage_classifies_an_unrecognized_python_script_by_shebang(self):
+        # Mirrors the real console-auth scenario exactly: a new Python
+        # appliance script this specific updater has never heard of must
+        # still be compile-checked, not shell-syntax-checked, or a valid
+        # new Python file would be wrongly rejected as invalid shell.
+        def add_new_python_script(release):
+            script = release / "appliance/bin/future-python-feature"
+            script.write_text("#!/usr/bin/python3\nimport json\n")
+            script.chmod(0o755)
+
+        transaction_id, staged = self.stage_mutated_bundle(add_new_python_script)
+        self.assertEqual(0, staged.returncode, staged.stderr)
+        self.assertEqual("staged", json.loads(staged.stdout)["status"])
+
+    def test_stage_still_rejects_an_unrecognized_python_script_with_bad_syntax(self):
+        def add_broken_python_script(release):
+            script = release / "appliance/bin/future-python-feature"
+            script.write_text("#!/usr/bin/python3\nif broken(\n")
+            script.chmod(0o755)
+
+        transaction_id, staged = self.stage_mutated_bundle(add_broken_python_script)
+        self.assertEqual(2, staged.returncode)
+        self.assertEqual(
+            "INVALID_APPLIANCE_SCRIPT", json.loads(staged.stderr)["code"]
+        )
+
+    def test_stage_rejects_missing_required_appliance_file(self):
+        def remove_required_file(release):
+            (release / "appliance/bin/stop-pihole").unlink()
+
+        transaction_id, staged = self.stage_mutated_bundle(remove_required_file)
         self.assertEqual(2, staged.returncode)
         self.assertEqual("INCOMPLETE_RELEASE", json.loads(staged.stderr)["code"])
         self.assertFalse(

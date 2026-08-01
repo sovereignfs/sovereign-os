@@ -106,6 +106,20 @@ but does not resolve it. Realistic directions, none chosen:
   docstring-level intent is a fully closed, enumerated file set, not an
   open one) — worth scrutiny before treating it as a quick fix.
 
-This needs the project owner's judgment, the same way ADR-0006 and
-ADR-0007 required a deliberate choice among real trade-offs rather than a
-default.
+**Update, same day:** the third option was implemented and
+hardware-qualified — see the
+[fix qualification report](appliance-file-set-ceiling-fix-qualification-report.md).
+On review, the "weakens closed-bundle integrity" concern didn't hold up:
+the inner, signed bundle manifest already independently verifies every
+file's digest regardless of this outer allowlist, so the allowlist was a
+redundant appliance-semantic check, not the actual integrity boundary.
+The exact real stuck transaction from this finding was recovered through
+to `committed` on real hardware, confirmed persistent across a reboot.
+
+This does **not** resolve the first option (a genuine self-update
+mechanism) or make Console auth actually runnable — new systemd units,
+`sysusers.d` groups, and other base-image content are still not delivered
+by any update, confirmed by `sovereign-console-auth.service` still not
+existing after this real `.18` install. That larger gap remains exactly
+where ROADMAP item 6 ("Full Base-OS Updates") already placed it: an
+architecture decision pending, deliberately not expanded into here.

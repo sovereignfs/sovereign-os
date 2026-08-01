@@ -167,13 +167,20 @@ Planned work:
   written for the device operator rather than a contributor; and
 - qualify every supported source-to-target update path on real hardware.
   A `0.1.0-preview.17` → `0.1.0-preview.18` attempt surfaced a real
-  structural ceiling, not just a path gap: the installed updater's
-  appliance file allowlist is fixed at flash time and cannot learn about
-  a new file added by any update, ever, without a self-update mechanism
-  this project doesn't have yet — see
-  [the finding](docs/research/appliance-file-set-update-ceiling-finding.md).
-  Unresolved; needs the project owner's decision among real trade-offs,
-  the same way ADR-0006/ADR-0007 did.
+  structural gap: the installed updater's appliance file allowlist was
+  fixed at flash time and couldn't learn about a new file added by the
+  release introducing it. Fixed and hardware-qualified the same day — the
+  validator now rejects only missing required files, not unrecognized
+  ones, and classifies appliance scripts by shebang instead of a
+  hardcoded name set; the exact real stuck transaction was recovered
+  through to `committed` on real hardware, confirmed persistent across a
+  reboot — see
+  [the finding](docs/research/appliance-file-set-update-ceiling-finding.md)
+  and its
+  [fix qualification report](docs/research/appliance-file-set-ceiling-fix-qualification-report.md).
+  This does not touch the larger, still-unresolved question of delivering
+  new systemd units/base-image content via update at all (see item 6
+  below) — only the narrower file-allowlist symptom.
 
 ### 3. Update Discovery and Console Controls
 
@@ -220,13 +227,16 @@ Planned work:
   [console authentication hardware qualification report](docs/research/console-authentication-hardware-qualification-report.md).
   Nothing mutating exists yet for it to gate. A real signed-release
   install attempt (`v0.1.0-preview.18`) surfaced a structural finding
-  bigger than Console auth itself: the installed updater's file allowlist
-  is fixed at flash time and can never learn about a new appliance file
-  — see
-  [the finding](docs/research/appliance-file-set-update-ceiling-finding.md).
-  Console auth therefore still has only ever been deployed manually for
-  qualification, not through a real install, pending a decision on that
-  larger question;
+  bigger than Console auth itself — see
+  [the finding](docs/research/appliance-file-set-update-ceiling-finding.md)
+  — since fixed: `.18` is now genuinely installed via a real update on
+  real hardware, `console-auth`'s binary included. Console auth still
+  cannot actually **run** without a reflash, though: the systemd unit,
+  `sysusers.d` group, and directory bootstrap it needs are base-image
+  content, which no update delivers (confirmed —
+  `sovereign-console-auth.service` still doesn't exist on the device
+  after installing `.18`). That larger gap is tracked at item 6 below,
+  not solved here;
 - show version, channel, release notes, download size, reboot requirements, and
   rollback limitations in Console;
 - provide user-triggered download and installation;

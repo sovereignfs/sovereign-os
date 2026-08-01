@@ -71,7 +71,6 @@ UPDATE_CHECK_MAX_RELEASES_BYTES = 2 * 1024 * 1024
 UPDATE_CHECK_MAX_ASSET_BYTES = 65536
 UPDATE_CHECK_MAX_CANDIDATES = 20
 
-PYTHON_APPLIANCE_SCRIPTS = {"console-auth", "console-health"}
 APPLIANCE_FILES = {
     "appliance/bin/console-auth": 0o755,
     "appliance/bin/console-health": 0o755,
@@ -916,13 +915,24 @@ def validate_release_payload(release, manifest):
         for path in release.rglob("*")
         if path.is_file()
     }
+    # Only the *installed* updater's static RELEASE_FILES is checked here —
+    # it is never itself replaced by an update (see
+    # docs/design/versioned-appliance-release.md), so it cannot know about a
+    # file a newer release legitimately introduces. Files beyond what this
+    # updater recognizes are therefore permitted rather than rejected as
+    # "unknown": the inner, signed bundle manifest (extract_bundle above)
+    # already provides the real closed-set/digest integrity guarantee for
+    # every file, known or not, independent of this static allowlist. This
+    # check only still requires every file *this* updater depends on to be
+    # present, with the mode it expects.
+    missing = set(RELEASE_FILES) - set(actual)
     fail(
-        set(actual) == set(RELEASE_FILES),
+        not missing,
         "INCOMPLETE_RELEASE",
-        "Release payload has missing or unknown files",
+        "Release payload is missing files this updater requires",
     )
     fail(
-        actual == RELEASE_FILES,
+        all(actual[name] == mode for name, mode in RELEASE_FILES.items()),
         "UNSAFE_RELEASE_MODE",
         "Release payload has an invalid file mode",
     )
@@ -940,7 +950,19 @@ def validate_release_payload(release, manifest):
 def validate_appliance_configuration(release, pihole):
     appliance = release / "appliance"
     for script in sorted((appliance / "bin").iterdir()):
-        if script.name in PYTHON_APPLIANCE_SCRIPTS:
+        # Classify by shebang, not a hardcoded name set: this updater is
+        # never itself replaced by an update, so a name-based allowlist
+        # could never recognize a script a newer release legitimately adds
+        # (see the comment on RELEASE_FILES above). The shebang is already
+        # part of what the signed bundle manifest covers by digest.
+        try:
+            first_line = script.open(encoding="utf-8").readline()
+        except (OSError, UnicodeError) as error:
+            raise UpdateError(
+                "INVALID_APPLIANCE_SCRIPT",
+                f"{script.name} could not be read",
+            ) from error
+        if "python" in first_line:
             try:
                 compile(
                     script.read_text(encoding="utf-8"),
