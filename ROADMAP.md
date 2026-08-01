@@ -166,6 +166,14 @@ Planned work:
   [docs/operations/update-recovery-and-compatibility.md](docs/operations/update-recovery-and-compatibility.md),
   written for the device operator rather than a contributor; and
 - qualify every supported source-to-target update path on real hardware.
+  A `0.1.0-preview.17` → `0.1.0-preview.18` attempt surfaced a real
+  structural ceiling, not just a path gap: the installed updater's
+  appliance file allowlist is fixed at flash time and cannot learn about
+  a new file added by any update, ever, without a self-update mechanism
+  this project doesn't have yet — see
+  [the finding](docs/research/appliance-file-set-update-ceiling-finding.md).
+  Unresolved; needs the project owner's decision among real trade-offs,
+  the same way ADR-0006/ADR-0007 did.
 
 ### 3. Update Discovery and Console Controls
 
@@ -210,10 +218,15 @@ Planned work:
   topbar. Unit-tested (`tests/test_console_auth.py`) and
   hardware-qualified on Raspberry Pi 5 — see the
   [console authentication hardware qualification report](docs/research/console-authentication-hardware-qualification-report.md).
-  Nothing mutating exists yet for it to gate, and it has only ever been
-  deployed manually for qualification, never shipped through a real
-  signed release install — see the ADR's own "Explicitly not yet done"
-  section;
+  Nothing mutating exists yet for it to gate. A real signed-release
+  install attempt (`v0.1.0-preview.18`) surfaced a structural finding
+  bigger than Console auth itself: the installed updater's file allowlist
+  is fixed at flash time and can never learn about a new appliance file
+  — see
+  [the finding](docs/research/appliance-file-set-update-ceiling-finding.md).
+  Console auth therefore still has only ever been deployed manually for
+  qualification, not through a real install, pending a decision on that
+  larger question;
 - show version, channel, release notes, download size, reboot requirements, and
   rollback limitations in Console;
 - provide user-triggered download and installation;

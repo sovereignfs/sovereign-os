@@ -187,8 +187,13 @@ the ask reaches root"):
   Controls" milestone wires an actual `sovereign-update` action behind it,
   which needs its own follow-up design work for the privilege-escalation
   path from this unprivileged backend to a root update action.
-- Has only ever been deployed manually for qualification — has not yet
-  shipped through an actual signed release install.
+- Has only ever been deployed manually for qualification — a real signed
+  release attempt (`v0.1.0-preview.18`) was rejected at `stage`, not
+  because of anything specific to Console auth, but because it's the
+  first release to add a new appliance file since the installed
+  updater's file allowlist was fixed at flash time — see
+  [the finding](../research/appliance-file-set-update-ceiling-finding.md).
+  Console auth cannot ship through a real install until that's resolved.
 
 ## Options
 
