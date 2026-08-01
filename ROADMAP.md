@@ -325,7 +325,13 @@ network access.
 
 ### 6. Full Base-OS Updates
 
-**Status:** ⏳ Architecture decision pending
+**Status:** ⏳ Architecture decision pending — scoped in
+[RFC-0016](docs/rfcs/0016-full-base-os-updates.md) (draft), which
+proposes building on Raspberry Pi's native `tryboot` mechanism and
+reusing RFC-0014's signed/staged/health-gated/rollback machinery rather
+than adopting a third-party OTA framework; awaiting project-owner
+decision, particularly on the existing-device migration question the
+draft leaves open.
 
 **Depends on:** Stable appliance updater and persistent partition contract
 
@@ -391,4 +397,5 @@ This milestone closes the remaining “flash once” gap.
 - [ADR-0004: Provider-neutral assistant and web search](docs/adrs/0004-provider-neutral-assistant-and-web-search.md)
 - [ADR-0005: Sovereign Console namespace and health boundary](docs/adrs/0005-sovereign-console-and-health-boundary.md)
 - [RFC-0014: Appliance update system](docs/rfcs/0014-appliance-update-system.md)
+- [RFC-0016: Full base-OS updates (A/B root filesystem)](docs/rfcs/0016-full-base-os-updates.md)
 - [Preview.12 appliance update qualification report](docs/research/preview-12-appliance-update-qualification-report.md)
