@@ -200,10 +200,26 @@ would be solving a problem this specific action doesn't actually have.
 
 ## Validation and Revisit Conditions
 
+**Hardware qualification: complete (2026-08-01).** The full sequence was
+qualified end-to-end on a real Raspberry Pi 5 via the actual Console web
+API (login, fresh-password re-verification, CSRF, file-trigger, systemd
+path/service unit, `prepare`→`backup`→`stage`→`activate`), including
+reboot persistence. It took nine attempts and surfaced five real,
+previously-unexercised bugs — none in this ADR's own new code, all in
+pre-existing code paths this feature was the first to exercise under
+real, unattended, end-to-end conditions: `verify-update-health` had no
+retry loop and then an insufficient one; `sovereign-console-install-
+trigger.service`'s `CapabilityBoundingSet` was missing two capabilities
+`nginx -t` needs for its real (non-parsing) startup side effects;
+`verify-local-access` had an unretried race against service restart; and
+`stage_release`'s directory creation silently lost world-traversability
+under the unit's `UMask=0077` hardening. Full details, evidence, and the
+attempt-by-attempt timeline are in
+[the qualification report](../research/console-triggered-install-qualification-report.md).
+This confirms the "unattended sequence" condition below did apply, and
+has now been exercised and resolved.
+
 Revisit this ADR if: a future action genuinely cannot avoid taking a
 Console-supplied parameter (e.g., "restore backup `X`" where `X` must
 be one of several real choices, not "whatever's already verified") — that
-needs Option B. Also revisit if hardware qualification of the full
-`prepare`→`activate` sequence surfaces a failure mode specific to running
-it unattended (no operator watching between steps) that the individually-qualified
-steps never exercised.
+needs Option B.

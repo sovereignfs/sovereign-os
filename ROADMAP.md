@@ -252,12 +252,32 @@ Planned work:
   `prepare`/`backup`/`stage`/`activate` (an actual install trigger) are
   explicitly out of scope for this pass — deliberately smaller blast
   radius first;
+- **user-triggered download and installation, with full state reporting**
+  — decided and implemented in
+  [ADR-0009](docs/adrs/0009-console-triggered-install.md): reuses
+  ADR-0008's file-trigger mechanism, resolved for a real action's
+  parameter/blast-radius/status needs by having the privileged side
+  independently re-decide the target through the same trust-anchored
+  discovery `check` already uses (Console never supplies or influences
+  which version installs), a required fresh password re-entry, and a
+  single continuous prepare→backup→stage→activate sequence with no
+  per-step Console confirmation. Hardware-qualified on Raspberry Pi 5 —
+  the full sequence committed and survived a reboot via the real Console
+  web API, after finding and fixing five real, previously-unexercised
+  defects (a missing and then insufficient health-check retry budget, two
+  missing systemd capabilities `nginx -t`'s real startup side effects
+  need, an unretried local-access race against service restart, and a
+  release directory silently losing world-traversability under the
+  trigger unit's own umask hardening) — see the
+  [qualification report](docs/research/console-triggered-install-qualification-report.md);
 - show version, channel, release notes, download size, reboot requirements, and
-  rollback limitations in Console;
-- provide user-triggered download and installation;
-- report download, verification, staging, activation, validation, rollback, and
-  completion states; and
-- retain a CLI recovery path independent of Console.
+  rollback limitations in Console — partially done: Console currently shows
+  available/current version only; channel, release notes link, download
+  size, and reboot-required surfacing remain;
+- retain a CLI recovery path independent of Console (already true: every
+  step ADR-0009 orchestrates — `prepare`/`backup`/`stage`/`activate`/
+  `recover`/`discard` — remains directly callable, unattended installs
+  are simply the same primitives run in sequence).
 
 The initial policy is **notify and require approval**. Automatic download and
 maintenance-window installation follow only after repeated field qualification.
