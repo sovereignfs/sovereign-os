@@ -112,18 +112,50 @@ longer it goes unaddressed.
   a `.18`-flashed device structurally could not test a feature whose
   code had shipped weeks earlier, because that feature's systemd units
   live in the rootfs, not the appliance layer.
+- The partition layout and `tryboot_a_b` mechanism described in
+  Proposal are read directly from upstream `rpi-image-gen`'s official
+  `image/gpt/ab_userdata` example (checked against a local copy of
+  release `v2.7.0` during this RFC's research), not secondhand
+  description — specifically its `genimage.cfg.in.ext4` (partition
+  table), `pre-image.sh` (the `autoboot.txt` this project's design
+  reuses verbatim), and `device/rootfs-overlay` (confirms no runtime
+  script rewrites `autoboot.txt`; promotion is firmware-only). This
+  example also includes cryptroot, eMMC write-protect, and erofs
+  variants Sovereign does not need — implementation should extract the
+  relevant ext4/plaintext subset, not adopt the example wholesale, and
+  should vendor or pin the exact upstream commit actually used, per
+  this project's existing pinning discipline (RFC-0010).
 
 ## Proposal
 
 ### Target partition layout
 
+Corrected from the original draft after direct inspection of
+`rpi-image-gen`'s own official `image/gpt/ab_userdata` reference example
+(vendored locally during this project's earlier build-system research;
+this is the same example the image-build assessment cited as evidence
+for choosing this builder). The real reference layout has more parts
+than this RFC first assumed, and the mechanism is simpler and more
+precisely specified than the earlier "shared boot partition with an
+`os_prefix` subdirectory" guess:
+
 ```text
-boot        (unchanged: firmware, kernel, tryboot config)
-root A      (fixed size, ext4, read during normal operation)
-root B      (same fixed size, ext4, inactive except during/after an update)
-data        (unchanged: /data, independent of either root slot, existing
-             growpart-on-first-boot behavior unaffected)
+bootconfig  (new, tiny — GPT partition holding only autoboot.txt, the
+             tryboot control file the firmware reads before anything else)
+boot A      (kernel, initramfs, dtbs, config.txt for slot A — whole,
+             separate FAT partition, not a subdirectory of a shared boot)
+boot B      (same, for slot B)
+root A      (ext4, ADR-0002's existing appliance/base-OS content)
+root B      (same, inactive except during/after an update)
+data        (unchanged: /data, independent of every other partition,
+             existing growpart-on-first-boot behavior unaffected)
 ```
+
+Six partitions instead of today's three (`boot`/`root`/`data`). The
+reference example uses **GPT**, not the MBR partition table this
+project's images use today — whether Sovereign's implementation needs
+to move to GPT too, or can keep MBR with an equivalent layout, is an
+implementation question to confirm early, not assumed either way here.
 
 Root A and root B are each sized to comfortably hold the base OS with
 headroom for the packages this project actually installs (see
@@ -139,22 +171,25 @@ directly (`df -h`, `lsblk -f`) rather than assumed:
   growth, is a reasonable starting point for both A and B — a modest
   ~6G total for both slots against devices this project targets (the
   qualification device alone has 113G of `/data`).
-- **boot** is currently 98M total with only **49M free** — and a
-  `tryboot` slot needs its own kernel image and initramfs in an
-  `os_prefix` directory (RPi's mechanism for pointing a trial boot at
-  alternate boot-partition content). `kernel_2712.img` (10M) +
-  `initramfs_2712` (14M) already total ~24M — more than half of
-  today's *entire* free boot space, for one additional slot's kernel
-  alone, with zero margin left over for anything else. **The boot
-  partition must grow** before this design is workable; 98M is not
-  enough. Two other contributors are smaller but real: the current
-  image ships device trees for boards this project doesn't support at
-  all (`bcm2710-*`/`bcm2711-*`, Pi 2/3/4/CM4 — ~500K combined, out of
-  20 `.dtb` files total for a Pi-5-only product), which is cheap,
-  independent cleanup worth doing regardless of this RFC's outcome.
-- No `autoboot.txt`/`tryboot.txt` exists on this device today (confirmed
-  directly) — as expected, since nothing has configured `tryboot` yet.
-  The bootloader itself is well past the version that added `tryboot`
+- **boot** is currently a single 98M partition with only **49M free**.
+  Under the corrected layout above, boot content splits into two
+  *separate* partitions (boot A, boot B), each holding only one slot's
+  kernel/initramfs/dtbs at a time — this actually relaxes the original
+  concern (a single ~98–120M partition per slot, not one shared
+  partition needing to hold both simultaneously with near-zero margin).
+  `kernel_2712.img` (10M) + `initramfs_2712` (14M) total ~24M today, so
+  each of boot A/boot B needs to be sized comfortably above that, not
+  the current 98M split two ways. Two smaller, real, independent
+  findings either way: the current image ships device trees for boards
+  this project doesn't support at all (`bcm2710-*`/`bcm2711-*`, Pi
+  2/3/4/CM4 — ~500K combined, out of 20 `.dtb` files total for a
+  Pi-5-only product) — cheap cleanup worth doing regardless of this
+  RFC's outcome; and the new tiny `bootconfig` partition (32M in the
+  reference example) holding only `autoboot.txt` is new overhead this
+  layout didn't have before, though trivial in absolute size.
+- No `autoboot.txt` exists on this device today (confirmed directly) —
+  as expected, since nothing has configured `tryboot` yet. The
+  bootloader itself is well past the version that added `tryboot`
   support (this device: EEPROM dated 2025-11-05; `tryboot` shipped in
   Raspberry Pi's 2023-05-11 firmware release), so the firmware
   prerequisite is already satisfied on hardware this project already
@@ -164,33 +199,67 @@ directly (`df -h`, `lsblk -f`) rather than assumed:
 ### Slot selection and health confirmation: Raspberry Pi `tryboot`
 
 Recommendation: build directly on the Raspberry Pi 5's own firmware
-`tryboot` mechanism (supported since the 2023 EEPROM bootloader; already
-demonstrated for A/B use by `rpi-image-gen`'s own official OTA example),
-rather than adopting RAUC or Mender. See Alternatives Considered for why.
+`tryboot_a_b` mechanism, following `rpi-image-gen`'s own official
+`ab_userdata` reference example precisely rather than a bespoke
+approximation, instead of adopting RAUC or Mender. See Alternatives
+Considered for why.
 
-At a high level:
+The reference example's `autoboot.txt` (confirmed directly from its
+`pre-image.sh`, which generates it at build time) is short and precise:
 
-1. A base-OS update artifact (a new full root-filesystem image, signed
-   the same way appliance releases are today) is written to the
-   currently-inactive root slot.
-2. The `boot` partition's `autoboot.txt` / `tryboot.txt` (or equivalent,
-   pending firmware-version confirmation during implementation) is set
-   to boot the new slot for exactly one trial boot.
+```ini
+[all]
+tryboot_a_b=1
+boot_partition=2
+
+[tryboot]
+boot_partition=3
+```
+
+`tryboot_a_b=1` puts the firmware in a specific, documented A/B mode: a
+**normal** boot always uses whatever `boot_partition` the `[all]`
+section currently names (partition 2, i.e. boot A, initially). A
+**trial** boot — triggered from Linux userspace via `reboot "0
+tryboot"`, not by editing this file — uses the `[tryboot]` section's
+`boot_partition` (3, i.e. boot B) for exactly that one boot. Critically,
+promotion is handled by the firmware itself, not by any userspace script
+rewriting `autoboot.txt`: if a trial boot is itself followed by an
+*ordinary* (non-tryboot) reboot, the firmware treats that as
+confirmation and promotes the trial slot to be the new `[all]` default
+for all future normal boots. Nothing in the reference example's
+`device/rootfs-overlay` content rewrites `autoboot.txt` at runtime — the
+promotion logic lives entirely in firmware.
+
+At a high level, applied to Sovereign's existing transaction model:
+
+1. A base-OS update artifact (a new full root-filesystem + boot-partition
+   image pair, signed the same way appliance releases are today) is
+   written to the currently-inactive slot (root B + boot B, in the
+   partition numbers above).
+2. `sovereign-update` triggers a trial boot: `reboot "0 tryboot"`. No
+   `autoboot.txt` edit is needed for this step — the `[tryboot]` section
+   is already static, always pointing at "the other" boot partition.
 3. On that trial boot, a systemd unit gated the same way
    `verify-update-health` gates appliance activation today — reusing
    that pattern, not just its name — confirms DNS, HTTP, Console, and
    Docker health.
-4. On success, the device commits: the new slot becomes the persistent
-   default (`autoboot.txt` updated to boot it normally, not just as a
-   trial), and the transaction reaches `committed` in the same
-   `sovereign-update status` surface appliance updates already report
-   through.
+4. On success, the device performs an ordinary reboot (not another
+   `tryboot`). The firmware promotes the trial slot to the new default
+   as a side effect of that plain reboot; the transaction reaches
+   `committed` in the same `sovereign-update status` surface appliance
+   updates already report through.
 5. On failure — health checks fail, or the trial boot never completes at
-   all (crash, hang, power loss) — the firmware's own `tryboot` fallback
-   behavior returns the next boot to the previously-active slot with no
-   software involvement required. This satisfies "automatic fallback to
-   the previous system" even in the worst case (the new slot's own OS
-   never came up enough to run any of Sovereign's own code).
+   all (crash, hang, power loss) — the device is still running the
+   trial slot's kernel with `[all]` in `autoboot.txt` still pointing at
+   the *original* slot. A power cycle or reboot without an explicit
+   "confirm" step returns to a normal boot, which uses `[all]`'s
+   unchanged value — the original slot — automatically. No software
+   fallback logic is required for the crash/hang/power-loss case; a
+   deliberate "roll back" action after a *detected* health failure
+   (case 3 succeeding at running Sovereign's own code, but reporting bad
+   health) still needs `sovereign-update` to explicitly initiate that
+   same plain reboot back to the known-good slot rather than confirming
+   forward.
 
 ### Reusing RFC-0014's machinery
 
@@ -393,8 +462,16 @@ every future rootfs-level change this project ships.
 
 ## Unresolved Questions
 
-- Exact `tryboot` configuration mechanism and the minimum EEPROM/firmware
-  version this project can require.
+- Whether Sovereign's images move to GPT (matching `rpi-image-gen`'s
+  reference example exactly) or keep MBR with an equivalent layout —
+  the reference example's partition table and `by-slot` udev/systemd
+  tooling assume GPT; not yet confirmed whether that assumption is load
+  -bearing or incidental to that example.
+- Whether Sovereign needs the reference example's separate `bootconfig`
+  partition and `/dev/disk/by-slot/active/*` symlink scheme verbatim,
+  or can simplify it now that the mechanism (not just the concept) is
+  understood — that example also carries cryptroot/eMMC/erofs machinery
+  Sovereign has no use for.
 - CLI/API shape for triggering and observing a base-OS transaction —
   new subcommands vs. extending existing ones.
 - Whether a base-OS update and an appliance update can ever be part of
