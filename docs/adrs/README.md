@@ -14,3 +14,4 @@ Use the [ADR template](../templates/adr.md) and zero-padded sequential identifie
 - [ADR-0006: Production update signing-key custody](0006-production-signing-key-custody.md) - Accepted
 - [ADR-0007: Sovereign Console authentication](0007-console-authentication.md) - Accepted
 - [ADR-0008: Console privileged action invocation](0008-console-privileged-action-invocation.md) - Accepted
+- [ADR-0009: Console-triggered update install](0009-console-triggered-install.md) - Accepted
