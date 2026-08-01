@@ -1,0 +1,29 @@
+[Unit]
+Description=Run a Console-triggered update install
+RequiresMountsFor=/data
+After=sovereign-data-expand.service sovereign-proof.service network-online.target
+Wants=network-online.target
+ConditionPathIsMountPoint=/data
+
+[Service]
+Type=oneshot
+# The trigger file's existence is the only signal this unit trusts (see
+# ADR-0008/ADR-0009) -- its content is never read. Removing it first means
+# a slow or malfunctioning install cannot cause the .path unit to refire
+# on the same request repeatedly.
+ExecStartPre=/usr/bin/rm -f /data/sovereign/console/actions/install.request
+ExecStart=/usr/sbin/sovereign-update install
+# Downloading a real update bundle and running prepare/backup/stage/
+# activate can genuinely take several minutes on a modest connection --
+# systemd's default 90s TimeoutStartSec would kill this mid-transaction,
+# a materially worse failure mode than a slow install. No timeout here;
+# sovereign-update's own steps each carry their own health gating and
+# don't hang indefinitely on their own.
+TimeoutStartSec=0
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=full
+ReadWritePaths=/data/sovereign
+CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_FOWNER
+UMask=0077

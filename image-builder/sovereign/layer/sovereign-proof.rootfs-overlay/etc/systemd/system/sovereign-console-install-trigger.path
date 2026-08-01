@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch for a Console-triggered update install request
+RequiresMountsFor=/data
+ConditionPathIsMountPoint=/data
+
+[Path]
+PathExists=/data/sovereign/console/actions/install.request
+Unit=sovereign-console-install-trigger.service
+
+[Install]
+WantedBy=multi-user.target

@@ -262,6 +262,21 @@ def read_update_check():
         return {"status": "unreadable"}
 
 
+def read_update_status():
+    # update-status.json is already deliberately bounded to
+    # schema_version/state/target_version/updated_at and world-readable by
+    # design (RFC-0014) -- no new sensitivity is introduced by serving it
+    # here, the same reasoning as read_update_check() above. Console polls
+    # this for real install progress (ADR-0009) instead of a bespoke
+    # status channel.
+    if not UPDATE_STATUS_PATH.is_file():
+        return {"state": "idle"}
+    try:
+        return json.loads(UPDATE_STATUS_PATH.read_text())
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return {"state": "unreadable"}
+
+
 class HealthHandler(BaseHTTPRequestHandler):
     server_version = "SovereignHealth/1"
     sys_version = ""
@@ -285,6 +300,8 @@ class HealthHandler(BaseHTTPRequestHandler):
             # was never meant to require a login, unlike causing a new check
             # to run (see console-auth and ADR-0008).
             self._send_json(read_update_check())
+        elif self.path == "/api/v1/update/status":
+            self._send_json(read_update_status())
         else:
             self.send_error(404)
 

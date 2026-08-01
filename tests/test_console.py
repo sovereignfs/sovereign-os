@@ -138,6 +138,37 @@ class ConsoleTests(unittest.TestCase):
             result = module["read_update_check"]()
         self.assertEqual("never_checked", result["status"])
 
+    def test_read_update_status_reflects_the_transaction_state_file(self):
+        module = runpy.run_path(str(HEALTH_SERVICE))
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            status = Path(temporary_directory) / "update-status.json"
+            status.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "state": "backing_up",
+                        "target_version": "0.1.0-preview.18",
+                        "updated_at": "2026-08-01T20:00:00Z",
+                    }
+                )
+            )
+            with mock.patch.dict(
+                module["read_update_status"].__globals__,
+                {"UPDATE_STATUS_PATH": status},
+            ):
+                result = module["read_update_status"]()
+        self.assertEqual("backing_up", result["state"])
+        self.assertEqual("0.1.0-preview.18", result["target_version"])
+
+    def test_read_update_status_reports_idle_when_absent(self):
+        module = runpy.run_path(str(HEALTH_SERVICE))
+        with mock.patch.dict(
+            module["read_update_status"].__globals__,
+            {"UPDATE_STATUS_PATH": Path("/nonexistent/update-status.json")},
+        ):
+            result = module["read_update_status"]()
+        self.assertEqual("idle", result["state"])
+
     def test_console_routes_and_privilege_boundary(self):
         nginx = NGINX.read_text()
         service = SYSTEMD_SERVICE.read_text()

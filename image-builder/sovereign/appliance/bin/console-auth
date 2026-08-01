@@ -44,6 +44,25 @@ CHECK_TRIGGER_PATH = pathlib.Path(
 )
 CHECK_TRIGGER_COOLDOWN_SECONDS = 60
 
+# See ADR-0009: same file-existence signal as the check trigger, but this
+# one additionally requires the password again (not just a valid session)
+# and only proceeds if the device has already found and verified a
+# candidate via check -- Console can only ask the device to do what it
+# already told the user was available, never force an arbitrary install.
+INSTALL_TRIGGER_PATH = pathlib.Path(
+    os.environ.get(
+        "SOVEREIGN_CONSOLE_INSTALL_TRIGGER_PATH",
+        "/data/sovereign/console/actions/install.request",
+    )
+)
+INSTALL_TRIGGER_COOLDOWN_SECONDS = 300
+UPDATE_CHECK_PATH = pathlib.Path(
+    os.environ.get(
+        "SOVEREIGN_CONSOLE_UPDATE_CHECK_PATH",
+        "/data/sovereign/update-check.json",
+    )
+)
+
 _SESSIONS_LOCK = threading.Lock()
 _SESSIONS = {}
 
@@ -52,6 +71,9 @@ _FAILURES = {}
 
 _CHECK_TRIGGER_LOCK = threading.Lock()
 _LAST_CHECK_TRIGGER = 0.0
+
+_INSTALL_TRIGGER_LOCK = threading.Lock()
+_LAST_INSTALL_TRIGGER = 0.0
 
 
 def hash_password(password, iterations=PBKDF2_ITERATIONS):
@@ -167,6 +189,34 @@ def trigger_check():
         return "ok", None
 
 
+def update_is_available():
+    try:
+        return json.loads(UPDATE_CHECK_PATH.read_text()).get("status") == "update_available"
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return False
+
+
+def trigger_install():
+    """Ask the root-owned install-trigger runner to run sovereign-update
+    install, subject to a longer cooldown than check's (see ADR-0009).
+
+    Returns ("ok", None), ("cooldown", retry_after_seconds), or
+    ("error", None) if the trigger file could not be written."""
+    global _LAST_INSTALL_TRIGGER
+    now = time.time()
+    with _INSTALL_TRIGGER_LOCK:
+        elapsed = now - _LAST_INSTALL_TRIGGER
+        if elapsed < INSTALL_TRIGGER_COOLDOWN_SECONDS:
+            return "cooldown", max(1, int(INSTALL_TRIGGER_COOLDOWN_SECONDS - elapsed))
+        try:
+            INSTALL_TRIGGER_PATH.parent.mkdir(parents=True, exist_ok=True)
+            INSTALL_TRIGGER_PATH.touch(exist_ok=True)
+        except OSError:
+            return "error", None
+        _LAST_INSTALL_TRIGGER = now
+        return "ok", None
+
+
 def _isoformat(epoch_seconds):
     return (
         datetime.datetime.fromtimestamp(epoch_seconds, datetime.timezone.utc)
@@ -263,6 +313,8 @@ class AuthHandler(BaseHTTPRequestHandler):
             self._handle_logout()
         elif self.path == "/api/v1/console/actions/check":
             self._handle_check_trigger()
+        elif self.path == "/api/v1/console/actions/install":
+            self._handle_install_trigger()
         else:
             self.send_error(404)
 
@@ -337,6 +389,56 @@ class AuthHandler(BaseHTTPRequestHandler):
                 429,
                 {"triggered": False, "error": "cooldown"},
                 extra_headers=[("Retry-After", str(retry_after))],
+            )
+        elif status == "error":
+            self._send_json(503, {"triggered": False, "error": "trigger_unavailable"})
+        else:
+            self._send_json(202, {"triggered": True})
+
+    def _handle_install_trigger(self):
+        if self._require_authenticated_session() is None:
+            return
+
+        source_ip = self._client_ip()
+        retry_after = rate_limited(source_ip)
+        if retry_after is not None:
+            self._send_json(
+                429,
+                {"triggered": False, "error": "rate_limited"},
+                extra_headers=[("Retry-After", str(retry_after))],
+            )
+            return
+
+        credential = read_credential()
+        if credential is None:
+            self._send_json(503, {"triggered": False, "error": "not_configured"})
+            return
+
+        body = self._read_json_body()
+        password = body.get("password") if isinstance(body, dict) else None
+        if not isinstance(password, str) or not password:
+            self._send_json(400, {"triggered": False, "error": "invalid_request"})
+            return
+
+        # ADR-0009: a valid session is not enough on its own to trigger an
+        # actual install -- the password is required again here, verified
+        # and discarded immediately, never stored or added to the session.
+        if not verify_password(password, credential):
+            record_failure(source_ip)
+            self._send_json(401, {"triggered": False, "error": "invalid_credentials"})
+            return
+        clear_failures(source_ip)
+
+        if not update_is_available():
+            self._send_json(409, {"triggered": False, "error": "no_update_available"})
+            return
+
+        status, install_retry_after = trigger_install()
+        if status == "cooldown":
+            self._send_json(
+                429,
+                {"triggered": False, "error": "cooldown"},
+                extra_headers=[("Retry-After", str(install_retry_after))],
             )
         elif status == "error":
             self._send_json(503, {"triggered": False, "error": "trigger_unavailable"})

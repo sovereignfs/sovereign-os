@@ -44,7 +44,14 @@ class HashingTests(unittest.TestCase):
 
 
 class LiveAuthServer:
-    def __init__(self, credential_path, session_seconds=8 * 60 * 60, trigger_path=None):
+    def __init__(
+        self,
+        credential_path,
+        session_seconds=8 * 60 * 60,
+        trigger_path=None,
+        install_trigger_path=None,
+        update_check_path=None,
+    ):
         self.credential_path = credential_path
         environment = {
             "SOVEREIGN_CONSOLE_CREDENTIAL_PATH": str(credential_path),
@@ -52,6 +59,10 @@ class LiveAuthServer:
         }
         if trigger_path is not None:
             environment["SOVEREIGN_CONSOLE_CHECK_TRIGGER_PATH"] = str(trigger_path)
+        if install_trigger_path is not None:
+            environment["SOVEREIGN_CONSOLE_INSTALL_TRIGGER_PATH"] = str(install_trigger_path)
+        if update_check_path is not None:
+            environment["SOVEREIGN_CONSOLE_UPDATE_CHECK_PATH"] = str(update_check_path)
         with mock.patch.dict(__import__("os").environ, environment):
             self.module = runpy.run_path(str(AUTH_SERVICE))
         from http.server import ThreadingHTTPServer
@@ -296,6 +307,118 @@ class CheckTriggerEndpointTests(unittest.TestCase):
         self.assertIsNotNone(second_response.getheader("Retry-After"))
 
 
+class InstallTriggerEndpointTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        directory = Path(self.temporary.name)
+        self.credential_path = directory / "admin-password.hash"
+        self.trigger_path = directory / "actions/install.request"
+        self.update_check_path = directory / "update-check.json"
+        self.live = LiveAuthServer(
+            self.credential_path,
+            install_trigger_path=self.trigger_path,
+            update_check_path=self.update_check_path,
+        )
+        self.addCleanup(self.live.stop)
+        self.live.set_password("correct horse battery staple")
+
+    def _set_update_available(self, available):
+        self.update_check_path.parent.mkdir(parents=True, exist_ok=True)
+        self.update_check_path.write_text(
+            json.dumps({"status": "update_available" if available else "up_to_date"})
+        )
+
+    def _authenticated_session(self):
+        connection = self.live.connection()
+        connection.request(
+            "POST",
+            "/api/v1/auth/login",
+            body=json.dumps({"password": "correct horse battery staple"}),
+            headers={"Content-Type": "application/json", "X-Real-IP": "203.0.113.10"},
+        )
+        response = connection.getresponse()
+        body = json.loads(response.read())
+        connection.close()
+        cookie = response.getheader("Set-Cookie").split(";")[0]
+        return cookie, body["csrf_token"]
+
+    def _trigger(self, cookie, csrf, password=None, source_ip="203.0.113.10"):
+        connection = self.live.connection()
+        headers = {
+            "Cookie": cookie,
+            "X-CSRF-Token": csrf,
+            "Content-Type": "application/json",
+            "X-Real-IP": source_ip,
+        }
+        connection.request(
+            "POST",
+            "/api/v1/console/actions/install",
+            body=json.dumps({"password": password}) if password is not None else "",
+            headers=headers,
+        )
+        response = connection.getresponse()
+        body = json.loads(response.read())
+        connection.close()
+        return response, body
+
+    def test_trigger_requires_authentication(self):
+        connection = self.live.connection()
+        connection.request("POST", "/api/v1/console/actions/install")
+        response = connection.getresponse()
+        body = json.loads(response.read())
+        connection.close()
+        self.assertEqual(401, response.status)
+        self.assertEqual("not_authenticated", body["error"])
+        self.assertFalse(self.trigger_path.exists())
+
+    def test_trigger_requires_matching_csrf_token(self):
+        cookie, _csrf = self._authenticated_session()
+        response, _body = self._trigger(cookie, "wrong token", password="correct horse battery staple")
+        self.assertEqual(403, response.status)
+        self.assertFalse(self.trigger_path.exists())
+
+    def test_valid_session_alone_is_not_enough_without_the_password(self):
+        self._set_update_available(True)
+        cookie, csrf = self._authenticated_session()
+        response, body = self._trigger(cookie, csrf, password="the wrong password")
+        self.assertEqual(401, response.status)
+        self.assertEqual("invalid_credentials", body["error"])
+        self.assertFalse(self.trigger_path.exists())
+
+    def test_refuses_to_trigger_when_no_update_was_discovered(self):
+        self._set_update_available(False)
+        cookie, csrf = self._authenticated_session()
+        response, body = self._trigger(cookie, csrf, password="correct horse battery staple")
+        self.assertEqual(409, response.status)
+        self.assertEqual("no_update_available", body["error"])
+        self.assertFalse(self.trigger_path.exists())
+
+    def test_correct_password_and_available_update_writes_the_trigger_file(self):
+        self._set_update_available(True)
+        cookie, csrf = self._authenticated_session()
+        response, body = self._trigger(cookie, csrf, password="correct horse battery staple")
+        self.assertEqual(202, response.status)
+        self.assertTrue(body["triggered"])
+        self.assertTrue(self.trigger_path.is_file())
+
+    def test_repeated_triggers_are_cooled_down(self):
+        self._set_update_available(True)
+        cookie, csrf = self._authenticated_session()
+
+        first_response, _first_body = self._trigger(
+            cookie, csrf, password="correct horse battery staple"
+        )
+        self.assertEqual(202, first_response.status)
+
+        second_response, second_body = self._trigger(
+            cookie, csrf, password="correct horse battery staple"
+        )
+        self.assertEqual(429, second_response.status)
+        self.assertEqual("cooldown", second_body["error"])
+        self.assertIsNotNone(second_response.getheader("Retry-After"))
+
+
 class SessionExpiryTests(unittest.TestCase):
     def test_session_expires_after_its_lifetime(self):
         module = runpy.run_path(str(AUTH_SERVICE))
@@ -415,6 +538,49 @@ class CheckTriggerProvisioningTests(unittest.TestCase):
         read_start = nginx.index("location = /api/v1/update/check {")
         read_block = nginx[read_start : nginx.index("}", read_start)]
         self.assertIn("127.0.0.1:8090/api/v1/update/check", read_block)
+
+
+class InstallTriggerProvisioningTests(unittest.TestCase):
+    PATH_UNIT = OVERLAY / "etc/systemd/system/sovereign-console-install-trigger.path"
+    SERVICE_UNIT = OVERLAY / "etc/systemd/system/sovereign-console-install-trigger.service"
+
+    def test_path_unit_watches_the_trigger_file_and_activates_the_service(self):
+        content = self.PATH_UNIT.read_text()
+        self.assertIn(
+            "PathExists=/data/sovereign/console/actions/install.request", content
+        )
+        self.assertIn("Unit=sovereign-console-install-trigger.service", content)
+
+    def test_service_unit_removes_the_trigger_before_running_install_as_root(self):
+        content = self.SERVICE_UNIT.read_text()
+        self.assertIn(
+            "ExecStartPre=/usr/bin/rm -f /data/sovereign/console/actions/install.request",
+            content,
+        )
+        self.assertIn("ExecStart=/usr/sbin/sovereign-update install", content)
+        self.assertIn("NoNewPrivileges=yes", content)
+        self.assertIn("ReadWritePaths=/data/sovereign", content)
+        # A real install can take minutes (bundle download + prepare/backup/
+        # stage/activate) -- systemd's default 90s TimeoutStartSec would
+        # kill it mid-transaction, a worse failure mode than a slow
+        # install completing normally.
+        self.assertIn("TimeoutStartSec=0", content)
+
+    def test_install_trigger_path_unit_is_enabled(self):
+        self.assertIn(
+            "sovereign-console-install-trigger.path", ENABLE_UNITS.read_text()
+        )
+
+    def test_nginx_proxies_new_routes(self):
+        nginx = NGINX.read_text()
+        trigger_start = nginx.index("location = /api/v1/console/actions/install {")
+        trigger_block = nginx[trigger_start : nginx.index("}", trigger_start)]
+        self.assertIn("127.0.0.1:8091/api/v1/console/actions/install", trigger_block)
+        self.assertIn("proxy_set_header X-Real-IP $remote_addr;", trigger_block)
+
+        read_start = nginx.index("location = /api/v1/update/status {")
+        read_block = nginx[read_start : nginx.index("}", read_start)]
+        self.assertIn("127.0.0.1:8090/api/v1/update/status", read_block)
 
 
 if __name__ == "__main__":
