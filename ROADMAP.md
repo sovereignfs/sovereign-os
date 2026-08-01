@@ -225,18 +225,33 @@ Planned work:
   topbar. Unit-tested (`tests/test_console_auth.py`) and
   hardware-qualified on Raspberry Pi 5 — see the
   [console authentication hardware qualification report](docs/research/console-authentication-hardware-qualification-report.md).
-  Nothing mutating exists yet for it to gate. A real signed-release
-  install attempt (`v0.1.0-preview.18`) surfaced a structural finding
-  bigger than Console auth itself — see
+  A real signed-release install attempt (`v0.1.0-preview.18`) surfaced a
+  structural finding bigger than Console auth itself — see
   [the finding](docs/research/appliance-file-set-update-ceiling-finding.md)
-  — since fixed: `.18` is now genuinely installed via a real update on
-  real hardware, `console-auth`'s binary included. Console auth still
-  cannot actually **run** without a reflash, though: the systemd unit,
-  `sysusers.d` group, and directory bootstrap it needs are base-image
-  content, which no update delivers (confirmed —
-  `sovereign-console-auth.service` still doesn't exist on the device
-  after installing `.18`). That larger gap is tracked at item 6 below,
-  not solved here;
+  — since fixed: `.18` is genuinely installed via a real update on real
+  hardware, `console-auth`'s binary included. The base-image content it
+  also needs (systemd unit, `sysusers.d` group, directory bootstrap) was
+  then deployed manually and permanently to the qualification device —
+  real, accepted drift against what any future image build produces
+  until the next reflash, not something an update can deliver (tracked
+  at item 6 below). Console authentication is now genuinely live and
+  working on real hardware;
+- **the first Console-triggered privileged action** — decided and
+  implemented in
+  [ADR-0008](docs/adrs/0008-console-privileged-action-invocation.md): a
+  file-existence trigger picked up by a `systemd` path-activated,
+  root-owned oneshot runner, scoped to exactly one action,
+  `sovereign-update check`. Hardware-qualified on Raspberry Pi 5 — the
+  full chain (auth/CSRF gating, the trigger actually firing, a real
+  check running as root, the result surfacing back to Console, cooldown
+  enforcement) verified correctly, after finding and fixing two real
+  defects (a missing `ReadWritePaths=` grant, and a static-group name
+  that collided with an unrelated service's own `DynamicUser` identity)
+  — see the
+  [qualification report](docs/research/console-check-trigger-hardware-qualification-report.md).
+  `prepare`/`backup`/`stage`/`activate` (an actual install trigger) are
+  explicitly out of scope for this pass — deliberately smaller blast
+  radius first;
 - show version, channel, release notes, download size, reboot requirements, and
   rollback limitations in Console;
 - provide user-triggered download and installation;

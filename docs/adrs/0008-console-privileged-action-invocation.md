@@ -52,10 +52,10 @@ auditing this decision's provenance later.
 - `console-auth`, after verifying session + CSRF exactly like `logout`
   already does, writes an empty trigger file to
   `/data/sovereign/console/actions/check.request`. It has group-write
-  access to that directory (`sovereign-console`, mode `0730` — write and
-  traverse, no read) and nothing more; it cannot read the directory's
-  contents, cannot invoke anything else, and still runs with the exact
-  same hardening as before this ADR.
+  access to that directory (`sovereign-console-secrets`, mode `0730` —
+  write and traverse, no read) and nothing more; it cannot read the
+  directory's contents, cannot invoke anything else. `ReadWritePaths=`
+  for that one directory was added to its otherwise-unchanged hardening.
 - A `systemd` `.path` unit
   (`sovereign-console-check-trigger.path`, `PathExists=`) watches for that
   file and activates a oneshot `.service`
@@ -199,6 +199,23 @@ Described in Decision above.
 Rejected — the actual hard problem (how does unprivileged Console code
 ever safely reach root) doesn't go away by special-casing one command; it
 would just resurface, unexamined, the moment a second action is needed.
+
+## Hardware Qualification
+
+Hardware-qualified on Raspberry Pi 5, deployed permanently alongside the
+already-live Console authentication — see the
+[qualification report](../research/console-check-trigger-hardware-qualification-report.md).
+The full real chain (unauthenticated rejection, CSRF enforcement,
+trigger, the `.path`/`.service` pair actually firing and running
+`sovereign-update check` as root, the result appearing in
+`/api/v1/update/check`, cooldown enforcement) verified correctly — after
+fixing two real defects design review alone didn't catch: the auth
+service's unit was missing `ReadWritePaths=` for the new trigger
+directory (silent `503` on every write), and the static group backing it
+was named `sovereign-console` — colliding with `sovereign-console.service`'s
+(unrelated `console-health`) own `DynamicUser`-derived identity, breaking
+that pre-existing service's ability to restart at all. Renamed to
+`sovereign-console-secrets` throughout.
 
 ## Validation and Revisit Conditions
 

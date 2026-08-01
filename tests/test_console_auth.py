@@ -15,7 +15,7 @@ APPLIANCE = ROOT / "image-builder/sovereign/appliance"
 AUTH_SERVICE = APPLIANCE / "bin/console-auth"
 PASSWORD_SCRIPT = OVERLAY / "usr/sbin/sovereign-console-password"
 SYSTEMD_SERVICE = OVERLAY / "etc/systemd/system/sovereign-console-auth.service"
-SYSUSERS = OVERLAY / "usr/lib/sysusers.d/sovereign-console.conf"
+SYSUSERS = OVERLAY / "usr/lib/sysusers.d/sovereign-console-secrets.conf"
 PROOF_INIT = OVERLAY / "usr/lib/sovereign/proof-init"
 PROOF_SERVICE = OVERLAY / "etc/systemd/system/sovereign-proof.service"
 NGINX = APPLIANCE / "nginx/sovereign.conf"
@@ -309,13 +309,18 @@ class SessionExpiryTests(unittest.TestCase):
 
 class ConsoleAuthProvisioningTests(unittest.TestCase):
     def test_group_declared_via_sysusers(self):
-        self.assertIn("g", SYSUSERS.read_text())
-        self.assertIn("sovereign-console", SYSUSERS.read_text())
+        content = SYSUSERS.read_text()
+        self.assertIn("g     sovereign-console-secrets -", content)
+        # Not "sovereign-console" (exactly) -- that collides with
+        # sovereign-console.service's own DynamicUser-derived identity.
+        # Found on real hardware: console-health refused to restart at
+        # all once a static group of that exact name existed.
+        self.assertNotIn("g     sovereign-console -", content)
 
     def test_systemd_unit_is_hardened_and_grouped(self):
         service = SYSTEMD_SERVICE.read_text()
         self.assertIn("DynamicUser=yes", service)
-        self.assertIn("SupplementaryGroups=sovereign-console", service)
+        self.assertIn("SupplementaryGroups=sovereign-console-secrets", service)
         self.assertIn("NoNewPrivileges=yes", service)
         self.assertIn("ProtectSystem=strict", service)
         self.assertIn("CapabilityBoundingSet=", service)
@@ -325,11 +330,18 @@ class ConsoleAuthProvisioningTests(unittest.TestCase):
         )
         self.assertIn("After=", service)
         self.assertIn("systemd-sysusers.service", service)
+        # ProtectSystem=strict makes the whole filesystem read-only except
+        # explicitly declared paths -- found missing on real hardware when
+        # the check-trigger endpoint's write silently failed (503
+        # trigger_unavailable) despite passing every unit test, since no
+        # test exercised the real sandboxed filesystem.
+        self.assertIn("ReadWritePaths=/data/sovereign/console/actions", service)
 
     def test_proof_init_creates_group_scoped_directory_and_validates_binary(self):
         content = PROOF_INIT.read_text()
         self.assertIn(
-            "install -d -m 0750 -o root -g sovereign-console /data/sovereign/console",
+            "install -d -m 0750 -o root -g sovereign-console-secrets"
+            " /data/sovereign/console",
             content,
         )
         self.assertIn('test -x "$release_dir/appliance/bin/console-auth"', content)
@@ -383,7 +395,7 @@ class CheckTriggerProvisioningTests(unittest.TestCase):
     def test_proof_init_creates_group_writable_actions_directory(self):
         content = PROOF_INIT.read_text()
         self.assertIn(
-            "install -d -m 0730 -o root -g sovereign-console"
+            "install -d -m 0730 -o root -g sovereign-console-secrets"
             " /data/sovereign/console/actions",
             content,
         )

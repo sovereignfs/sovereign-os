@@ -4,8 +4,8 @@ set -eu
 
 install -d -m 0755 /data/sovereign /data/sovereign/configuration
 install -d -m 0700 /data/sovereign/backups /data/sovereign/update-state
-install -d -m 0750 -o root -g sovereign-console /data/sovereign/console
-install -d -m 0730 -o root -g sovereign-console /data/sovereign/console/actions
+install -d -m 0750 -o root -g sovereign-console-secrets /data/sovereign/console
+install -d -m 0730 -o root -g sovereign-console-secrets /data/sovereign/console/actions
 if [ ! -L /opt/sovereign/current ]; then
   version=$(sed -n 's/^VERSION="\(.*\)"$/\1/p' /etc/sovereign-release)
   test -n "$version"
