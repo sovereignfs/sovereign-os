@@ -25,5 +25,17 @@ PrivateTmp=yes
 ProtectHome=yes
 ProtectSystem=full
 ReadWritePaths=/data/sovereign
-CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_FOWNER
+# nginx's `-t` config test is not a pure parse: it performs real startup
+# side effects against the configured directives (it actually attempts to
+# bind every listen socket, and chowns worker-owned temp directories to
+# the configured `user` UID) rather than just validating syntax. Since
+# verify-update-health (invoked by `sovereign-update install`'s health
+# gates) shells out to `nginx -t`, this unit needs every capability those
+# side effects require, even though the unit itself never binds a port or
+# changes file ownership directly. Both of the below were found one at a
+# time on real hardware, each manifesting as a distinct PREUPDATE_HEALTH_
+# FAILED at the nginx-config check with a different underlying errno:
+#  - CAP_NET_BIND_SERVICE: bind() to 0.0.0.0:80 got EACCES
+#  - CAP_CHOWN: chown() of /var/lib/nginx/body to the worker UID got EPERM
+CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_FOWNER CAP_NET_BIND_SERVICE CAP_CHOWN
 UMask=0077

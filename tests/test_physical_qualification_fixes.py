@@ -77,6 +77,28 @@ class PhysicalQualificationFixTests(unittest.TestCase):
         self.assertIn("sleep 1", verifier)
         self.assertIn("StartLimitBurst=6", service)
 
+    def test_root_redirect_and_console_checks_retry_instead_of_racing_startup(self):
+        # nginx and sovereign-console.service both just (re)started when
+        # this script runs -- an unretried curl here can race a backend
+        # that isn't listening yet. Confirmed on real hardware (ADR-0009
+        # qualification, attempt 8): sovereign-update install restarts
+        # everything back-to-back during activation, giving these checks
+        # far less natural settle time than a cold boot would, and the
+        # unretried root_redirect/console checks failed with a transient
+        # 404 as a direct result.
+        verifier = (APPLIANCE / "bin/verify-local-access").read_text()
+        lines = verifier.splitlines()
+        nginx_t_index = next(i for i, line in enumerate(lines) if line.strip() == "nginx -t")
+        health_until_index = next(
+            i for i, line in enumerate(lines)
+            if "curl --fail --silent --show-error --max-time 10 \\" in line
+            and i > nginx_t_index
+            and lines[i + 1].strip() == "http://127.0.0.1/api/v1/health | \\"
+        )
+        between = "\n".join(lines[nginx_t_index:health_until_index])
+        self.assertIn("until", between)
+        self.assertIn("http://127.0.0.1/console/", between)
+
 
 if __name__ == "__main__":
     unittest.main()

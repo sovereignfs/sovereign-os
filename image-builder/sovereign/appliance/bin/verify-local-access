@@ -7,13 +7,25 @@ marker=${state_dir}/local-access-ready
 
 nginx -t
 
-root_redirect=$(curl --silent --show-error --max-time 10 \
+# nginx and sovereign-console.service both just started (or were just
+# restarted mid-activation by `sovereign-update install`, which gives them
+# far less natural settle time than a cold boot's staggered unit startup)
+# -- an immediate, unretried curl here can race a backend that isn't
+# listening yet, giving a transient 502/404 rather than a real failure.
+# Confirmed on real hardware (ADR-0009 qualification, attempt 8): this
+# same started-too-fast pattern already required a retry loop once this
+# session, for verify-update-health's Pi-hole checks.
+attempt=0
+until root_redirect=$(curl --silent --show-error --max-time 10 \
   --output /dev/null --write-out '%{redirect_url}' \
-  http://127.0.0.1/)
-test "$root_redirect" = http://127.0.0.1/console/
-
-curl --fail --silent --show-error --max-time 10 \
+  http://127.0.0.1/) && [ "$root_redirect" = http://127.0.0.1/console/ ] && \
+  curl --fail --silent --show-error --max-time 10 \
   --output /dev/null http://127.0.0.1/console/
+do
+  attempt=$((attempt + 1))
+  [ "$attempt" -lt 30 ] || exit 1
+  sleep 1
+done
 
 attempt=0
 until curl --fail --silent --show-error --max-time 10 \

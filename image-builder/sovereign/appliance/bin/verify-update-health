@@ -18,42 +18,116 @@ set -eu
 attempt=0
 max_attempts=70
 
-all_checks_pass() {
+# Named check functions so a final exhaustion can report exactly which
+# check(s) are failing, instead of `set -e` bailing out on the first one
+# alphabetically and leaving the rest unknown. The caller
+# (sovereign-update's run_checked) previously discarded this script's
+# stdout/stderr entirely, so on real-hardware failures the only evidence
+# was an after-the-fact `docker inspect`, whose health log only retains
+# the last 5 entries -- by the time anyone looked, the window that
+# mattered had already rotated out. This script now always names the
+# failing check(s) on its own, so the caller doesn't have to capture
+# anything for the failure to be diagnosable.
+
+check_docker_health() {
   docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' pihole 2>/dev/null |
-    grep -qx healthy &&
-  dig +tcp +short +time=3 +tries=1 @127.0.0.1 pi.hole | grep -q . &&
-  dig +notcp +short +time=3 +tries=1 @127.0.0.1 pi.hole | grep -q . &&
+    grep -qx healthy
+}
+
+check_dig_tcp() {
+  dig +tcp +short +time=3 +tries=1 @127.0.0.1 pi.hole | grep -q .
+}
+
+check_dig_udp() {
+  dig +notcp +short +time=3 +tries=1 @127.0.0.1 pi.hole | grep -q .
+}
+
+check_pihole_admin() {
   curl --fail --silent --show-error --max-time 10 \
-    --output /dev/null http://127.0.0.1:8080/admin/ &&
-  nginx -t >/dev/null 2>&1 &&
+    --output /dev/null http://127.0.0.1:8080/admin/
+}
+
+check_nginx_config() {
+  nginx -t >/dev/null 2>&1
+}
+
+check_dns_admin_proxy() {
   curl --fail --silent --show-error --max-time 10 \
-    --output /dev/null http://127.0.0.1/dns/admin/ &&
-  test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
-    --max-time 10 http://127.0.0.1/admin/)" = 404 &&
-  test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
-    --max-time 10 http://127.0.0.1/api/)" = 404 &&
+    --output /dev/null http://127.0.0.1/dns/admin/
+}
+
+check_admin_404() {
+  code="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+    --max-time 10 http://127.0.0.1/admin/)"
+  test "$code" = 404
+}
+
+check_api_404() {
+  code="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+    --max-time 10 http://127.0.0.1/api/)"
+  test "$code" = 404
+}
+
+check_data_mount() {
   findmnt -rn -o TARGET /data | grep -qx /data
+}
+
+all_checks_pass() {
+  check_docker_health &&
+  check_dig_tcp &&
+  check_dig_udp &&
+  check_pihole_admin &&
+  check_nginx_config &&
+  check_dns_admin_proxy &&
+  check_admin_404 &&
+  check_api_404 &&
+  check_data_mount
+}
+
+report_failures() {
+  # Run every check independently (not short-circuited by &&) so a single
+  # exhausted attempt reports the complete picture, not just whichever
+  # check happens to be first in the list.
+  set +e
+  echo "verify-update-health: giving up after ${max_attempts} attempts; per-check results:" >&2
+  check_docker_health
+  status=$?
+  if [ "$status" -eq 0 ]; then
+    echo "  docker-health: OK" >&2
+  else
+    echo "  docker-health: FAIL (status=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' pihole 2>&1))" >&2
+  fi
+  check_dig_tcp; [ $? -eq 0 ] && echo "  dig-tcp: OK" >&2 || echo "  dig-tcp: FAIL" >&2
+  check_dig_udp; [ $? -eq 0 ] && echo "  dig-udp: OK" >&2 || echo "  dig-udp: FAIL" >&2
+  check_pihole_admin; [ $? -eq 0 ] && echo "  pihole-admin: OK" >&2 || echo "  pihole-admin: FAIL" >&2
+  check_nginx_config
+  status=$?
+  if [ "$status" -eq 0 ]; then
+    echo "  nginx-config: OK" >&2
+  else
+    echo "  nginx-config: FAIL ($(nginx -t 2>&1 | tr '\n' ' '))" >&2
+  fi
+  check_dns_admin_proxy; [ $? -eq 0 ] && echo "  dns-admin-proxy: OK" >&2 || echo "  dns-admin-proxy: FAIL" >&2
+  admin_code="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 10 http://127.0.0.1/admin/ 2>/dev/null || echo unreachable)"
+  if [ "$admin_code" = 404 ]; then
+    echo "  admin-404: OK" >&2
+  else
+    echo "  admin-404: FAIL (got $admin_code, want 404)" >&2
+  fi
+  api_code="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 10 http://127.0.0.1/api/ 2>/dev/null || echo unreachable)"
+  if [ "$api_code" = 404 ]; then
+    echo "  api-404: OK" >&2
+  else
+    echo "  api-404: FAIL (got $api_code, want 404)" >&2
+  fi
+  check_data_mount; [ $? -eq 0 ] && echo "  data-mount: OK" >&2 || echo "  data-mount: FAIL" >&2
+  set -e
 }
 
 until all_checks_pass; do
   attempt=$((attempt + 1))
   if [ "$attempt" -ge "$max_attempts" ]; then
-    # Run once more outside the loop so the real failure (not just a
-    # generic timeout) is what the caller sees in its own error output.
-    nginx -t
-    docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' pihole |
-      grep -qx healthy
-    dig +tcp +short +time=3 +tries=1 @127.0.0.1 pi.hole | grep -q .
-    dig +notcp +short +time=3 +tries=1 @127.0.0.1 pi.hole | grep -q .
-    curl --fail --silent --show-error --max-time 10 \
-      --output /dev/null http://127.0.0.1:8080/admin/
-    curl --fail --silent --show-error --max-time 10 \
-      --output /dev/null http://127.0.0.1/dns/admin/
-    test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
-      --max-time 10 http://127.0.0.1/admin/)" = 404
-    test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
-      --max-time 10 http://127.0.0.1/api/)" = 404
-    findmnt -rn -o TARGET /data | grep -qx /data
+    report_failures
     exit 1
   fi
   sleep 2

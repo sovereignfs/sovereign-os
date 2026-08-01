@@ -696,6 +696,37 @@ def run_checked(command, code, message, timeout=120):
         raise UpdateError(code, message) from error
 
 
+# Some run_checked callers are worth capturing output for: on hardware, a
+# failure's real cause is the whole picture (which check failed and why),
+# and by the time anyone inspects the device afterward that evidence
+# (e.g. Docker's own 5-entry health log, a deleted validation tempdir) has
+# often already rotated out or been cleaned up. Unlike run_checked's other
+# callers -- fast, well-understood commands like systemctl/tar -- these
+# fold a tail of the captured output into the raised error so it lands
+# directly in the transaction's failure record without needing a repro.
+CHECKED_OUTPUT_TAIL_BYTES = 4000
+
+
+def run_checked_capturing(command, code, message, timeout=120):
+    try:
+        result = subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        raise UpdateError(code, message) from error
+    if result.returncode != 0:
+        output = result.stdout.decode("utf-8", errors="replace").strip()
+        detail = output[-CHECKED_OUTPUT_TAIL_BYTES:] if output else "(no output captured)"
+        raise UpdateError(code, f"{message}: {detail}")
+
+
+def run_health_check(code, message):
+    run_checked_capturing([health_check_command()], code, message, timeout=HEALTH_CHECK_TIMEOUT_SECONDS)
+
+
 def archive_directory(source, destination):
     source = pathlib.Path(source)
     fail(source.is_dir(), "BACKUP_SOURCE_MISSING", f"Backup source is missing: {source.name}")
@@ -809,12 +840,7 @@ def create_backup(args):
                 "Pi-hole could not be restarted after backup",
             )
             stopped = False
-            run_checked(
-                [health_check_command()],
-                "PREUPDATE_HEALTH_FAILED",
-                "Pi-hole did not recover after backup",
-                timeout=HEALTH_CHECK_TIMEOUT_SECONDS,
-            )
+            run_health_check("PREUPDATE_HEALTH_FAILED", "Pi-hole did not recover after backup")
             backup_manifest = {
                 "schema_version": 1,
                 "backup_id": backup_id,
@@ -1085,7 +1111,7 @@ def validate_appliance_configuration(release, pihole):
             "}\n",
             encoding="utf-8",
         )
-        run_checked(
+        run_checked_capturing(
             [NGINX, "-t", "-c", str(nginx_config), "-p", "/"],
             "INVALID_NGINX_CONFIGURATION",
             "Sovereign Nginx configuration failed validation",
@@ -1204,7 +1230,7 @@ def activate_release(args):
             snapshot = transition(snapshot, "validating", "TARGET_STARTED")
             qualification_interrupt("validating")
             qualification_health_failure()
-            run_checked([health_check_command()], "POSTUPDATE_HEALTH_FAILED", "Updated appliance failed health checks", timeout=HEALTH_CHECK_TIMEOUT_SECONDS)
+            run_health_check("POSTUPDATE_HEALTH_FAILED", "Updated appliance failed health checks")
             snapshot = transition(snapshot, "committed", "UPDATE_COMMITTED", recovery_action="none")
             shutil.rmtree(directory / "release-candidate", ignore_errors=True)
             try:
@@ -1221,7 +1247,7 @@ def activate_release(args):
                 stop_appliance("ROLLBACK_STOP_FAILED")
                 switch_current(previous)
                 start_appliance("ROLLBACK_START_FAILED")
-                run_checked([health_check_command()], "ROLLBACK_HEALTH_FAILED", "Previous release failed health checks", timeout=HEALTH_CHECK_TIMEOUT_SECONDS)
+                run_health_check("ROLLBACK_HEALTH_FAILED", "Previous release failed health checks")
                 transition(snapshot, "rolled_back", "ROLLBACK_HEALTHY", recovery_action="none")
             except UpdateError as rollback_error:
                 transition(snapshot, "recovery_required", rollback_error.code, failure={"code": rollback_error.code, "message": str(rollback_error), "retryable": False}, recovery_action="manual")
@@ -1594,7 +1620,7 @@ def restore_backup(args):
             snapshot = transition_restore(snapshot, "verifying", "RESTORE_TARGET_STARTED")
             qualification_interrupt("verifying")
             qualification_health_failure("POSTRESTORE_HEALTH_FAILED")
-            run_checked([health_check_command()], "POSTRESTORE_HEALTH_FAILED", "Restored appliance failed health checks", timeout=HEALTH_CHECK_TIMEOUT_SECONDS)
+            run_health_check("POSTRESTORE_HEALTH_FAILED", "Restored appliance failed health checks")
             snapshot = transition_restore(snapshot, "committed", "RESTORE_COMMITTED", recovery_action="none")
             for _live, old in swapped:
                 if old is not None:
@@ -1618,7 +1644,7 @@ def restore_backup(args):
                     if old is not None:
                         old.rename(live)
                 run_checked([SYSTEMCTL, "start", "sovereign-pihole.service"], "ROLLBACK_START_FAILED", "Pi-hole could not be restarted after restore rollback")
-                run_checked([health_check_command()], "ROLLBACK_HEALTH_FAILED", "Previous data failed health checks after restore rollback", timeout=HEALTH_CHECK_TIMEOUT_SECONDS)
+                run_health_check("ROLLBACK_HEALTH_FAILED", "Previous data failed health checks after restore rollback")
                 transition_restore(snapshot, "rolled_back", "RESTORE_ROLLBACK_HEALTHY", recovery_action="none")
                 for live, _old in swapped:
                     shutil.rmtree(live.with_name(f"{live.name}.rollback-failed.{snapshot['restore_id']}"), ignore_errors=True)

@@ -566,6 +566,24 @@ class InstallTriggerProvisioningTests(unittest.TestCase):
         # install completing normally.
         self.assertIn("TimeoutStartSec=0", content)
 
+    def test_service_unit_grants_capabilities_nginx_config_test_needs(self):
+        # nginx -t is not a pure parse: it actually binds every listen
+        # socket (needs CAP_NET_BIND_SERVICE for 0.0.0.0:80) and chowns
+        # worker-owned temp directories to the configured user (needs
+        # CAP_CHOWN). verify-update-health shells out to `nginx -t` as
+        # part of sovereign-update install's health gates, so this unit
+        # needs both even though it never itself binds a port or chowns a
+        # file directly. Confirmed on real hardware, one at a time, each
+        # as a distinct PREUPDATE_HEALTH_FAILED with a different errno
+        # (ADR-0009 qualification, attempts 5 and 7).
+        content = self.SERVICE_UNIT.read_text()
+        self.assertIn("CapabilityBoundingSet=", content)
+        bounding_set_line = next(
+            line for line in content.splitlines() if line.startswith("CapabilityBoundingSet=")
+        )
+        self.assertIn("CAP_NET_BIND_SERVICE", bounding_set_line)
+        self.assertIn("CAP_CHOWN", bounding_set_line)
+
     def test_install_trigger_path_unit_is_enabled(self):
         self.assertIn(
             "sovereign-console-install-trigger.path", ENABLE_UNITS.read_text()
