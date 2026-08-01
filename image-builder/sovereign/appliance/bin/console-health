@@ -24,6 +24,12 @@ UPDATE_STATUS_PATH = pathlib.Path(
         "/data/sovereign/update-status.json",
     )
 )
+UPDATE_CHECK_PATH = pathlib.Path(
+    os.environ.get(
+        "SOVEREIGN_UPDATE_CHECK_PATH",
+        "/data/sovereign/update-check.json",
+    )
+)
 
 
 def read_key_values(path):
@@ -247,15 +253,21 @@ def collect_health():
     }
 
 
+def read_update_check():
+    if not UPDATE_CHECK_PATH.is_file():
+        return {"status": "never_checked"}
+    try:
+        return json.loads(UPDATE_CHECK_PATH.read_text())
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return {"status": "unreadable"}
+
+
 class HealthHandler(BaseHTTPRequestHandler):
     server_version = "SovereignHealth/1"
     sys_version = ""
 
-    def do_GET(self):
-        if self.path != "/api/v1/health":
-            self.send_error(404)
-            return
-        body = json.dumps(collect_health(), separators=(",", ":")).encode()
+    def _send_json(self, payload):
+        body = json.dumps(payload, separators=(",", ":")).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -263,6 +275,18 @@ class HealthHandler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         self.wfile.write(body)
+
+    def do_GET(self):
+        if self.path == "/api/v1/health":
+            self._send_json(collect_health())
+        elif self.path == "/api/v1/update/check":
+            # update-check.json is deliberately non-sensitive, world-readable
+            # output (RFC-0015) -- reading the last result costs nothing and
+            # was never meant to require a login, unlike causing a new check
+            # to run (see console-auth and ADR-0008).
+            self._send_json(read_update_check())
+        else:
+            self.send_error(404)
 
     def log_message(self, format_string, *arguments):
         return

@@ -44,15 +44,15 @@ class HashingTests(unittest.TestCase):
 
 
 class LiveAuthServer:
-    def __init__(self, credential_path, session_seconds=8 * 60 * 60):
+    def __init__(self, credential_path, session_seconds=8 * 60 * 60, trigger_path=None):
         self.credential_path = credential_path
-        with mock.patch.dict(
-            __import__("os").environ,
-            {
-                "SOVEREIGN_CONSOLE_CREDENTIAL_PATH": str(credential_path),
-                "SOVEREIGN_CONSOLE_SESSION_SECONDS": str(session_seconds),
-            },
-        ):
+        environment = {
+            "SOVEREIGN_CONSOLE_CREDENTIAL_PATH": str(credential_path),
+            "SOVEREIGN_CONSOLE_SESSION_SECONDS": str(session_seconds),
+        }
+        if trigger_path is not None:
+            environment["SOVEREIGN_CONSOLE_CHECK_TRIGGER_PATH"] = str(trigger_path)
+        with mock.patch.dict(__import__("os").environ, environment):
             self.module = runpy.run_path(str(AUTH_SERVICE))
         from http.server import ThreadingHTTPServer
 
@@ -208,6 +208,94 @@ class AuthEndpointTests(unittest.TestCase):
         self.assertEqual("invalid_request", body["error"])
 
 
+class CheckTriggerEndpointTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        directory = Path(self.temporary.name)
+        self.credential_path = directory / "admin-password.hash"
+        self.trigger_path = directory / "actions/check.request"
+        self.live = LiveAuthServer(self.credential_path, trigger_path=self.trigger_path)
+        self.addCleanup(self.live.stop)
+        self.live.set_password("correct horse battery staple")
+
+    def _authenticated_session(self):
+        connection = self.live.connection()
+        connection.request(
+            "POST",
+            "/api/v1/auth/login",
+            body=json.dumps({"password": "correct horse battery staple"}),
+            headers={"Content-Type": "application/json", "X-Real-IP": "203.0.113.10"},
+        )
+        response = connection.getresponse()
+        body = json.loads(response.read())
+        connection.close()
+        cookie = response.getheader("Set-Cookie").split(";")[0]
+        return cookie, body["csrf_token"]
+
+    def test_trigger_requires_authentication(self):
+        connection = self.live.connection()
+        connection.request("POST", "/api/v1/console/actions/check")
+        response = connection.getresponse()
+        body = json.loads(response.read())
+        connection.close()
+        self.assertEqual(401, response.status)
+        self.assertEqual("not_authenticated", body["error"])
+        self.assertFalse(self.trigger_path.exists())
+
+    def test_trigger_requires_matching_csrf_token(self):
+        cookie, _csrf = self._authenticated_session()
+        connection = self.live.connection()
+        connection.request(
+            "POST",
+            "/api/v1/console/actions/check",
+            headers={"Cookie": cookie, "X-CSRF-Token": "wrong token"},
+        )
+        response = connection.getresponse()
+        response.read()
+        connection.close()
+        self.assertEqual(403, response.status)
+        self.assertFalse(self.trigger_path.exists())
+
+    def test_authenticated_trigger_writes_the_request_file(self):
+        cookie, csrf = self._authenticated_session()
+        connection = self.live.connection()
+        connection.request(
+            "POST",
+            "/api/v1/console/actions/check",
+            headers={"Cookie": cookie, "X-CSRF-Token": csrf},
+        )
+        response = connection.getresponse()
+        body = json.loads(response.read())
+        connection.close()
+        self.assertEqual(202, response.status)
+        self.assertTrue(body["triggered"])
+        self.assertTrue(self.trigger_path.is_file())
+
+    def test_repeated_triggers_are_cooled_down(self):
+        cookie, csrf = self._authenticated_session()
+
+        def trigger():
+            connection = self.live.connection()
+            connection.request(
+                "POST",
+                "/api/v1/console/actions/check",
+                headers={"Cookie": cookie, "X-CSRF-Token": csrf},
+            )
+            response = connection.getresponse()
+            body = json.loads(response.read())
+            connection.close()
+            return response, body
+
+        first_response, _first_body = trigger()
+        self.assertEqual(202, first_response.status)
+
+        second_response, second_body = trigger()
+        self.assertEqual(429, second_response.status)
+        self.assertEqual("cooldown", second_body["error"])
+        self.assertIsNotNone(second_response.getheader("Retry-After"))
+
+
 class SessionExpiryTests(unittest.TestCase):
     def test_session_expires_after_its_lifetime(self):
         module = runpy.run_path(str(AUTH_SERVICE))
@@ -269,6 +357,52 @@ class ConsoleAuthProvisioningTests(unittest.TestCase):
         self.assertIn("pbkdf2_hmac", content)
         self.assertIn("0o640", content)
         self.assertIn("0o750", content)
+
+
+class CheckTriggerProvisioningTests(unittest.TestCase):
+    PATH_UNIT = OVERLAY / "etc/systemd/system/sovereign-console-check-trigger.path"
+    SERVICE_UNIT = OVERLAY / "etc/systemd/system/sovereign-console-check-trigger.service"
+
+    def test_path_unit_watches_the_trigger_file_and_activates_the_service(self):
+        content = self.PATH_UNIT.read_text()
+        self.assertIn(
+            "PathExists=/data/sovereign/console/actions/check.request", content
+        )
+        self.assertIn("Unit=sovereign-console-check-trigger.service", content)
+
+    def test_service_unit_removes_the_trigger_before_running_check_as_root(self):
+        content = self.SERVICE_UNIT.read_text()
+        self.assertIn(
+            "ExecStartPre=/usr/bin/rm -f /data/sovereign/console/actions/check.request",
+            content,
+        )
+        self.assertIn("ExecStart=/usr/sbin/sovereign-update check", content)
+        self.assertIn("NoNewPrivileges=yes", content)
+        self.assertIn("ReadWritePaths=/data/sovereign", content)
+
+    def test_proof_init_creates_group_writable_actions_directory(self):
+        content = PROOF_INIT.read_text()
+        self.assertIn(
+            "install -d -m 0730 -o root -g sovereign-console"
+            " /data/sovereign/console/actions",
+            content,
+        )
+
+    def test_check_trigger_path_unit_is_enabled(self):
+        self.assertIn(
+            "sovereign-console-check-trigger.path", ENABLE_UNITS.read_text()
+        )
+
+    def test_nginx_proxies_new_routes(self):
+        nginx = NGINX.read_text()
+        trigger_start = nginx.index("location = /api/v1/console/actions/check {")
+        trigger_block = nginx[trigger_start : nginx.index("}", trigger_start)]
+        self.assertIn("127.0.0.1:8091/api/v1/console/actions/check", trigger_block)
+        self.assertIn("proxy_set_header X-Real-IP $remote_addr;", trigger_block)
+
+        read_start = nginx.index("location = /api/v1/update/check {")
+        read_block = nginx[read_start : nginx.index("}", read_start)]
+        self.assertIn("127.0.0.1:8090/api/v1/update/check", read_block)
 
 
 if __name__ == "__main__":

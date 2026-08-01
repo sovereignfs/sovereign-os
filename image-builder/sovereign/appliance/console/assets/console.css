@@ -210,6 +210,10 @@ button:hover, button:focus-visible { border-color: var(--accent); }
 
 .network-panel { display: flex; justify-content: space-between; align-items: center; gap: 2rem; margin-top: 1rem; }
 .network-panel h2 { margin-bottom: 0; }
+
+.update-panel { display: flex; justify-content: space-between; align-items: center; gap: 2rem; margin-top: 1rem; }
+.update-panel h2 { margin-bottom: 0; }
+.update-panel #update-summary { margin-top: .35rem; }
 .network-list { display: flex; flex-wrap: wrap; justify-content: end; gap: .6rem; }
 .network-chip { padding: .65rem .8rem; border: 1px solid var(--border); border-radius: 11px; background: rgba(7,17,15,.35); }
 .network-chip strong, .network-chip span { display: block; }

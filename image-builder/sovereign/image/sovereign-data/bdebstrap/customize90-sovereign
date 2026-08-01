@@ -9,6 +9,7 @@ set -eu
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-pihole.service
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-console.service
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-console-auth.service
+"$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-console-check-trigger.path
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-update-recovery.service
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-update-prune.timer
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-update-check.timer

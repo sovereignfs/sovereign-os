@@ -32,11 +32,26 @@ RATE_LIMIT_THRESHOLD = 5
 PBKDF2_ITERATIONS = 600_000
 MAX_REQUEST_BODY_BYTES = 4096
 
+# See ADR-0008: the trigger file's mere existence is the entire signal a
+# root-owned systemd path unit acts on -- its content is never read or
+# trusted, so there is no request format for a compromised writer to abuse
+# beyond "cause a check to run."
+CHECK_TRIGGER_PATH = pathlib.Path(
+    os.environ.get(
+        "SOVEREIGN_CONSOLE_CHECK_TRIGGER_PATH",
+        "/data/sovereign/console/actions/check.request",
+    )
+)
+CHECK_TRIGGER_COOLDOWN_SECONDS = 60
+
 _SESSIONS_LOCK = threading.Lock()
 _SESSIONS = {}
 
 _FAILURES_LOCK = threading.Lock()
 _FAILURES = {}
+
+_CHECK_TRIGGER_LOCK = threading.Lock()
+_LAST_CHECK_TRIGGER = 0.0
 
 
 def hash_password(password, iterations=PBKDF2_ITERATIONS):
@@ -131,6 +146,27 @@ def clear_failures(source_ip):
         _FAILURES.pop(source_ip, None)
 
 
+def trigger_check():
+    """Ask the root-owned check-trigger runner to run sovereign-update
+    check, subject to a global cooldown.
+
+    Returns ("ok", None), ("cooldown", retry_after_seconds), or
+    ("error", None) if the trigger file could not be written."""
+    global _LAST_CHECK_TRIGGER
+    now = time.time()
+    with _CHECK_TRIGGER_LOCK:
+        elapsed = now - _LAST_CHECK_TRIGGER
+        if elapsed < CHECK_TRIGGER_COOLDOWN_SECONDS:
+            return "cooldown", max(1, int(CHECK_TRIGGER_COOLDOWN_SECONDS - elapsed))
+        try:
+            CHECK_TRIGGER_PATH.parent.mkdir(parents=True, exist_ok=True)
+            CHECK_TRIGGER_PATH.touch(exist_ok=True)
+        except OSError:
+            return "error", None
+        _LAST_CHECK_TRIGGER = now
+        return "ok", None
+
+
 def _isoformat(epoch_seconds):
     return (
         datetime.datetime.fromtimestamp(epoch_seconds, datetime.timezone.utc)
@@ -206,11 +242,27 @@ class AuthHandler(BaseHTTPRequestHandler):
         morsel = jar.get(SESSION_COOKIE_NAME)
         return morsel.value if morsel else None
 
+    def _require_authenticated_session(self):
+        """Returns the session dict for a valid, CSRF-verified request, or
+        sends the appropriate error response and returns None."""
+        token = self._session_token()
+        session = lookup_session(token)
+        if session is None:
+            self._send_json(401, {"error": "not_authenticated"})
+            return None
+        csrf_header = self.headers.get("X-CSRF-Token")
+        if not csrf_header or not hmac.compare_digest(csrf_header, session["csrf_token"]):
+            self._send_json(403, {"error": "csrf_mismatch"})
+            return None
+        return session
+
     def do_POST(self):
         if self.path == "/api/v1/auth/login":
             self._handle_login()
         elif self.path == "/api/v1/auth/logout":
             self._handle_logout()
+        elif self.path == "/api/v1/console/actions/check":
+            self._handle_check_trigger()
         else:
             self.send_error(404)
 
@@ -275,6 +327,21 @@ class AuthHandler(BaseHTTPRequestHandler):
             {"authenticated": False},
             extra_headers=[("Set-Cookie", _expired_session_cookie())],
         )
+
+    def _handle_check_trigger(self):
+        if self._require_authenticated_session() is None:
+            return
+        status, retry_after = trigger_check()
+        if status == "cooldown":
+            self._send_json(
+                429,
+                {"triggered": False, "error": "cooldown"},
+                extra_headers=[("Retry-After", str(retry_after))],
+            )
+        elif status == "error":
+            self._send_json(503, {"triggered": False, "error": "trigger_unavailable"})
+        else:
+            self._send_json(202, {"triggered": True})
 
     def _handle_session(self):
         session = lookup_session(self._session_token())

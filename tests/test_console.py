@@ -107,6 +107,37 @@ class ConsoleTests(unittest.TestCase):
         self.assertEqual("degraded", result["status"])
         self.assertNotIn("transaction", json.dumps(result).lower())
 
+    def test_read_update_check_reflects_the_discovery_result_file(self):
+        module = runpy.run_path(str(HEALTH_SERVICE))
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            check = Path(temporary_directory) / "update-check.json"
+            check.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "status": "update_available",
+                        "current_version": "0.1.0-preview.17",
+                        "available_version": "0.1.0-preview.18",
+                    }
+                )
+            )
+            with mock.patch.dict(
+                module["read_update_check"].__globals__,
+                {"UPDATE_CHECK_PATH": check},
+            ):
+                result = module["read_update_check"]()
+        self.assertEqual("update_available", result["status"])
+        self.assertEqual("0.1.0-preview.18", result["available_version"])
+
+    def test_read_update_check_reports_never_checked_when_absent(self):
+        module = runpy.run_path(str(HEALTH_SERVICE))
+        with mock.patch.dict(
+            module["read_update_check"].__globals__,
+            {"UPDATE_CHECK_PATH": Path("/nonexistent/update-check.json")},
+        ):
+            result = module["read_update_check"]()
+        self.assertEqual("never_checked", result["status"])
+
     def test_console_routes_and_privilege_boundary(self):
         nginx = NGINX.read_text()
         service = SYSTEMD_SERVICE.read_text()
@@ -184,6 +215,17 @@ class ConsoleTests(unittest.TestCase):
         self.assertIn("X-CSRF-Token", javascript)
         self.assertNotIn("onclick=", html.lower())
         self.assertNotIn("onsubmit=", html.lower())
+
+    def test_update_check_ui_reads_unauthenticated_and_triggers_authenticated(self):
+        javascript = JAVASCRIPT.read_text()
+        html = HTML.read_text()
+
+        self.assertIn('id="update-check-now"', html)
+        self.assertIn("update-check-now", html)
+        # Reading the last result is unauthenticated by design (see
+        # ADR-0008); only triggering a new check is gated.
+        self.assertIn('fetch("/api/v1/update/check"', javascript)
+        self.assertIn('fetch("/api/v1/console/actions/check"', javascript)
 
 
 if __name__ == "__main__":

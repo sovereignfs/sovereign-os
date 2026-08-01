@@ -140,6 +140,7 @@ function showSignedIn() {
   authToggle.hidden = true;
   authForm.hidden = true;
   authSignout.hidden = false;
+  document.querySelector("#update-check-now").hidden = false;
   setAuthMessage("");
 }
 
@@ -149,6 +150,7 @@ function showSignedOut() {
   authForm.hidden = true;
   authToggle.setAttribute("aria-expanded", "false");
   authSignout.hidden = true;
+  document.querySelector("#update-check-now").hidden = true;
   setAuthMessage("");
 }
 
@@ -226,3 +228,61 @@ authSignout.addEventListener("click", async () => {
 });
 
 loadSession();
+
+const updateSummary = document.querySelector("#update-summary");
+const updateCheckNow = document.querySelector("#update-check-now");
+
+function renderUpdateCheck(data) {
+  switch (data.status) {
+    case "update_available":
+      updateSummary.textContent = `Version ${data.available_version} is available (currently ${data.current_version}).`;
+      break;
+    case "up_to_date":
+      updateSummary.textContent = `Up to date (${data.current_version}).`;
+      break;
+    case "check_failed":
+      updateSummary.textContent = "Sovereign could not reach the update service.";
+      break;
+    case "unreadable":
+      updateSummary.textContent = "Update status is currently unavailable.";
+      break;
+    default:
+      updateSummary.textContent = "Not checked yet.";
+  }
+}
+
+async function loadUpdateCheck() {
+  try {
+    const response = await fetch("/api/v1/update/check", {cache: "no-store"});
+    if (!response.ok) throw new Error("Update check request failed");
+    renderUpdateCheck(await response.json());
+  } catch (error) {
+    updateSummary.textContent = "Update status is currently unavailable.";
+  }
+}
+
+updateCheckNow.addEventListener("click", async () => {
+  updateCheckNow.disabled = true;
+  try {
+    const response = await fetch("/api/v1/console/actions/check", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: csrfToken ? {"X-CSRF-Token": csrfToken} : {},
+    });
+    if (response.status === 202) {
+      updateSummary.textContent = "Check requested…";
+      setTimeout(loadUpdateCheck, 5000);
+    } else if (response.status === 429) {
+      updateSummary.textContent = "A check was just requested. Try again shortly.";
+    } else {
+      updateSummary.textContent = "Could not request a check.";
+    }
+  } catch (error) {
+    updateSummary.textContent = "Could not reach the device.";
+  } finally {
+    updateCheckNow.disabled = false;
+  }
+});
+
+loadUpdateCheck();

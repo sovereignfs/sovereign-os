@@ -1,0 +1,22 @@
+[Unit]
+Description=Run a Console-triggered update check
+RequiresMountsFor=/data
+After=sovereign-data-expand.service sovereign-proof.service network-online.target
+Wants=network-online.target
+ConditionPathIsMountPoint=/data
+
+[Service]
+Type=oneshot
+# The trigger file's existence is the only signal this unit trusts (see
+# ADR-0008) -- its content is never read. Removing it first means a
+# malfunctioning or slow check cannot cause the .path unit to refire on
+# the same request repeatedly.
+ExecStartPre=/usr/bin/rm -f /data/sovereign/console/actions/check.request
+ExecStart=/usr/sbin/sovereign-update check
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=full
+ReadWritePaths=/data/sovereign
+CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_FOWNER
+UMask=0077
