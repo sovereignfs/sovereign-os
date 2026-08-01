@@ -935,10 +935,12 @@ def extract_bundle(bundle, destination, target_version):
             }
             fail(set(names) == expected, "INVALID_BUNDLE", "Bundle has unlisted or missing files")
             destination.mkdir(parents=True, mode=0o755)
+            os.chmod(destination, 0o755)
             for relative, details in declared.items():
                 member = archive.getmember(f"sovereign-update-v1/{relative}")
                 output = destination.joinpath(*pathlib.PurePosixPath(relative).parts[1:])
                 output.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+                os.chmod(output.parent, 0o755)
                 digest = hashlib.sha256()
                 size = 0
                 descriptor = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, details["mode"])
@@ -1132,6 +1134,7 @@ def stage_release(args):
         fail(manifest["rollback"]["supported"], "ROLLBACK_UNSUPPORTED", "This updater requires a rollback-capable release")
         releases = RELEASES_ROOT / "releases"
         releases.mkdir(parents=True, exist_ok=True, mode=0o755)
+        os.chmod(releases, 0o755)
         final_release = releases / snapshot["target_version"]
         fail(not final_release.exists(), "RELEASE_EXISTS", "Target release already exists")
         candidate = directory / "release-candidate"
@@ -1140,7 +1143,19 @@ def stage_release(args):
         try:
             extract_bundle(directory / "staging/update-bundle.tar.zst", candidate, snapshot["target_version"])
             validate_release_payload(candidate, manifest)
+            # mkdir's mode= is masked by the calling process's umask, unlike
+            # chmod, which sets the bits absolutely -- when this runs under
+            # sovereign-console-install-trigger.service (UMask=0077), 0o755
+            # here silently became 0o700, leaving the activated release
+            # unreadable to every DynamicUser appliance service (console,
+            # console-auth, local-access) and breaking activation outright.
+            # Confirmed on real hardware (ADR-0009 qualification, attempt
+            # 9): a manual interactive `sovereign-update stage` never hit
+            # this, since an interactive shell's umask is normally 0022 --
+            # only the real Console-triggered path, with its own hardened
+            # UMask=0077, ever exercised it.
             install_candidate.mkdir(mode=0o755)
+            os.chmod(install_candidate, 0o755)
             for source in sorted(candidate.rglob("*")):
                 relative = source.relative_to(candidate)
                 if relative.as_posix() == "pihole-arm64.oci.tar":
@@ -1148,8 +1163,10 @@ def stage_release(args):
                 destination = install_candidate / relative
                 if source.is_dir():
                     destination.mkdir(exist_ok=True, mode=0o755)
+                    os.chmod(destination, 0o755)
                 else:
                     destination.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+                    os.chmod(destination.parent, 0o755)
                     shutil.copyfile(source, destination)
                     os.chmod(destination, source.stat().st_mode & 0o777)
             sync_directory(install_candidate)

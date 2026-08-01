@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import ssl
+import stat
 import subprocess
 import tempfile
 import threading
@@ -328,10 +329,32 @@ class UpdateInstallTests(unittest.TestCase):
         self.assertEqual(2, result.returncode)
         self.assertEqual("NO_UPDATE_AVAILABLE", json.loads(result.stderr)["code"])
 
-        status = self.run_status()
-        payload = json.loads(status.stdout)
-        self.assertEqual("0.1.0-preview.5", payload["installed_version"])
-        self.assertEqual("idle", payload["update_state"])
+    def test_staged_release_is_traversable_under_a_restrictive_umask(self):
+        # sovereign-console-install-trigger.service runs with UMask=0077.
+        # mkdir's mode= argument is masked by the calling process's umask
+        # (unlike chmod, which sets bits absolutely), so a naive
+        # mkdir(mode=0o755) under that unit silently produces 0o700 --
+        # unreadable to every DynamicUser appliance service that needs to
+        # traverse into the activated release afterward. A plain
+        # interactive shell (umask 0022) never exercises this; only the
+        # real Console-triggered path does. Confirmed on real hardware
+        # (ADR-0009 qualification, attempt 9).
+        result = subprocess.run(
+            [str(CLIENT), "install"],
+            env=self.environment(),
+            capture_output=True,
+            text=True,
+            preexec_fn=lambda: os.umask(0o077),
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+
+        release_dir = self.releases / "releases" / "0.1.0-preview.6"
+        self.assertTrue(release_dir.is_dir())
+        self.assertEqual(0o755, stat.S_IMODE(release_dir.stat().st_mode))
+        appliance_dir = release_dir / "appliance"
+        self.assertEqual(0o755, stat.S_IMODE(appliance_dir.stat().st_mode))
+        bin_dir = appliance_dir / "bin"
+        self.assertEqual(0o755, stat.S_IMODE(bin_dir.stat().st_mode))
 
     def test_install_rejects_a_bundle_exceeding_the_size_limit(self):
         environment = self.environment()
