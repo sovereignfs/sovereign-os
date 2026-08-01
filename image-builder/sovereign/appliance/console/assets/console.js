@@ -242,6 +242,12 @@ const installForm = document.querySelector("#install-form");
 const installCredential = document.querySelector("#install-credential");
 const installSubmit = document.querySelector("#install-submit");
 const installMessage = document.querySelector("#install-message");
+const updateDetails = document.querySelector("#update-details");
+const updateDetailChannel = document.querySelector("#update-detail-channel");
+const updateDetailSize = document.querySelector("#update-detail-size");
+const updateDetailReboot = document.querySelector("#update-detail-reboot");
+const updateDetailRollback = document.querySelector("#update-detail-rollback");
+const updateDetailNotes = document.querySelector("#update-detail-notes");
 
 let updateAvailable = false;
 let installInProgress = false;
@@ -258,9 +264,46 @@ function refreshInstallButtonVisibility() {
   }
 }
 
+function formatBytes(bytes) {
+  if (typeof bytes !== "number" || !Number.isFinite(bytes)) return "Unknown";
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+function renderUpdateDetails(data) {
+  if (data.status !== "update_available") {
+    updateDetails.hidden = true;
+    return;
+  }
+  updateDetailChannel.textContent = data.channel || "Unknown";
+  updateDetailSize.textContent = formatBytes(data.download_size_bytes);
+  updateDetailReboot.textContent = data.reboot_required ? "Yes" : "No";
+  if (data.rollback_supported === false) {
+    updateDetailRollback.textContent = "Not supported for this update";
+  } else if (Array.isArray(data.rollback_limitations) && data.rollback_limitations.length > 0) {
+    updateDetailRollback.textContent = `Supported, with limitations: ${data.rollback_limitations.join("; ")}`;
+  } else {
+    updateDetailRollback.textContent = "Supported";
+  }
+  if (data.notes_url) {
+    updateDetailNotes.href = data.notes_url;
+    updateDetailNotes.closest("div").hidden = false;
+  } else {
+    updateDetailNotes.closest("div").hidden = true;
+  }
+  updateDetails.hidden = false;
+}
+
 function renderUpdateCheck(data) {
   updateAvailable = data.status === "update_available";
   refreshInstallButtonVisibility();
+  renderUpdateDetails(data);
   if (installInProgress) return;
   switch (data.status) {
     case "update_available":

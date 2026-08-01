@@ -112,6 +112,13 @@
             <p class="eyebrow">Software updates</p>
             <h2 id="update-title">Appliance version</h2>
             <p id="update-summary" class="placeholder">Checking…</p>
+            <dl id="update-details" class="update-details" hidden>
+              <div><dt>Channel</dt><dd id="update-detail-channel"></dd></div>
+              <div><dt>Download size</dt><dd id="update-detail-size"></dd></div>
+              <div><dt>Reboot required</dt><dd id="update-detail-reboot"></dd></div>
+              <div><dt>Rollback</dt><dd id="update-detail-rollback"></dd></div>
+              <div><dt>Release notes</dt><dd><a id="update-detail-notes" href="#" target="_blank" rel="noopener noreferrer">View notes</a></dd></div>
+            </dl>
           </div>
           <div class="update-panel-actions">
             <button id="update-check-now" type="button" hidden>Check now</button>

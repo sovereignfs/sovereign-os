@@ -217,6 +217,11 @@ button:hover, button:focus-visible { border-color: var(--accent); }
 .update-panel #update-summary { margin-top: .35rem; }
 .update-panel-actions { display: flex; gap: .6rem; align-items: center; }
 .install-form { position: absolute; right: 0; top: calc(100% + .6rem); z-index: 5; width: 17rem; }
+.update-details { display: flex; flex-wrap: wrap; gap: .8rem 1.6rem; margin: .6rem 0 0; }
+.update-details > div { display: flex; flex-direction: column; gap: .1rem; }
+.update-details dt { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .03em; }
+.update-details dd { margin: 0; font-size: .85rem; }
+.update-details a { color: var(--accent); }
 .network-list { display: flex; flex-wrap: wrap; justify-content: end; gap: .6rem; }
 .network-chip { padding: .65rem .8rem; border: 1px solid var(--border); border-radius: 11px; background: rgba(7,17,15,.35); }
 .network-chip strong, .network-chip span { display: block; }

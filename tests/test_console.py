@@ -277,6 +277,30 @@ class ConsoleTests(unittest.TestCase):
         self.assertIn("installCredential.value", install_block)
         self.assertIn("X-CSRF-Token", install_block)
 
+    def test_update_panel_shows_channel_size_reboot_rollback_and_notes(self):
+        javascript = JAVASCRIPT.read_text()
+        html = HTML.read_text()
+
+        self.assertIn('id="update-details"', html)
+        self.assertIn('id="update-detail-channel"', html)
+        self.assertIn('id="update-detail-size"', html)
+        self.assertIn('id="update-detail-reboot"', html)
+        self.assertIn('id="update-detail-rollback"', html)
+        self.assertIn('id="update-detail-notes"', html)
+        self.assertIn("rel=\"noopener noreferrer\"", html)
+
+        self.assertIn("download_size_bytes", javascript)
+        self.assertIn("reboot_required", javascript)
+        self.assertIn("rollback_supported", javascript)
+        self.assertIn("rollback_limitations", javascript)
+        self.assertIn("notes_url", javascript)
+        # The details block must hide again once nothing is available,
+        # not just show correct content when it is.
+        render_details = javascript.index("function renderUpdateDetails")
+        details_block = javascript[render_details : javascript.index("\n}", render_details)]
+        self.assertIn('data.status !== "update_available"', details_block)
+        self.assertIn("updateDetails.hidden = true", details_block)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -208,6 +208,9 @@ class UpdateCheckTests(unittest.TestCase):
         self.assertEqual("up_to_date", status["status"])
         self.assertEqual("0.1.0-preview.14", status["current_version"])
         self.assertIsNone(status["available_version"])
+        self.assertIsNone(status["download_size_bytes"])
+        self.assertIsNone(status["rollback_supported"])
+        self.assertIsNone(status["rollback_limitations"])
         self.assertIsNone(status["error"])
 
     def test_only_draft_releases_are_ignored(self):
@@ -235,6 +238,9 @@ class UpdateCheckTests(unittest.TestCase):
         self.assertEqual("preview", status["channel"])
         self.assertEqual("https://example.invalid/notes/0.1.0-preview.15", status["notes_url"])
         self.assertFalse(status["reboot_required"])
+        self.assertEqual(len(b"fixture-0.1.0-preview.15"), status["download_size_bytes"])
+        self.assertTrue(status["rollback_supported"])
+        self.assertEqual([], status["rollback_limitations"])
         self.assertIsNone(status["error"])
         check_path = self.directory / "state" / "update-check.json"
         self.assertTrue(check_path.is_file())

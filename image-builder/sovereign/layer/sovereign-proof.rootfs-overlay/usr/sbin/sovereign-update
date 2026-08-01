@@ -2209,6 +2209,9 @@ def check_updates(_args):
         "channel": policy.get("channel"),
         "notes_url": None,
         "reboot_required": False,
+        "download_size_bytes": None,
+        "rollback_supported": None,
+        "rollback_limitations": None,
         "error": None,
     }
     try:
@@ -2227,6 +2230,9 @@ def check_updates(_args):
                     "channel": result["channel"],
                     "notes_url": manifest["release"]["notes_url"],
                     "reboot_required": result["reboot_required"],
+                    "download_size_bytes": manifest["artifacts"][0]["size"],
+                    "rollback_supported": manifest["rollback"]["supported"],
+                    "rollback_limitations": manifest["rollback"]["limitations"],
                     "error": None,
                 }
             )
