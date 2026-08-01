@@ -184,7 +184,7 @@ Planned work:
 
 ### 3. Update Discovery and Console Controls
 
-**Status:** 🟡 In progress
+**Status:** ✅ Complete
 
 **Depends on:** Production Update Operations for the Console-facing and
 installation-triggering bullets below; the device-side check-and-notify
@@ -271,9 +271,12 @@ Planned work:
   trigger unit's own umask hardening) — see the
   [qualification report](docs/research/console-triggered-install-qualification-report.md);
 - show version, channel, release notes, download size, reboot requirements, and
-  rollback limitations in Console — partially done: Console currently shows
-  available/current version only; channel, release notes link, download
-  size, and reboot-required surfacing remain;
+  rollback limitations in Console — done: the update panel now shows a
+  details row (channel, download size, reboot requirement, rollback
+  support/limitations, release-notes link) whenever an update is
+  available, sourced from fields `sovereign-update check` already
+  verified from the signed manifest but hadn't previously surfaced past
+  the CLI;
 - retain a CLI recovery path independent of Console (already true: every
   step ADR-0009 orchestrates — `prepare`/`backup`/`stage`/`activate`/
   `recover`/`discard` — remains directly callable, unattended installs
