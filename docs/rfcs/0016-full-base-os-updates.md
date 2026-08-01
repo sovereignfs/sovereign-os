@@ -103,10 +103,17 @@ longer it goes unaddressed.
   partly *because* it supports this direction. It also explicitly warns
   that builder's own OTA example is tied to Raspberry Pi Connect and
   "does not replace Sovereign's independent update-system design."
-- The current image layout (`image-builder/sovereign/image/sovereign-data/image.yaml`)
-  sizes the root partition at `root_part_size: 100%` of whatever remains
-  after boot — i.e. today's images reserve **no** space for a second
-  root slot at all. This is the central migration constraint below.
+- The current image layout gives root a fixed, modest footprint (2.5G on
+  the qualification device, not "the whole disk" — see the corrected
+  numbers below), but it is `data` — not root — that expands to consume
+  every byte of physical media the build-time layout didn't already
+  claim, via `expand-data-partition`'s `growpart` call at first boot
+  (`image-builder/sovereign/layer/sovereign-proof.rootfs-overlay/usr/lib/sovereign/expand-data-partition`).
+  By the time any device has completed its first boot, `data` occupies
+  everything after `root` with no gap remaining. This is the central
+  migration constraint below — not because root itself is oversized, but
+  because nothing is reserved anywhere on the disk for a partition that
+  doesn't exist yet in the build-time layout.
 - `docs/research/console-triggered-install-qualification-report.md`
   documents the concrete incident that motivates prioritizing this now:
   a `.18`-flashed device structurally could not test a feature whose
@@ -343,11 +350,15 @@ Pending implementation detail; sketched here for review:
 ## Compatibility and Migration
 
 This is the hardest open problem in this proposal and should not be
-understated: **today's images allocate the entire disk (minus boot and
-an initial small data partition) to a single root partition
-(`root_part_size: 100%`).** There is no reserved space for a second
-root slot on any device flashed with any image shipped to date,
-including the device this project's own hardware qualification runs on.
+understated: **root itself is small and fixed (2.5G on the qualification
+device), but `data` grows via `growpart` at first boot to consume every
+byte of physical media left after boot and root — so by the time any
+device has completed its first boot, there is no unclaimed space left on
+the disk for a partition that wasn't already in the build-time layout.**
+This is true on any device flashed with any image shipped to date,
+including the device this project's own hardware qualification runs on
+— not because root was sized greedily, but because nothing reserves
+space in advance for a partition the layout didn't originally define.
 
 Two consequences follow:
 
