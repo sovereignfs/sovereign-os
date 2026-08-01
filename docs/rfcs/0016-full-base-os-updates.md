@@ -129,6 +129,36 @@ headroom for the packages this project actually installs (see
 not sized to 100% of the disk. `data` continues to expand to fill
 whatever remains, as it does today.
 
+Real numbers from this project's own qualification device, checked
+directly (`df -h`, `lsblk -f`) rather than assumed:
+
+- **root** is currently 2.5G total, 1022M used (44%). A root slot sized
+  around 3G, comfortably covering today's usage with headroom for
+  growth, is a reasonable starting point for both A and B — a modest
+  ~6G total for both slots against devices this project targets (the
+  qualification device alone has 113G of `/data`).
+- **boot** is currently 98M total with only **49M free** — and a
+  `tryboot` slot needs its own kernel image and initramfs in an
+  `os_prefix` directory (RPi's mechanism for pointing a trial boot at
+  alternate boot-partition content). `kernel_2712.img` (10M) +
+  `initramfs_2712` (14M) already total ~24M — more than half of
+  today's *entire* free boot space, for one additional slot's kernel
+  alone, with zero margin left over for anything else. **The boot
+  partition must grow** before this design is workable; 98M is not
+  enough. Two other contributors are smaller but real: the current
+  image ships device trees for boards this project doesn't support at
+  all (`bcm2710-*`/`bcm2711-*`, Pi 2/3/4/CM4 — ~500K combined, out of
+  20 `.dtb` files total for a Pi-5-only product), which is cheap,
+  independent cleanup worth doing regardless of this RFC's outcome.
+- No `autoboot.txt`/`tryboot.txt` exists on this device today (confirmed
+  directly) — as expected, since nothing has configured `tryboot` yet.
+  The bootloader itself is well past the version that added `tryboot`
+  support (this device: EEPROM dated 2025-11-05; `tryboot` shipped in
+  Raspberry Pi's 2023-05-11 firmware release), so the firmware
+  prerequisite is already satisfied on hardware this project already
+  qualifies against — the gap is purely in image layout and
+  `sovereign-update` integration, not firmware readiness.
+
 ### Slot selection and health confirmation: Raspberry Pi `tryboot`
 
 Recommendation: build directly on the Raspberry Pi 5's own firmware
@@ -345,7 +375,15 @@ every future rootfs-level change this project ships.
 - `tryboot`'s exact configuration surface (which firmware versions
   support which `autoboot.txt` syntax) needs to be confirmed against
   the actual EEPROM version this project's images ship, not assumed
-  from general Raspberry Pi documentation.
+  from general Raspberry Pi documentation. The firmware version
+  requirement itself is already satisfied on this project's
+  qualification hardware (see Proposal); what remains unverified is the
+  exact config syntax, not whether the feature exists.
+- The **boot partition must grow** — confirmed directly on real
+  hardware, not estimated: today's 98M boot partition has only 49M
+  free, and a second slot's kernel + initramfs alone (~24M) would
+  consume essentially all of that margin. This is a required image-layout
+  change this RFC depends on, not an optional optimization.
 - This is a genuinely bigger, riskier surface than any prior update-
   system milestone: a failure mode here can leave a device unable to
   boot at all, not just unable to reach `committed` state. The
