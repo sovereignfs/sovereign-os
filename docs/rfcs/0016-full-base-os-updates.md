@@ -1,6 +1,8 @@
 # RFC-0016: Full Base-OS Updates (A/B Root Filesystem)
 
-**Status:** Draft
+**Status:** Accepted — direction and migration approach decided
+(2026-08-01); implementation and hardware qualification not yet started.
+See Decision.
 **Author:** Project creator and Claude
 **Created:** 2026-08-01
 **Reviewers:**
@@ -288,14 +290,14 @@ Two consequences follow:
   while the filesystem is mounted and serving DNS), or (b) a reflash,
   which is exactly the operation this whole milestone exists to avoid.
 
-The honest options are: accept that existing single-root devices remain
-on today's appliance-only updater indefinitely (with the base-OS gap
-documented as a known, permanent limitation for that generation of
-device, not silently glossed over), or accept that the transition to
-A/B is itself a one-time reflash for currently-deployed devices — the
-one case where reflashing is the correct, not-avoidable answer. This
-draft does not resolve which; it should be an explicit decision recorded
-before implementation begins, not discovered during it.
+**Decided (2026-08-01, project creator):** the transition to A/B is a
+one-time reflash for currently-deployed devices, including this
+project's own qualification hardware. Every device that goes through
+that single reflash gains base-OS updates from that point forward with
+no further reflashing required. Devices are not permanently excluded
+from this capability based on when they were first flashed; the one-time
+reflash is the deliberate exception to "no reflashing," made once, in
+service of never needing it again for this class of update.
 
 ## Operations and Observability
 
@@ -391,9 +393,6 @@ every future rootfs-level change this project ships.
 
 ## Unresolved Questions
 
-- Existing single-root device migration: reflash-once-then-A/B-forever,
-  or permanently excluded from base-OS updates? (See Compatibility and
-  Migration.)
 - Exact `tryboot` configuration mechanism and the minimum EEPROM/firmware
   version this project can require.
 - CLI/API shape for triggering and observing a base-OS transaction —
@@ -420,10 +419,19 @@ every future rootfs-level change this project ships.
   of both, unaffected.
 - `sovereign-update status` and Console correctly represent an in-flight
   and a committed base-OS transaction.
-- The migration question (above) is explicitly decided and documented,
-  not left implicit.
+- The qualification device (and any other currently-deployed device)
+  is successfully migrated via the decided one-time reflash and
+  receives at least one subsequent base-OS update without a second
+  reflash.
 
 ## Decision
 
-Leave blank until review. Record approval, rejection, or requested
-changes with date and owner.
+**Accepted (2026-08-01, project creator).** Direction approved as
+written: A/B root on Raspberry Pi's native `tryboot`, reusing RFC-0014's
+signed/staged/health-gated/rollback machinery rather than adopting a
+third-party OTA framework. The migration question is resolved (see
+Compatibility and Migration): a one-time reflash for currently-deployed
+devices, A/B thereafter. Remaining items in Unresolved Questions are
+implementation-detail decisions, not open direction questions, and may
+be resolved during implementation and hardware qualification rather
+than blocking the start of that work.

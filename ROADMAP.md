@@ -325,13 +325,14 @@ network access.
 
 ### 6. Full Base-OS Updates
 
-**Status:** ⏳ Architecture decision pending — scoped in
-[RFC-0016](docs/rfcs/0016-full-base-os-updates.md) (draft), which
-proposes building on Raspberry Pi's native `tryboot` mechanism and
+**Status:** 🟡 Architecture decided, implementation not started —
+[RFC-0016](docs/rfcs/0016-full-base-os-updates.md) (accepted
+2026-08-01): A/B root on Raspberry Pi's native `tryboot` mechanism,
 reusing RFC-0014's signed/staged/health-gated/rollback machinery rather
-than adopting a third-party OTA framework; awaiting project-owner
-decision, particularly on the existing-device migration question the
-draft leaves open.
+than adopting a third-party OTA framework. Existing single-root devices
+(including this project's own qualification hardware) migrate via a
+one-time reflash, then receive base-OS updates like any new device from
+that point forward.
 
 **Depends on:** Stable appliance updater and persistent partition contract
 
@@ -370,7 +371,7 @@ This milestone closes the remaining “flash once” gap.
 - ⏳ Local inference benchmark and conversation/capability RFCs
 - ⚪ SearXNG-backed web-search capability
 - ⚪ Home Assistant capability integration
-- ⏳ A/B or equivalent full base-OS update architecture
+- 🟡 A/B full base-OS update architecture decided (RFC-0016), not yet built
 
 ---
 
