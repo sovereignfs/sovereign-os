@@ -13,6 +13,7 @@ import pathlib
 import re
 import secrets
 import shutil
+import ssl
 import stat
 import subprocess
 import sys
@@ -69,7 +70,17 @@ UPDATE_CHECK_STATUS_PATH = pathlib.Path(
 UPDATE_CHECK_TIMEOUT_SECONDS = 10
 UPDATE_CHECK_MAX_RELEASES_BYTES = 2 * 1024 * 1024
 UPDATE_CHECK_MAX_ASSET_BYTES = 65536
+# Test-only: overrides the trust anchor used to verify the HTTPS connection
+# itself (not any signed manifest). Unset in production, where the real
+# system trust store verifies the real api.github.com/github.com chain --
+# mirrors the existing SOVEREIGN_OPENSSL/SOVEREIGN_ZSTD pattern of letting
+# tests point at fixtures without changing production behavior.
+UPDATE_CHECK_CA_FILE = os.environ.get("SOVEREIGN_UPDATE_CHECK_CA_FILE")
 UPDATE_CHECK_MAX_CANDIDATES = 20
+UPDATE_INSTALL_MAX_ARTIFACT_BYTES = int(
+    os.environ.get("SOVEREIGN_UPDATE_INSTALL_MAX_ARTIFACT_BYTES", str(500 * 1024 * 1024))
+)
+UPDATE_INSTALL_DOWNLOAD_TIMEOUT_SECONDS = 300
 
 APPLIANCE_FILES = {
     "appliance/bin/console-auth": 0o755,
@@ -657,6 +668,7 @@ def prepare_update(args):
         inspect_update(staged_args, emit=False)
         snapshot = transition(snapshot, "verified", "STAGED_INPUTS_VERIFIED")
         print(json.dumps({"status": "verified", "transaction_id": snapshot["transaction_id"], "target_version": snapshot["target_version"]}, sort_keys=True))
+        return snapshot["transaction_id"]
 
 
 def run_checked(command, code, message, timeout=120):
@@ -2033,6 +2045,12 @@ def rotate_trust(args):
         print(json.dumps({"status": "rotated", "operations": applied}, sort_keys=True))
 
 
+def _https_context():
+    if UPDATE_CHECK_CA_FILE is None:
+        return None
+    return ssl.create_default_context(cafile=UPDATE_CHECK_CA_FILE)
+
+
 def http_get_bytes(url, max_bytes, timeout):
     request = urllib.request.Request(
         url,
@@ -2042,7 +2060,9 @@ def http_get_bytes(url, max_bytes, timeout):
         },
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+        with urllib.request.urlopen(  # noqa: S310
+            request, timeout=timeout, context=_https_context()
+        ) as response:
             data = response.read(max_bytes + 1)
     except (urllib.error.URLError, OSError, ValueError) as error:
         raise UpdateError(
@@ -2164,6 +2184,96 @@ def check_updates(_args):
     print(json.dumps(status, sort_keys=True))
 
 
+def http_get_to_file(url, destination, max_bytes, timeout):
+    request = urllib.request.Request(
+        url,
+        headers={"Accept": "application/octet-stream", "User-Agent": "sovereign-update"},
+    )
+    try:
+        with urllib.request.urlopen(  # noqa: S310
+            request, timeout=timeout, context=_https_context()
+        ) as response:
+            written = 0
+            with destination.open("wb") as stream:
+                while True:
+                    chunk = response.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    written += len(chunk)
+                    fail(
+                        written <= max_bytes,
+                        "UPDATE_INSTALL_RESPONSE_TOO_LARGE",
+                        "Update bundle download exceeded the size limit",
+                    )
+                    stream.write(chunk)
+                stream.flush()
+                os.fsync(stream.fileno())
+    except (urllib.error.URLError, OSError, ValueError) as error:
+        destination.unlink(missing_ok=True)
+        raise UpdateError(
+            "UPDATE_INSTALL_NETWORK_FAILED", "Could not download the update bundle"
+        ) from error
+    except UpdateError:
+        destination.unlink(missing_ok=True)
+        raise
+    return written
+
+
+def install_available_update(_args):
+    """Re-discovers and re-verifies a candidate exactly like `check` does
+    (see ADR-0009: this command deliberately accepts no target-version
+    parameter from any caller), downloads its bundle, then runs the same
+    prepare/backup/stage/activate functions any manual install already
+    uses -- no new trust logic, just orchestration over already-qualified
+    primitives."""
+    fail(
+        os.geteuid() == 0 or os.environ.get("SOVEREIGN_UPDATE_TEST_MODE") == "1",
+        "ROOT_REQUIRED",
+        "Installing an update requires administrator privileges",
+    )
+    candidates = fetch_release_candidates()
+    last_error = None
+    manifest = None
+    for _version, manifest_url, signature_url in candidates:
+        try:
+            manifest, _result = evaluate_release_candidate(manifest_url, signature_url)
+        except UpdateError as error:
+            last_error = error
+            continue
+        break
+    else:
+        raise last_error or UpdateError(
+            "NO_UPDATE_AVAILABLE", "No verified update candidate is available"
+        )
+
+    artifact = manifest["artifacts"][0]
+    with tempfile.TemporaryDirectory(prefix="sovereign-update-install-") as directory:
+        directory = pathlib.Path(directory)
+        manifest_path = directory / "release-manifest.json"
+        signature_path = directory / "release-manifest.sig"
+        bundle_path = directory / "update-bundle.tar.zst"
+        manifest_path.write_bytes(
+            http_get_bytes(manifest_url, UPDATE_CHECK_MAX_ASSET_BYTES, UPDATE_CHECK_TIMEOUT_SECONDS)
+        )
+        signature_path.write_bytes(
+            http_get_bytes(signature_url, UPDATE_CHECK_MAX_ASSET_BYTES, UPDATE_CHECK_TIMEOUT_SECONDS)
+        )
+        http_get_to_file(
+            artifact["url"],
+            bundle_path,
+            UPDATE_INSTALL_MAX_ARTIFACT_BYTES,
+            UPDATE_INSTALL_DOWNLOAD_TIMEOUT_SECONDS,
+        )
+
+        transaction_id = prepare_update(
+            argparse.Namespace(manifest=manifest_path, signature=signature_path, artifact=bundle_path)
+        )
+
+    create_backup(argparse.Namespace(transaction=transaction_id))
+    stage_release(argparse.Namespace(transaction=transaction_id))
+    activate_release(argparse.Namespace(transaction=transaction_id))
+
+
 def show_status(_args):
     policy = read_json(POLICY_PATH, "INVALID_POLICY")
     latest = read_json(UPDATE_STATUS_PATH) if UPDATE_STATUS_PATH.is_file() else None
@@ -2244,6 +2354,11 @@ def parser():
         "check", help="check whether a compatible signed update is available"
     )
     check.set_defaults(handler=check_updates)
+    install = subcommands.add_parser(
+        "install",
+        help="discover, verify, download, and install the latest compatible update",
+    )
+    install.set_defaults(handler=install_available_update)
     return command
 
 
