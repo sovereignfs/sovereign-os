@@ -107,12 +107,23 @@
       </section>
 
       <section class="panel update-panel" aria-labelledby="update-title">
-        <div>
-          <p class="eyebrow">Software updates</p>
-          <h2 id="update-title">Appliance version</h2>
-          <p id="update-summary" class="placeholder">Checking…</p>
+        <div class="update-panel-row">
+          <div>
+            <p class="eyebrow">Software updates</p>
+            <h2 id="update-title">Appliance version</h2>
+            <p id="update-summary" class="placeholder">Checking…</p>
+          </div>
+          <div class="update-panel-actions">
+            <button id="update-check-now" type="button" hidden>Check now</button>
+            <button id="update-install-now" type="button" hidden>Install update</button>
+          </div>
         </div>
-        <button id="update-check-now" type="button" hidden>Check now</button>
+        <form id="install-form" class="auth-form install-form" hidden>
+          <label for="install-credential">Confirm your Console password to install</label>
+          <input id="install-credential" name="password" type="password" autocomplete="current-password" required>
+          <button id="install-submit" type="submit">Install now</button>
+          <p id="install-message" role="status" aria-live="polite"></p>
+        </form>
       </section>
     </main>
 

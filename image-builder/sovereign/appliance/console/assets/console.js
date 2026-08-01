@@ -136,15 +136,20 @@ function setAuthMessage(text, isError) {
   authMessage.classList.toggle("error", Boolean(isError));
 }
 
+let isSignedIn = false;
+
 function showSignedIn() {
+  isSignedIn = true;
   authToggle.hidden = true;
   authForm.hidden = true;
   authSignout.hidden = false;
   document.querySelector("#update-check-now").hidden = false;
   setAuthMessage("");
+  refreshInstallButtonVisibility();
 }
 
 function showSignedOut() {
+  isSignedIn = false;
   csrfToken = null;
   authToggle.hidden = false;
   authForm.hidden = true;
@@ -152,6 +157,7 @@ function showSignedOut() {
   authSignout.hidden = true;
   document.querySelector("#update-check-now").hidden = true;
   setAuthMessage("");
+  refreshInstallButtonVisibility();
 }
 
 async function loadSession() {
@@ -231,8 +237,31 @@ loadSession();
 
 const updateSummary = document.querySelector("#update-summary");
 const updateCheckNow = document.querySelector("#update-check-now");
+const updateInstallNow = document.querySelector("#update-install-now");
+const installForm = document.querySelector("#install-form");
+const installCredential = document.querySelector("#install-credential");
+const installSubmit = document.querySelector("#install-submit");
+const installMessage = document.querySelector("#install-message");
+
+let updateAvailable = false;
+let installInProgress = false;
+
+function setInstallMessage(text, isError) {
+  installMessage.textContent = text;
+  installMessage.classList.toggle("error", Boolean(isError));
+}
+
+function refreshInstallButtonVisibility() {
+  updateInstallNow.hidden = !(isSignedIn && updateAvailable) || installInProgress;
+  if (updateInstallNow.hidden) {
+    installForm.hidden = true;
+  }
+}
 
 function renderUpdateCheck(data) {
+  updateAvailable = data.status === "update_available";
+  refreshInstallButtonVisibility();
+  if (installInProgress) return;
   switch (data.status) {
     case "update_available":
       updateSummary.textContent = `Version ${data.available_version} is available (currently ${data.current_version}).`;
@@ -282,6 +311,93 @@ updateCheckNow.addEventListener("click", async () => {
     updateSummary.textContent = "Could not reach the device.";
   } finally {
     updateCheckNow.disabled = false;
+  }
+});
+
+const installStateLabels = {
+  available: "Preparing…",
+  downloading: "Downloading…",
+  verified: "Verified, backing up…",
+  backing_up: "Backing up Pi-hole…",
+  backed_up: "Staging the new release…",
+  staged: "Activating…",
+  activating: "Activating…",
+  validating: "Checking the new release…",
+  committed: "Update installed.",
+  rolling_back: "Rolling back…",
+  rolled_back: "Update failed; rolled back safely.",
+  recovery_required: "Update needs attention. See the recovery guide.",
+};
+
+function renderInstallProgress(status) {
+  const label = installStateLabels[status.state] || status.state;
+  updateSummary.textContent = status.target_version
+    ? `${label} (${status.target_version})`
+    : label;
+  const terminal = ["committed", "rolled_back", "recovery_required", "idle"];
+  if (terminal.includes(status.state)) {
+    installInProgress = false;
+    refreshInstallButtonVisibility();
+    setTimeout(loadUpdateCheck, 2000);
+    return;
+  }
+  setTimeout(pollInstallProgress, 4000);
+}
+
+async function pollInstallProgress() {
+  try {
+    const response = await fetch("/api/v1/update/status", {cache: "no-store"});
+    if (!response.ok) throw new Error("Update status request failed");
+    renderInstallProgress(await response.json());
+  } catch (error) {
+    setTimeout(pollInstallProgress, 4000);
+  }
+}
+
+updateInstallNow.addEventListener("click", () => {
+  const expanded = installForm.hidden === false;
+  installForm.hidden = expanded;
+  if (!expanded) installCredential.focus();
+});
+
+installForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  installSubmit.disabled = true;
+  setInstallMessage("Requesting install…");
+  try {
+    const response = await fetch("/api/v1/console/actions/install", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+        ...(csrfToken ? {"X-CSRF-Token": csrfToken} : {}),
+      },
+      body: JSON.stringify({password: installCredential.value}),
+    });
+    installCredential.value = "";
+    const data = await response.json();
+    if (response.status === 202 && data.triggered) {
+      installForm.hidden = true;
+      installInProgress = true;
+      refreshInstallButtonVisibility();
+      setInstallMessage("");
+      setTimeout(pollInstallProgress, 2000);
+      return;
+    }
+    if (response.status === 401) {
+      setInstallMessage("Incorrect password.", true);
+    } else if (response.status === 409) {
+      setInstallMessage("No update is currently available.", true);
+    } else if (response.status === 429) {
+      setInstallMessage("An install was just requested. Try again shortly.", true);
+    } else {
+      setInstallMessage("Could not request an install.", true);
+    }
+  } catch (error) {
+    setInstallMessage("Could not reach the device.", true);
+  } finally {
+    installSubmit.disabled = false;
   }
 });
 

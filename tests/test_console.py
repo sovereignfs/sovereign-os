@@ -258,6 +258,25 @@ class ConsoleTests(unittest.TestCase):
         self.assertIn('fetch("/api/v1/update/check"', javascript)
         self.assertIn('fetch("/api/v1/console/actions/check"', javascript)
 
+    def test_install_ui_requires_password_and_polls_progress(self):
+        javascript = JAVASCRIPT.read_text()
+        html = HTML.read_text()
+
+        self.assertIn('id="update-install-now"', html)
+        self.assertIn('id="install-credential"', html)
+        self.assertIn('type="password"', html)
+        self.assertNotRegex(html, r'id="install-credential"[^>]*value="[^"]')
+        # Same CSP/native-submission constraints as the sign-in form.
+        self.assertIn('fetch("/api/v1/console/actions/install"', javascript)
+        self.assertIn('fetch("/api/v1/update/status"', javascript)
+        # The install trigger always sends a password, mirroring the
+        # backend's fresh-credential requirement (ADR-0009) rather than
+        # relying on the session cookie alone.
+        install_submit = javascript.index('installForm.addEventListener("submit"')
+        install_block = javascript[install_submit : javascript.index("});", install_submit)]
+        self.assertIn("installCredential.value", install_block)
+        self.assertIn("X-CSRF-Token", install_block)
+
 
 if __name__ == "__main__":
     unittest.main()
