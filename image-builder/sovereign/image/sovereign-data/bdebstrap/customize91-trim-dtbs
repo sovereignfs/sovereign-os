@@ -1,0 +1,15 @@
+#!/bin/bash
+
+set -eu
+
+# This image targets Raspberry Pi 5 only, but the firmware/kernel
+# packages ship device trees for the whole Raspberry Pi family. Trim the
+# ones for boards this product never runs on (Pi 2/3/CM0/CM3/Zero 2,
+# BCM2710; Pi 4/400/CM4, BCM2711) -- confirmed present and unused on real
+# hardware during RFC-0016 research (docs/rfcs/0016-full-base-os-updates.md).
+# Keep every bcm2712* file: the Pi 5 family (5, 500, CM5 variants).
+
+root=$1
+rm -f \
+  "${root}/boot/firmware/bcm2710-"*.dtb \
+  "${root}/boot/firmware/bcm2711-"*.dtb

@@ -1,6 +1,8 @@
 import base64
 import json
+import os
 import shutil
+import stat
 import subprocess
 import tarfile
 import tempfile
@@ -124,6 +126,31 @@ class UpdateReleaseTests(unittest.TestCase):
         wrapper = overlay / "usr/bin/sovereign-update"
         self.assertTrue(wrapper.is_file())
         self.assertIn("/usr/sbin/sovereign-update", wrapper.read_text())
+
+    def test_trims_dtbs_for_boards_this_product_does_not_support(self):
+        # This image targets Raspberry Pi 5 only, but the upstream
+        # firmware/kernel packages ship device trees for the whole
+        # Raspberry Pi family. Confirmed present and unused on real
+        # hardware during RFC-0016 research
+        # (docs/rfcs/0016-full-base-os-updates.md): 11 bcm2710/bcm2711
+        # files (Pi 2/3/CM0/CM3/Zero 2, Pi 4/400/CM4) alongside the 9
+        # bcm2712 files this product actually needs.
+        hook = (
+            ROOT
+            / "image-builder/sovereign/image/sovereign-data/bdebstrap/customize91-trim-dtbs"
+        )
+        self.assertTrue(hook.is_file())
+        mode = hook.stat().st_mode
+        self.assertTrue(mode & stat.S_IXUSR, "hook must be executable")
+
+        result = subprocess.run(["sh", "-n", str(hook)], capture_output=True)
+        self.assertEqual(0, result.returncode, result.stderr)
+
+        content = hook.read_text()
+        rm_block = content[content.index("rm -f") :]
+        self.assertIn("bcm2710-", rm_block)
+        self.assertIn("bcm2711-", rm_block)
+        self.assertNotIn("bcm2712", rm_block)
 
     def test_prune_timer_is_enabled_and_hardened(self):
         overlay = ROOT / "image-builder/sovereign/layer/sovereign-proof.rootfs-overlay"
