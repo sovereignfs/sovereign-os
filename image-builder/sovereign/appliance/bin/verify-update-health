@@ -3,16 +3,20 @@
 set -eu
 
 # Pi-hole's own Docker healthcheck, and the rest of this checklist, do not
-# necessarily pass in the instant right after `systemctl start` returns --
-# FTL still has to import the on-disk query database before it reports
-# healthy, and that takes measurably longer as a device's real query
-# history grows over its lifetime. This was a single-shot check for a long
-# time and never surfaced a problem on freshly-flashed or lightly-used
-# devices; found on real hardware once a device had accumulated over
-# 10,000 real queries and Pi-hole's restart during a backup outlasted the
-# single check.
+# necessarily pass in the instant right after `systemctl start` returns.
+# The container's health STATUS only updates on Docker's own healthcheck
+# cadence (this image doesn't override the default: interval=30s), not on
+# every poll here -- if the first check or two land before FTL is fully
+# settled, the status won't flip to "healthy" until a later scheduled
+# check succeeds, potentially 30-60s+ later, regardless of how fast this
+# script polls. A short retry budget (previously 60s total) can therefore
+# still lose the race even though this is no longer a single-shot check;
+# confirmed on real hardware where an initial fix using a 60s budget still
+# failed even though every individual check passed cleanly moments later.
+# 140s comfortably covers several healthcheck cycles while staying under
+# the caller's HEALTH_CHECK_TIMEOUT_SECONDS (180s) subprocess timeout.
 attempt=0
-max_attempts=30
+max_attempts=70
 
 all_checks_pass() {
   docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' pihole 2>/dev/null |

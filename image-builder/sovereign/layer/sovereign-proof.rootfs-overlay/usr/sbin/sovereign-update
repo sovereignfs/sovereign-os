@@ -251,6 +251,18 @@ def health_check_command():
     return str(RELEASES_ROOT / "current/appliance/bin/verify-update-health")
 
 
+# verify-update-health itself now retries (see that script) rather than
+# checking once, to ride out Pi-hole's container healthcheck cadence
+# (Docker's own default interval is 30s, unconfigured by this project's
+# compose template) rather than the moment-of-restart snapshot this used
+# to be. run_checked's default 120s subprocess timeout doesn't leave that
+# retry loop enough real headroom to cover multiple healthcheck cycles
+# plus the checks' own execution time, so every health-check call site
+# uses this longer, explicit budget instead of the shared default (which
+# stays appropriate for the fast systemctl/tar/etc. calls elsewhere).
+HEALTH_CHECK_TIMEOUT_SECONDS = 180
+
+
 def read_key_values(path):
     try:
         lines = pathlib.Path(path).read_text(encoding="utf-8").splitlines()
@@ -801,6 +813,7 @@ def create_backup(args):
                 [health_check_command()],
                 "PREUPDATE_HEALTH_FAILED",
                 "Pi-hole did not recover after backup",
+                timeout=HEALTH_CHECK_TIMEOUT_SECONDS,
             )
             backup_manifest = {
                 "schema_version": 1,
@@ -1191,7 +1204,7 @@ def activate_release(args):
             snapshot = transition(snapshot, "validating", "TARGET_STARTED")
             qualification_interrupt("validating")
             qualification_health_failure()
-            run_checked([health_check_command()], "POSTUPDATE_HEALTH_FAILED", "Updated appliance failed health checks")
+            run_checked([health_check_command()], "POSTUPDATE_HEALTH_FAILED", "Updated appliance failed health checks", timeout=HEALTH_CHECK_TIMEOUT_SECONDS)
             snapshot = transition(snapshot, "committed", "UPDATE_COMMITTED", recovery_action="none")
             shutil.rmtree(directory / "release-candidate", ignore_errors=True)
             try:
@@ -1208,7 +1221,7 @@ def activate_release(args):
                 stop_appliance("ROLLBACK_STOP_FAILED")
                 switch_current(previous)
                 start_appliance("ROLLBACK_START_FAILED")
-                run_checked([health_check_command()], "ROLLBACK_HEALTH_FAILED", "Previous release failed health checks")
+                run_checked([health_check_command()], "ROLLBACK_HEALTH_FAILED", "Previous release failed health checks", timeout=HEALTH_CHECK_TIMEOUT_SECONDS)
                 transition(snapshot, "rolled_back", "ROLLBACK_HEALTHY", recovery_action="none")
             except UpdateError as rollback_error:
                 transition(snapshot, "recovery_required", rollback_error.code, failure={"code": rollback_error.code, "message": str(rollback_error), "retryable": False}, recovery_action="manual")
@@ -1581,7 +1594,7 @@ def restore_backup(args):
             snapshot = transition_restore(snapshot, "verifying", "RESTORE_TARGET_STARTED")
             qualification_interrupt("verifying")
             qualification_health_failure("POSTRESTORE_HEALTH_FAILED")
-            run_checked([health_check_command()], "POSTRESTORE_HEALTH_FAILED", "Restored appliance failed health checks")
+            run_checked([health_check_command()], "POSTRESTORE_HEALTH_FAILED", "Restored appliance failed health checks", timeout=HEALTH_CHECK_TIMEOUT_SECONDS)
             snapshot = transition_restore(snapshot, "committed", "RESTORE_COMMITTED", recovery_action="none")
             for _live, old in swapped:
                 if old is not None:
@@ -1605,7 +1618,7 @@ def restore_backup(args):
                     if old is not None:
                         old.rename(live)
                 run_checked([SYSTEMCTL, "start", "sovereign-pihole.service"], "ROLLBACK_START_FAILED", "Pi-hole could not be restarted after restore rollback")
-                run_checked([health_check_command()], "ROLLBACK_HEALTH_FAILED", "Previous data failed health checks after restore rollback")
+                run_checked([health_check_command()], "ROLLBACK_HEALTH_FAILED", "Previous data failed health checks after restore rollback", timeout=HEALTH_CHECK_TIMEOUT_SECONDS)
                 transition_restore(snapshot, "rolled_back", "RESTORE_ROLLBACK_HEALTHY", recovery_action="none")
                 for live, _old in swapped:
                     shutil.rmtree(live.with_name(f"{live.name}.rollback-failed.{snapshot['restore_id']}"), ignore_errors=True)
