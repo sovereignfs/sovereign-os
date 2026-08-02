@@ -1,6 +1,7 @@
 import importlib.util
 from importlib.machinery import SourceFileLoader
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -97,3 +98,53 @@ class ImagerProvisioningTests(unittest.TestCase):
 
         self.assertFalse(self.config.exists())
         self.assertFalse((self.root / "data/sovereign/imager-provisioned").exists())
+
+
+class ImagerProvisionServiceUnitTests(unittest.TestCase):
+    SERVICE_UNIT = (
+        Path(__file__).resolve().parents[1]
+        / "image-builder/sovereign/layer/sovereign-proof.rootfs-overlay/etc/systemd/system/sovereign-imager-provision.service"
+    )
+    RESTORE_SCRIPT = (
+        Path(__file__).resolve().parents[1]
+        / "image-builder/sovereign/layer/sovereign-proof.rootfs-overlay/usr/lib/sovereign/restore-root-mount-mode"
+    )
+
+    def test_brackets_provisioning_with_a_scoped_writable_window(self):
+        # apply-imager-provisioning writes directly to /etc/passwd,
+        # /etc/shadow, /etc/group, and /etc/sudoers.d/ -- root is
+        # read-only at runtime on RFC-0016's A/B images, so this needs a
+        # real, one-time writable window, not a workaround. Confirmed on
+        # real hardware: without this, first-boot Imager provisioning
+        # (the operator account/password) silently never applies, and
+        # the device is unreachable over SSH with any password.
+        content = self.SERVICE_UNIT.read_text()
+        self.assertIn("ExecStartPre=/bin/mount -o remount,rw /", content)
+        self.assertIn(
+            "ExecStart=/usr/lib/sovereign/apply-imager-provisioning", content
+        )
+        # ExecStopPost, not ExecStartPost: the latter is skipped if
+        # ExecStart fails, which would leave root permanently read-write
+        # after any provisioning failure until the next reboot.
+        self.assertIn(
+            "ExecStopPost=/usr/lib/sovereign/restore-root-mount-mode", content
+        )
+        self.assertNotIn("ExecStartPost=", content)
+
+    def test_restore_script_never_hardcodes_a_direction(self):
+        # Must work correctly on both image generations: read-only-root
+        # A/B images (restore to ro) and today's single-root images
+        # (fstab already says rw, so this is a harmless no-op) -- decided
+        # by reading /etc/fstab at runtime, not by assuming either image
+        # generation.
+        self.assertTrue(self.RESTORE_SCRIPT.is_file())
+        mode = self.RESTORE_SCRIPT.stat().st_mode
+        self.assertTrue(mode & 0o111, "restore script must be executable")
+
+        result = subprocess.run(["sh", "-n", str(self.RESTORE_SCRIPT)], capture_output=True)
+        self.assertEqual(0, result.returncode, result.stderr)
+
+        content = self.RESTORE_SCRIPT.read_text()
+        self.assertIn("/etc/fstab", content)
+        self.assertIn("remount,ro", content)
+        self.assertNotIn("remount,rw", content)

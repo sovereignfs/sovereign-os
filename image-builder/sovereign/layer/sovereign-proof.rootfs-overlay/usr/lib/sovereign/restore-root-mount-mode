@@ -1,0 +1,13 @@
+#!/bin/sh
+# Restore root to whatever /etc/fstab actually declares for it (ro on
+# RFC-0016's read-only-root A/B images, rw on today's single-root
+# images) after a service has temporarily remounted it rw for a
+# one-time write. Never hardcodes either direction, so the same unit
+# file works correctly on both image generations.
+
+set -eu
+
+options=$(awk '$2 == "/" { print $4 }' /etc/fstab)
+case ",${options}," in
+  *,ro,*) mount -o remount,ro / ;;
+esac
