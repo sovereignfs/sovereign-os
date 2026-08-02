@@ -268,6 +268,50 @@ At a high level, applied to Sovereign's existing transaction model:
    same plain reboot back to the known-good slot rather than confirming
    forward.
 
+### Build on `rpi-image-gen`'s own A/B layers, not a hand-rolled equivalent
+
+Further research (into the `ab_userdata` example's own declared layer
+dependencies) found that its slot-detection and `autoboot.txt`
+generation logic isn't bespoke to that example — it comes from a
+separate, versioned, documented upstream layer:
+**`rpi-ab-slot-mapper`** (`layer/rpi/device/ab-slots.yaml` in
+`rpi-image-gen`, currently v3.0.0), which itself depends on
+`rpi-storage-binder` — a layer this project's images already require
+today (`image-builder/sovereign/image/sovereign-data/image.yaml`'s
+existing `X-Env-Layer-Requires`). This substantially changes the
+implementation plan for the better: build on this layer directly rather
+than reimplementing equivalent slot-detection logic.
+
+Concretely, `rpi-ab-slot-mapper` installs:
+
+- udev rules that create stable `/dev/disk/by-slot/active/*` and
+  `/dev/disk/by-slot/other/*` symlinks from GPT partition labels;
+- `rpi-slot-tryboot`, which reads those symlinks and prints exactly the
+  `autoboot.txt` content this RFC's Proposal section already described
+  (confirmed by reading the script directly — it generates precisely
+  the `[all]`/`tryboot_a_b=1`/`[tryboot]` structure shown above, by
+  resolving the current partition numbers dynamically rather than
+  hardcoding them);
+- `rpi-slot-label` / `rpi-slot-static` for labeling and static-fallback
+  slot identification;
+- initramfs-tools/dracut integration for early-boot root selection.
+
+What it deliberately does **not** do: decide *when* to write a new
+`autoboot.txt`, *when* to trigger `reboot "0 tryboot"`, or *when* to
+treat a trial boot as confirmed versus roll back. That orchestration —
+exactly the piece this RFC's "Reusing RFC-0014's machinery" section
+below describes — is left to the consumer, which is precisely where
+`sovereign-update`'s own transaction state machine should plug in.
+
+The full reference layer this piece comes from,
+`image-rota` (`image/gpt/ab_userdata/image.yaml`'s actual layer name),
+also declares `rootfs_type: erofs` as its default (not `ext4`) and pulls
+in `device-base`/`systemd-min` — implementation should confirm exactly
+which of those are load-bearing for `rpi-ab-slot-mapper` to function
+versus specific to that reference example's own choices (erofs,
+encryption variants) before assuming the whole dependency chain is
+required.
+
 ### Reusing RFC-0014's machinery
 
 The signed-manifest verification, transaction journal, and
@@ -484,11 +528,16 @@ every future rootfs-level change this project ships.
   inside an extended partition, working against the tooling instead of
   with it, for a hardware target that has no need to preserve MBR
   specifically. Today's images move to GPT as part of this milestone.
-- Whether Sovereign needs the reference example's separate `bootconfig`
-  partition and `/dev/disk/by-slot/active/*` symlink scheme verbatim,
-  or can simplify it now that the mechanism (not just the concept) is
-  understood — that example also carries cryptroot/eMMC/erofs machinery
-  Sovereign has no use for.
+- **Resolved: use the `/dev/disk/by-slot/active/*` symlink scheme
+  verbatim** — it comes from `rpi-ab-slot-mapper`, a separate, versioned
+  upstream layer (not something to reimplement), and Sovereign already
+  depends on that layer's own prerequisite (`rpi-storage-binder`). Still
+  open: whether the small `bootconfig` partition specifically is
+  required by that layer or is incidental to the `ab_userdata` example,
+  and which of `image-rota`'s other declared dependencies
+  (`device-base`, `systemd-min`) are load-bearing versus specific to
+  that example's own choices (erofs, encryption variants Sovereign
+  doesn't need).
 - CLI/API shape for triggering and observing a base-OS transaction —
   new subcommands vs. extending existing ones.
 - Whether a base-OS update and an appliance update can ever be part of
