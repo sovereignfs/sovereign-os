@@ -158,11 +158,11 @@ data        (unchanged: /data, independent of every other partition,
              existing growpart-on-first-boot behavior unaffected)
 ```
 
-Six partitions instead of today's three (`boot`/`root`/`data`). The
-reference example uses **GPT**, not the MBR partition table this
-project's images use today — whether Sovereign's implementation needs
-to move to GPT too, or can keep MBR with an equivalent layout, is an
-implementation question to confirm early, not assumed either way here.
+Six partitions instead of today's three (`boot`/`root`/`data`) — moving
+to **GPT**, not the MBR partition table this project's images use today
+(see Unresolved Questions for why: six partitions don't fit MBR's
+practical 4-primary-partition ceiling without nesting most of them
+inside an extended partition).
 
 Root A and root B are each sized to comfortably hold the base OS with
 headroom for the packages this project actually installs (see
@@ -473,11 +473,17 @@ every future rootfs-level change this project ships.
 
 ## Unresolved Questions
 
-- Whether Sovereign's images move to GPT (matching `rpi-image-gen`'s
-  reference example exactly) or keep MBR with an equivalent layout —
-  the reference example's partition table and `by-slot` udev/systemd
-  tooling assume GPT; not yet confirmed whether that assumption is load
-  -bearing or incidental to that example.
+- **Resolved: move to GPT.** Not because `tryboot_a_b` is confirmed to
+  require it at the firmware level (that remains unverified either way)
+  — but because the six-partition layout itself doesn't fit MBR's
+  practical ceiling of 4 primary partitions (or 3 primary + 1 extended
+  containing logical partitions). `rpi-image-gen`'s reference example
+  uses GPT's own partition-table format directly, cleanly addressing 6
+  partitions with `in-partition-table = true` entries; reproducing the
+  same layout under MBR would mean nesting most of the new partitions
+  inside an extended partition, working against the tooling instead of
+  with it, for a hardware target that has no need to preserve MBR
+  specifically. Today's images move to GPT as part of this milestone.
 - Whether Sovereign needs the reference example's separate `bootconfig`
   partition and `/dev/disk/by-slot/active/*` symlink scheme verbatim,
   or can simplify it now that the mechanism (not just the concept) is
