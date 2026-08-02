@@ -257,8 +257,18 @@ independently of the OS" (Pi-hole configuration, device secrets, backup
 and transaction journals, update state all already live under
 `/data/sovereign`); the appliance-release tree belongs there for exactly
 the same reason, not in a second, newly-invented persistent-storage
-mechanism. Moving it is a path change in `sovereign-update`
-(`RELEASES_ROOT`), not a new concept.
+mechanism.
+
+Concretely, this is a **bind mount, not a path rename**: `/opt/sovereign`
+stays the literal path every already-qualified piece of code, nginx
+proxy config, and systemd `ExecStart=` line already hardcodes — none of
+that gets touched. What changes is what backs it: at boot, before
+anything needs it, `/opt/sovereign` gets bind-mounted from real storage
+under `/data`, using the exact same "reclaim a path from the read-only
+root, bind-mount it from persistent storage before `local-fs.target`"
+mechanism already being adopted for `/var` and `/home` above — this
+project's own instance of the reference architecture's `slot-shared`
+pattern, not a separate mechanism invented for this one path.
 
 What deliberately isn't adopted from the reference: `erofs` as the root
 filesystem type (its own default) or dm-verity-backed integrity
