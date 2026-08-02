@@ -26,4 +26,4 @@ DEVICE="rpi5-arm64"
 DATA_SCHEMA="1"
 EOF
 
-exec ./rpi-image-gen build -S /opt/sovereign-image -c sovereign-proof.yaml
+exec ./rpi-image-gen build -S /opt/sovereign-image -c "${SOVEREIGN_IMAGE_CONFIG:-sovereign-proof.yaml}"

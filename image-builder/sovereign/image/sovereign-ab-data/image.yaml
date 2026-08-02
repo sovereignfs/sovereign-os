@@ -1,0 +1,61 @@
+# METABEGIN
+# X-Env-Layer-Name: image-sovereign-ab-data
+# X-Env-Layer-Category: image
+# X-Env-Layer-Desc: GPT A/B image with redundant boot/root slots, a
+#  tryboot control partition, and a persistent data partition. Root is
+#  read-only at runtime; /var is reclaimed and bind-mounted per-slot
+#  from /data; /opt/sovereign is bind-mounted from /data so appliance
+#  updates stay independent of base-OS slot switches (RFC-0016).
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: image-base,rpi-storage-binder,rpi-ab-slot-mapper
+# X-Env-Layer-Provides: image
+#
+# X-Env-VarPrefix: image
+#
+# X-Env-Var-rootfs_type: ext4
+# X-Env-Var-rootfs_type-Desc: Root filesystem type.
+# X-Env-Var-rootfs_type-Required: n
+# X-Env-Var-rootfs_type-Valid: ext4,
+# X-Env-Var-rootfs_type-Set: y
+#
+# X-Env-Var-bootconfig_part_size: 32M
+# X-Env-Var-bootconfig_part_size-Desc: tryboot control partition size (autoboot.txt only).
+# X-Env-Var-bootconfig_part_size-Required: n
+# X-Env-Var-bootconfig_part_size-Valid: size
+# X-Env-Var-bootconfig_part_size-Set: y
+#
+# X-Env-Var-boot_part_size: 150M
+# X-Env-Var-boot_part_size-Desc: Per-slot boot partition size (kernel, initramfs, dtbs).
+# X-Env-Var-boot_part_size-Required: n
+# X-Env-Var-boot_part_size-Valid: size
+# X-Env-Var-boot_part_size-Set: y
+#
+# X-Env-Var-root_part_size: 3G
+# X-Env-Var-root_part_size-Desc: Per-slot root partition size.
+# X-Env-Var-root_part_size-Required: n
+# X-Env-Var-root_part_size-Valid: size
+# X-Env-Var-root_part_size-Set: y
+#
+# X-Env-Var-data_part_size: 512M
+# X-Env-Var-data_part_size-Desc: Initial persistent data partition size (grows at first boot).
+# X-Env-Var-data_part_size-Required: n
+# X-Env-Var-data_part_size-Valid: size
+# X-Env-Var-data_part_size-Set: y
+#
+# X-Env-Var-assetdir: ${DIRECTORY}
+# X-Env-Var-assetdir-Desc: Image-specific asset directory.
+# X-Env-Var-assetdir-Required: n
+# X-Env-Var-assetdir-Valid: dir
+# X-Env-Var-assetdir-Set: y
+#
+# X-Env-Var-pmap: clear
+# X-Env-Var-pmap-Desc: Provisioning map identifier.
+# X-Env-Var-pmap-Required: n
+# X-Env-Var-pmap-Valid: clear,
+# X-Env-Var-pmap-Set: y
+# METAEND
+---
+mmdebstrap:
+  packages:
+    - initramfs-tools
+    - rsync

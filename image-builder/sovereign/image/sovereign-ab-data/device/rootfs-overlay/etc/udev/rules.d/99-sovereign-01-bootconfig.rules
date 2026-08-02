@@ -1,0 +1,7 @@
+# rpi-ab-slot-mapper's own udev rules only handle the boot_a/boot_b and
+# system_a/system_b A/B pairs (see rpi-slot-label's hardcoded label
+# matching). The bootconfig partition (autoboot.txt) isn't part of that
+# A/B pairing -- it's a single, non-slotted partition -- so it needs its
+# own stable symlink, matching rpi-image-gen's own ab_userdata reference
+# example's equivalent rule.
+SUBSYSTEM=="block", ENV{RPI_ONBOOTDEV}=="1", ENV{ID_PART_ENTRY_NAME}=="bootconfig", SYMLINK+="disk/by-slot/bootconfig"

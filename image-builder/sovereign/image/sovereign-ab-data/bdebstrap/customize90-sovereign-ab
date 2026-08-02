@@ -1,0 +1,4 @@
+#!/bin/bash
+
+set -eu
+"$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-machine-id-sync.service

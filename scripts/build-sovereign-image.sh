@@ -6,8 +6,14 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 source "${repo_root}/image-builder/rpi-image-gen.version"
 
 image="sovereign-image-builder:${RPI_IMAGE_GEN_TAG}"
-container="sovereign-image-build"
-output_dir="${repo_root}/build/sovereign-image"
+sovereign_image_config=${SOVEREIGN_IMAGE_CONFIG:-}
+if [ -n "$sovereign_image_config" ]; then
+  container="sovereign-image-build-${sovereign_image_config%.yaml}"
+  output_dir="${repo_root}/build/sovereign-image-${sovereign_image_config%.yaml}"
+else
+  container="sovereign-image-build"
+  output_dir="${repo_root}/build/sovereign-image"
+fi
 patched_version="${RPI_IMAGE_GEN_TAG}-dirty"
 sovereign_version=${SOVEREIGN_VERSION:-0.1.0-dev}
 sovereign_channel=${SOVEREIGN_CHANNEL:-preview}
@@ -32,7 +38,9 @@ find "${output_dir}/deploy" -mindepth 1 -delete
 find "${output_dir}/evidence" -mindepth 1 -delete
 
 set +e
-docker run --name "${container}" --privileged --platform linux/arm64 "${image}"
+docker run --name "${container}" --privileged --platform linux/arm64 \
+  ${sovereign_image_config:+-e "SOVEREIGN_IMAGE_CONFIG=${sovereign_image_config}"} \
+  "${image}"
 build_status=$?
 set -e
 

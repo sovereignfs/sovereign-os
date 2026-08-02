@@ -1,0 +1,11 @@
+device:
+  layer: rpi5
+  hostname: sovereign
+
+image:
+  layer: image-sovereign-ab-data
+  name: sovereign-ab-proof
+
+layer:
+  base: trixie-minbase
+  sovereign: sovereign-proof

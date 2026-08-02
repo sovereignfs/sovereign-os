@@ -1,0 +1,73 @@
+[
+   {
+      "attributes": {
+         "PMAPversion": "1.4.0",
+         "system_type": "slotted"
+      }
+   },
+   {
+      "partitions": [
+         {
+            "comment": "tryboot control (autoboot.txt)",
+            "image": "bootconfig"
+         }
+      ]
+   },
+   {
+      "slots": {
+         "A": {
+            "partitions": [
+               {
+                  "comment": "kernel + device tree + initramfs, slot A",
+                  "image": "boot_a"
+               }
+            ]
+         }
+      }
+   },
+   {
+      "slots": {
+         "B": {
+            "partitions": [
+               {
+                  "comment": "kernel + device tree + initramfs, slot B",
+                  "image": "boot_b"
+               }
+            ]
+         }
+      }
+   },
+   {
+      "slots": {
+         "A": {
+            "partitions": [
+               {
+                  "comment": "root filesystem, slot A",
+                  "image": "system_a"
+               }
+            ]
+         }
+      }
+   },
+   {
+      "slots": {
+         "B": {
+            "partitions": [
+               {
+                  "comment": "root filesystem, slot B",
+                  "image": "system_b"
+               }
+            ]
+         }
+      }
+   },
+   {
+      "partitions": [
+         {
+            "image": "data",
+            "comment": "persistent Sovereign application data, shared between slots",
+            "expand-to-fit": true
+         }
+      ]
+   }
+]
