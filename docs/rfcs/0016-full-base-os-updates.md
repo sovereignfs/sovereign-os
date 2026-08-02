@@ -572,6 +572,37 @@ reverted in favor of the already-hardware-proven version. Still not
 done: an actual `tryboot` trial-boot cycle, which remains this
 milestone's real qualification gate.
 
+**Progress (2026-08-02, tryboot cycle):** the qualification gate itself,
+qualified. `sudo reboot "0 tryboot"` correctly performs a one-time trial
+boot of the inactive slot (verified via a marker file written to the
+inactive slot's root beforehand, and via `sovereign-slot-var-generator`'s
+own slot detection). Two safety-critical properties confirmed directly,
+not assumed from documentation:
+
+- An **uncommitted** trial reverts automatically on the very next
+  ordinary (non-tryboot) reboot — no manual intervention, no hard power
+  cycle needed. `autoboot.txt` is untouched by the trial boot itself
+  (`rpi-slot-tryboot`, read from `rpi-ab-slot-mapper`'s own source, is
+  a pure stdout-printing helper with no side effects — "it simply
+  exposes stable by-slot device links leaving policy to higher layers,"
+  per that layer's own documentation; promotion is not automatic and
+  has no wiring anywhere in the upstream reference either, confirmed by
+  grepping for callers). This is the most important property for the
+  whole design's safety case, and it held without any Sovereign code
+  written to enforce it — a firmware-level guarantee, not a userspace
+  one.
+- An **explicit commit** (`rpi-slot-tryboot > /bootfs/autoboot.txt`,
+  run manually here since Sovereign hasn't built the automated
+  health-gated commit step yet) correctly promotes the trial slot to
+  the permanent default, verified to persist through a subsequent
+  ordinary reboot.
+
+Not yet done: a hard power cut *during* an active, uncommitted trial
+(as opposed to a graceful uncommitted reboot, already verified above),
+and the actual automated `sovereign-update`-side integration (health
+gate + commit step) that item 6 on the roadmap still needs — today's
+commit step was a manual qualification action, not product code.
+
 ## Alternatives Considered
 
 ### RAUC or Mender (adopt a third-party A/B OTA framework)
