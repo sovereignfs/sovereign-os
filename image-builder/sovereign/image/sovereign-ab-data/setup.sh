@@ -24,7 +24,7 @@ case "$1" in
 # not the reclaimed skeleton that briefly exists before var.mount runs.
 /data/sovereign/log/journal      /var/log/journal  none  bind,x-systemd.requires-mounts-for=/data,x-systemd.after=var.mount  0  0
 
-# /etc's own persistence is handled by etc.mount (an
+# /etc's own persistence is handled by sovereign-etc-overlay.service (an
 # overlayfs, not a plain bind mount -- passwd/usermod/PAM write account
 # files via a sibling-temp-file-then-rename in the SAME directory, which
 # needs the whole directory writable, not just the individual file).

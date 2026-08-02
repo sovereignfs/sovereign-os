@@ -13,7 +13,7 @@ Type=oneshot
 # apply-imager-provisioning writes directly to /etc/passwd, /etc/shadow,
 # /etc/group, /etc/sudoers.d/, and a few other /etc paths. Root is
 # read-only at runtime on RFC-0016's A/B images, but /etc itself is a
-# persistent, writable overlay there (etc.mount, an
+# persistent, writable overlay there (sovereign-etc-overlay.service, an
 # earlier-boot dependency of this one via ordering on local-fs.target) --
 # not on today's single-root images, where /etc is just part of the
 # already-writable root. Either way, no special handling is needed here.

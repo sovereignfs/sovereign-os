@@ -83,54 +83,40 @@ class AbDataIdentityPersistenceTests(unittest.TestCase):
 
 
 class AbDataEtcOverlayTests(unittest.TestCase):
-    # Native systemd .mount units, not a custom script -- matching
-    # var.mount's own proven pattern (Requires/After=data.mount,
-    # Before=local-fs.target). Unit names are load-bearing: systemd
-    # requires a .mount unit's filename to be exactly the
-    # systemd-escaped form of its Where= path (verified against real
-    # systemd-escape output, not guessed), or it silently won't
-    # activate the way its [Install] section expects. A first attempt
-    # at this used a custom oneshot .service bind-mounting /etc onto
-    # itself and hung the device on real hardware for 5+ minutes with
-    # no network response at all; this design instead takes a wholly
-    # separate second read-only mount of the same root block device as
-    # the overlay's lower layer, avoiding any self-reference on /etc.
-    LOWER_UNIT = IMAGE_DIR / "device/rootfs-overlay/etc/systemd/system/run-sovereign-etclower.mount"
-    ETC_UNIT = IMAGE_DIR / "device/rootfs-overlay/etc/systemd/system/etc.mount"
+    OVERLAY_UNIT = IMAGE_DIR / "device/rootfs-overlay/etc/systemd/system/sovereign-etc-overlay.service"
+    OVERLAY_SCRIPT = IMAGE_DIR / "device/rootfs-overlay/usr/lib/sovereign/mount-etc-overlay"
 
-    def test_lower_unit_is_a_second_readonly_mount_of_this_slots_root(self):
-        content = self.LOWER_UNIT.read_text()
-        self.assertIn("What=/dev/disk/by-slot/active/system", content)
-        self.assertIn("Where=/run/sovereign/etclower", content)
-        self.assertIn("Options=ro", content)
+    def test_unit_runs_early_and_depends_on_data(self):
+        content = self.OVERLAY_UNIT.read_text()
+        self.assertIn("Requires=data.mount", content)
+        self.assertIn("After=data.mount", content)
         self.assertIn("Before=local-fs.target", content)
+        self.assertIn("ExecStart=/usr/lib/sovereign/mount-etc-overlay", content)
 
-    def test_etc_unit_overlays_with_shared_not_per_slot_upper(self):
-        content = self.ETC_UNIT.read_text()
-        self.assertIn("Requires=data.mount run-sovereign-etclower.mount", content)
-        self.assertIn("After=data.mount run-sovereign-etclower.mount", content)
-        self.assertIn("Before=local-fs.target", content)
-        self.assertIn("Where=/etc", content)
-        self.assertIn("Type=overlay", content)
-        self.assertIn("lowerdir=/run/sovereign/etclower/etc", content)
+    def test_enabled_in_customize90(self):
+        content = (IMAGE_DIR / "bdebstrap/customize90-sovereign-ab").read_text()
+        self.assertIn("sovereign-etc-overlay.service", content)
+
+    def test_script_mounts_overlay_with_shared_not_per_slot_upper(self):
+        self.assertTrue(self.OVERLAY_SCRIPT.is_file())
+        self.assertTrue(
+            self.OVERLAY_SCRIPT.stat().st_mode & 0o111, "script must be executable"
+        )
+        result = subprocess.run(
+            ["sh", "-n", str(self.OVERLAY_SCRIPT)], capture_output=True
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+
+        content = self.OVERLAY_SCRIPT.read_text()
+        self.assertIn("mount --bind /etc /run/sovereign/etc-lower", content)
+        self.assertIn("-t overlay overlay", content)
+        self.assertIn("lowerdir=/run/sovereign/etc-lower", content)
         # Shared (not under data/sovereign/slots/<slot>/) so account and
         # imager-provisioned state survives a slot switch instead of
         # resetting with it.
         self.assertIn("upperdir=/data/sovereign/identity/etc-upper", content)
         self.assertIn("workdir=/data/sovereign/identity/etc-work", content)
         self.assertNotIn("slots/", content)
-
-    def test_enabled_in_customize90(self):
-        content = (IMAGE_DIR / "bdebstrap/customize90-sovereign-ab").read_text()
-        self.assertIn("run-sovereign-etclower.mount", content)
-        self.assertIn("etc.mount", content)
-
-    def test_pre_image_seeds_upper_and_work_dirs(self):
-        # Overlayfs requires upperdir/workdir to already exist -- it
-        # will not create them itself.
-        content = (IMAGE_DIR / "pre-image.sh").read_text()
-        self.assertIn("data/sovereign/identity/etc-upper", content)
-        self.assertIn("data/sovereign/identity/etc-work", content)
 
 
 if __name__ == "__main__":
