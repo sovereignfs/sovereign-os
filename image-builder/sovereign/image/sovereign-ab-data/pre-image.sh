@@ -71,14 +71,20 @@ if [ -d "${filesystem}/opt/sovereign" ]; then
   find "${filesystem}/opt/sovereign" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
 fi
 
-# --- Persistent home directories (RFC-0016) ---
-# /etc's own persistence is handled at boot by sovereign-etc-overlay.service
-# (an overlayfs with a writable upper layer on /data), not seeded here --
-# passwd/usermod/PAM need the whole /etc directory writable (they rename a
-# sibling temp file over the target), which a plain bind mount of individual
-# files like /etc/passwd can't provide. /home gets the simpler bind-mount
-# treatment: imager-provisioned SSH authorized_keys must survive a base-OS
-# slot switch instead of reverting to build-time (empty) defaults.
+# --- Persistent /etc and /home (RFC-0016) ---
+# /etc is overlaid at boot by etc.mount (run-sovereign-etclower.mount
+# provides the lower layer): passwd/usermod/PAM need the whole /etc
+# directory writable, since they rename a sibling temp file over the
+# target, which a plain bind mount of individual files like /etc/passwd
+# can't provide. Overlayfs requires upperdir/workdir to already exist --
+# it won't create them -- so they're seeded here, empty (the overlay's
+# lower layer supplies the actual starting content at boot).
+install -d -m 0755 "${filesystem}/data/sovereign/identity/etc-upper" \
+                     "${filesystem}/data/sovereign/identity/etc-work"
+
+# /home gets the simpler bind-mount treatment: imager-provisioned SSH
+# authorized_keys must survive a base-OS slot switch instead of
+# reverting to build-time (empty) defaults.
 if [ -d "${filesystem}/home" ]; then
   install -d -m 0755 "${filesystem}/data/sovereign/identity/home"
   rsync -aHAX --numeric-ids "${filesystem}/home/" "${filesystem}/data/sovereign/identity/home/"

@@ -1,0 +1,14 @@
+[Unit]
+Description=Second, read-only mount of this slot's root -- the lower layer for etc.mount
+DefaultDependencies=no
+Before=local-fs.target
+ConditionPathExists=/dev/disk/by-slot/active/system
+
+[Mount]
+What=/dev/disk/by-slot/active/system
+Where=/run/sovereign/etclower
+Type=ext4
+Options=ro
+
+[Install]
+WantedBy=local-fs.target

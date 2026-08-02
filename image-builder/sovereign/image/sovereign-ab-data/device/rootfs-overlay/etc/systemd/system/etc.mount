@@ -1,0 +1,16 @@
+[Unit]
+Description=Overlay /etc with a persistent, writable upper layer
+DefaultDependencies=no
+Requires=data.mount run-sovereign-etclower.mount
+After=data.mount run-sovereign-etclower.mount
+Before=local-fs.target sysinit.target
+ConditionPathExists=/data/sovereign
+
+[Mount]
+What=overlay
+Where=/etc
+Type=overlay
+Options=lowerdir=/run/sovereign/etclower/etc,upperdir=/data/sovereign/identity/etc-upper,workdir=/data/sovereign/identity/etc-work
+
+[Install]
+WantedBy=local-fs.target

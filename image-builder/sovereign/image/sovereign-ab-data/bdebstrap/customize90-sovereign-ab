@@ -19,7 +19,8 @@ set -eu
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-local-access.service
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-credentials-console.service
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-machine-id-sync.service
-"$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-etc-overlay.service
+"$BDEBSTRAP_HOOKS/enable-units" "$1" run-sovereign-etclower.mount
+"$BDEBSTRAP_HOOKS/enable-units" "$1" etc.mount
 unlink "$1/etc/nginx/sites-enabled/default" 2>/dev/null || true
 ln -s ../sites-available/sovereign "$1/etc/nginx/sites-enabled/sovereign"
 ln -sf /run/systemd/resolve/resolv.conf "$1/etc/resolv.conf"

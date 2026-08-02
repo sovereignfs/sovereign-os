@@ -108,7 +108,7 @@ class ImagerProvisionServiceUnitTests(unittest.TestCase):
 
     def test_runs_apply_imager_provisioning_directly(self):
         # No remount wrapper needed: /etc is a persistent, writable
-        # overlay on RFC-0016's A/B images (sovereign-etc-overlay.service)
+        # overlay on RFC-0016's A/B images (etc.mount)
         # and is just part of the already-writable root on today's
         # single-root images. An earlier commit added a scoped
         # remount-root-rw workaround here, then removed it once the /etc
