@@ -152,10 +152,12 @@ bootconfig  (new, tiny — GPT partition holding only autoboot.txt, the
 boot A      (kernel, initramfs, dtbs, config.txt for slot A — whole,
              separate FAT partition, not a subdirectory of a shared boot)
 boot B      (same, for slot B)
-root A      (ext4, ADR-0002's existing appliance/base-OS content)
+root A      (ext4, read-only at runtime — see "Root is read-only" below)
 root B      (same, inactive except during/after an update)
 data        (unchanged: /data, independent of every other partition,
-             existing growpart-on-first-boot behavior unaffected)
+             existing growpart-on-first-boot behavior unaffected —
+             and now also where /opt/sovereign's appliance-release tree
+             lives, moved out of root; see "Root is read-only" below)
 ```
 
 Six partitions instead of today's three (`boot`/`root`/`data`) — moving
@@ -202,6 +204,72 @@ directly (`df -h`, `lsblk -f`) rather than assumed:
   prerequisite is already satisfied on hardware this project already
   qualifies against — the gap is purely in image layout and
   `sovereign-update` integration, not firmware readiness.
+
+### Root is read-only
+
+**Decided (2026-08-02, project creator): root A/root B are read-only at
+runtime**, matching `rpi-image-gen`'s own reference design rather than
+keeping root writable as this RFC originally sketched. Root as a
+writable filesystem inside an A/B slot gets rollback but not integrity —
+inconsistent with the atomic, never-mutated-in-place philosophy this
+project already applies at the appliance layer (`current` is a symlink
+swap between versioned, immutable release directories; nothing is ever
+edited in place). A read-only root extends the same discipline down one
+layer, and gives this DNS appliance a real, ongoing tamper-resistance
+property beyond just enabling OTA updates.
+
+This was weighed against the real complexity it adds — primarily that
+Docker leans heavily on `/var/lib/docker`, which can't sensibly live on
+a read-only filesystem — and concluded the cost is smaller for Sovereign
+specifically than it would be for a general-purpose Docker host:
+`activate_release` already re-imports the Pi-hole image by digest
+(`docker load`) on every appliance activation, so Sovereign's Docker
+usage is already tolerant of the image cache being ephemeral. A slot
+switch resetting `/var/lib/docker` is not a new failure mode this design
+introduces — it's a cost the appliance layer already absorbs today.
+
+Following the reference architecture's pattern:
+
+- `/var` and `/home` are reclaimed from each root slot at build time
+  (emptied, replaced with a minimal writable skeleton for services that
+  need `PrivateTmp`) and bind-mounted from persistent storage at boot,
+  before `local-fs.target`.
+- The systemd journal persists across slot switches (`Storage=persistent`
+  under a dedicated, bounded-size location), rather than resetting with
+  every base-OS update — losing log history on every update would be a
+  real regression from today.
+- `/etc/machine-id` is preserved and synced at boot rather than
+  regenerated per slot, so device identity (and anything keyed off it)
+  survives a base-OS update the same way it already survives an
+  appliance update today.
+
+**`/opt/sovereign` moves out of root entirely, onto `/data`.** This is
+not optional once root is read-only — RFC-0014's appliance-release tree
+(`RELEASES_ROOT`, today `/opt/sovereign`) is actively written to by
+every appliance update, completely independent of base-OS updates
+(ADR-0002: "application, appliance, and base-OS versions are tracked
+independently"). If it stayed inside root, a base-OS update would
+silently revert appliance content to whatever was baked into that base
+image at build time, undoing independent appliance progress — a real
+correctness bug, not just an immutability inconvenience. `/data` is
+already this project's established boundary for "state that must survive
+independently of the OS" (Pi-hole configuration, device secrets, backup
+and transaction journals, update state all already live under
+`/data/sovereign`); the appliance-release tree belongs there for exactly
+the same reason, not in a second, newly-invented persistent-storage
+mechanism. Moving it is a path change in `sovereign-update`
+(`RELEASES_ROOT`), not a new concept.
+
+What deliberately isn't adopted from the reference: `erofs` as the root
+filesystem type (its own default) or dm-verity-backed integrity
+verification. Both are real, further hardening steps in the same
+direction as read-only root, but are separable, additive decisions this
+RFC doesn't need to make now — plain read-only ext4 already delivers the
+property that matters for this milestone (root cannot be mutated in
+place; a corrupted or tampered root is still detectable by activation's
+own signature/health gates, just not by filesystem-level verification on
+every read). Revisit if a future security-focused RFC wants that
+stronger guarantee.
 
 ### Slot selection and health confirmation: Raspberry Pi `tryboot`
 
@@ -514,6 +582,21 @@ every future rootfs-level change this project ships.
   system milestone: a failure mode here can leave a device unable to
   boot at all, not just unable to reach `committed` state. The
   qualification bar (see Testing Strategy) needs to reflect that.
+- Read-only root adds real new surface beyond the partition/tryboot
+  mechanism itself: `/var`/`/home` reclaim-and-bind-mount at boot,
+  journal persistence configuration, machine-id sync, and moving
+  `/opt/sovereign` onto `/data` all need their own correctness
+  verification, not just "the OS boots." A subtly wrong bind-mount
+  ordering (before `local-fs.target`, before anything that writes to
+  `/var` starts) is a real, easy-to-get-wrong failure mode this design
+  introduces that a writable-root approach wouldn't have had.
+- Docker's storage under `/var/lib/docker` is not preserved across a
+  slot switch under this design (see "Root is read-only"). Acceptable
+  because `activate_release` already re-imports the Pi-hole image by
+  digest on every appliance activation, but this should be explicitly
+  qualified, not just assumed — confirm Docker itself starts cleanly
+  against an empty `/var/lib/docker` after a slot switch, not only that
+  the subsequent `docker load` succeeds.
 
 ## Unresolved Questions
 
@@ -559,7 +642,15 @@ every future rootfs-level change this project ships.
   hard power cut mid-trial-boot) is qualified to correctly fall back to
   the previous slot with no data loss and no manual recovery needed.
 - `/data` survives a base-OS update, a rollback, and a repeated cycle
-  of both, unaffected.
+  of both, unaffected — including `/opt/sovereign`'s appliance-release
+  tree, now living there: an appliance update installed *after* a
+  base-OS update must still be present and correctly `current` after a
+  *subsequent* base-OS update, proving the two layers are genuinely
+  independent, not just independently versioned on paper.
+- Root is confirmed read-only at runtime (a write attempt fails), with
+  `/var` and `/home` correctly bind-mounted and writable, Docker starting
+  cleanly against a slot-switch-reset `/var/lib/docker`, the journal and
+  `/etc/machine-id` surviving a base-OS update unchanged.
 - `sovereign-update status` and Console correctly represent an in-flight
   and a committed base-OS transaction.
 - The qualification device (and any other currently-deployed device)
