@@ -544,6 +544,34 @@ UUID. Not yet done: booting this image at all (real or otherwise), let
 alone a `tryboot` trial-boot cycle — that remains the real qualification
 gate this section describes, unstarted.
 
+**Progress (2026-08-02, continued):** first real boot on the
+qualification Raspberry Pi 5. Found and fixed, in order: Raspberry Pi
+Imager's first-boot account provisioning writing directly to
+`/etc/passwd`/`/etc/shadow`/etc., impossible on read-only root; the new
+image layer's bdebstrap hooks missing Docker installation, the
+ADR-0003 bootstrap account, and almost all appliance service
+enablement (authored from scratch rather than derived from
+`sovereign-data`'s proven hooks); and, most substantively, that
+individual-file bind mounts for the account database are insufficient
+on read-only root — `passwd`/`usermod`/PAM write account files by
+renaming a sibling temp file in the *same* directory, which needs the
+whole `/etc` directory writable, not just the mounted file. Fixed by
+overlaying `/etc` at boot (`sovereign-etc-overlay.service`): a writable
+upper layer on `/data`, shared across slots (not per-slot) so account
+state and imager-provisioned configuration survive a future slot
+switch instead of reverting to build-time defaults, while untouched
+files still track whatever the current slot's image ships. Confirmed
+on hardware: SSH login with the ADR-0003 bootstrap credential, the
+forced first-login password change, Docker, and the full appliance
+service set (Pi-hole, Console, nginx) all now work end-to-end on the
+GPT A/B image. A same-day detour attempted a native-systemd-`.mount`-unit
+version of the `/etc` overlay after a hardware test appeared to hang;
+the hang turned out to be an unrelated LAN/mDNS reachability issue on
+the test machine, not a real boot problem, so that redesign was
+reverted in favor of the already-hardware-proven version. Still not
+done: an actual `tryboot` trial-boot cycle, which remains this
+milestone's real qualification gate.
+
 ## Alternatives Considered
 
 ### RAUC or Mender (adopt a third-party A/B OTA framework)
