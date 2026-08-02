@@ -530,6 +530,20 @@ service of never needing it again for this class of update.
   cut, forced health-check failure) is not optional given how central
   automatic fallback is to this design's safety case.
 
+**Progress (2026-08-02):** the six-partition GPT layout builds
+successfully end-to-end (`image-builder/sovereign/image/sovereign-ab-data`,
+a new additive layer — the production `sovereign-proof.yaml` build path
+is untouched). Verified locally, without a CI round-trip, using native
+ARM64 Docker on Apple Silicon. Confirmed directly against the built
+image: GPT partition table with exactly the designed six partitions
+(`bootconfig`/`boot_a`/`boot_b`/`system_a`/`system_b`/`data`) at the
+right sizes, `autoboot.txt` content matching the `tryboot_a_b` design
+exactly, and `cmdline.txt`'s `root=` correctly using the
+`rpi-ab-slot-mapper`-provided by-slot symlink rather than a hardcoded
+UUID. Not yet done: booting this image at all (real or otherwise), let
+alone a `tryboot` trial-boot cycle — that remains the real qualification
+gate this section describes, unstarted.
+
 ## Alternatives Considered
 
 ### RAUC or Mender (adopt a third-party A/B OTA framework)
