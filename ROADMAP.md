@@ -153,13 +153,26 @@ Planned work:
   version-mismatched restore by default, then recovered an injected
   canary correctly under `--force` with no regression — see the
   [production-signed restore qualification report](docs/research/production-signed-restore-qualification-report.md).
-  `prune`/`rotate-trust` still haven't been exercised as part of an
-  actual signed-release install cycle — doing so meaningfully needs
-  either a second real release or a genuine key rotation, not a
-  manufactured scenario. Getting a rotation manifest onto
+  `prune` has now been exercised as part of a genuine signed-release
+  install cycle: `v0.1.0-preview.23`, signed with the real production
+  key by its custody holder (the assistant never handles that key,
+  per ADR-0006), discovered, installed, and committed on the
+  qualification device, followed by a real (non-dry-run) `prune` run.
+  It correctly removed nothing — not a gap, but confirmation that
+  `prune_releases`' protection logic works as designed: a release
+  beyond the raw `keep_count` (here, `0.1.0-preview.21`, a third
+  release against `keep_count: 2`) stays protected as long as any
+  transaction still within retention (`committed` state, `keep_days:
+  90`) records it as a rollback anchor — a genuinely useful, real-cycle
+  confirmation that release and transaction retention interlock
+  correctly rather than pruning something a still-live rollback path
+  depends on. `rotate-trust` still hasn't been exercised this way —
+  deliberately deferred as its own separate, deliberate event rather
+  than bundled into this cycle. Getting a rotation manifest onto
   already-flashed devices without an operator manually running the
   command still depends on the
-  Update Discovery work in item 3 below;
+  Update Discovery work in item 3 below (now complete, so this is
+  unblocked whenever a rotation is actually needed);
 - approve the update RFC and production manifest policy;
 - publish release compatibility, rollback limitations, and recovery
   guidance — published as
