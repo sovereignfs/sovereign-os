@@ -23,6 +23,17 @@ case "$1" in
 # per-slot -- mounted after var.mount so it lands inside the real /var,
 # not the reclaimed skeleton that briefly exists before var.mount runs.
 /data/sovereign/log/journal      /var/log/journal  none  bind,x-systemd.requires-mounts-for=/data,x-systemd.after=var.mount  0  0
+
+# Account/identity state persists across slot switches and stays writable
+# even though root is read-only -- required for PAM password changes
+# (ADR-0003) and so imager-provisioned accounts/keys/sudo grants survive a
+# base-OS update instead of reverting to build-time defaults.
+/data/sovereign/identity/passwd     /etc/passwd     none  bind,x-systemd.requires-mounts-for=/data  0  0
+/data/sovereign/identity/shadow     /etc/shadow     none  bind,x-systemd.requires-mounts-for=/data  0  0
+/data/sovereign/identity/group      /etc/group      none  bind,x-systemd.requires-mounts-for=/data  0  0
+/data/sovereign/identity/gshadow    /etc/gshadow    none  bind,x-systemd.requires-mounts-for=/data  0  0
+/data/sovereign/identity/sudoers.d  /etc/sudoers.d  none  bind,x-systemd.requires-mounts-for=/data  0  0
+/data/sovereign/identity/home       /home           none  bind,x-systemd.requires-mounts-for=/data  0  0
 EOF
     ;;
   BOOT)

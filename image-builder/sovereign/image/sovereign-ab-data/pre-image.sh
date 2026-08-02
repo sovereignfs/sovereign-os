@@ -71,6 +71,34 @@ if [ -d "${filesystem}/opt/sovereign" ]; then
   find "${filesystem}/opt/sovereign" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
 fi
 
+# --- Persistent account/identity state (RFC-0016) ---
+# Root is read-only at runtime, so /etc/passwd, /etc/shadow, /etc/group,
+# and /etc/gshadow must be genuinely writable at all times, not only
+# during a scoped rw window: PAM-driven password changes (ADR-0003 forces
+# one at first login) write /etc/shadow directly, outside of any service
+# that could bracket a remount. Persisting these on /data also means
+# account changes survive a base-OS slot switch instead of reverting to
+# whatever a new root image baked in -- the same reasoning that already
+# applies to /opt/sovereign above. /etc/sudoers.d and /home get the same
+# treatment: imager-provisioned sudo grants and SSH authorized_keys must
+# persist too, for the same two reasons.
+install -d -m 0755 "${filesystem}/data/sovereign/identity"
+for f in passwd shadow group gshadow; do
+  cp -a "${filesystem}/etc/$f" "${filesystem}/data/sovereign/identity/$f"
+done
+
+if [ -d "${filesystem}/etc/sudoers.d" ]; then
+  install -d -m 0750 -o root -g root "${filesystem}/data/sovereign/identity/sudoers.d"
+  rsync -aHAX --numeric-ids "${filesystem}/etc/sudoers.d/" "${filesystem}/data/sovereign/identity/sudoers.d/"
+  find "${filesystem}/etc/sudoers.d" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+fi
+
+if [ -d "${filesystem}/home" ]; then
+  install -d -m 0755 "${filesystem}/data/sovereign/identity/home"
+  rsync -aHAX --numeric-ids "${filesystem}/home/" "${filesystem}/data/sovereign/identity/home/"
+  find "${filesystem}/home" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+fi
+
 # --- machine-id, preserved across slot switches ---
 # Must run before /var is reclaimed below -- it writes into
 # /var/lib/dbus, which the reclaim step below empties out.
