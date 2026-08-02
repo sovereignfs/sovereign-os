@@ -52,38 +52,27 @@ class AbDataParityWithProductionTests(unittest.TestCase):
 
 
 class AbDataIdentityPersistenceTests(unittest.TestCase):
-    # Root is read-only at runtime. /etc/passwd, /etc/shadow, /etc/group,
-    # /etc/gshadow, /etc/sudoers.d, and /home must stay genuinely
-    # writable at all times -- not only during a scoped rw window -- both
-    # because PAM writes /etc/shadow directly on any password change
-    # (ADR-0003 forces one at first login, outside of any service that
-    # could bracket a remount) and so account state survives a base-OS
-    # slot switch instead of reverting to whatever a new root image
-    # baked in. Confirmed on real hardware: without this, the ADR-0003
+    # Root is read-only at runtime. /home persists via a plain bind
+    # mount (SSH authorized_keys must survive a base-OS slot switch).
+    # /etc/passwd, /etc/shadow, /etc/group, /etc/gshadow, and
+    # /etc/sudoers.d do NOT get individual-file bind mounts: an earlier
+    # attempt at that failed on real hardware, because passwd/usermod/PAM
+    # write account files by renaming a sibling temp file in the SAME
+    # directory (e.g. /etc/passwd+ over /etc/passwd), which needs the
+    # whole /etc directory writable, not just the one file -- the ADR-0003
     # forced first-login password change failed with "Authentication
-    # token manipulation error".
-    def test_pre_image_seeds_identity_state_on_data(self):
+    # token manipulation error". See AbDataEtcOverlayTests for the fix.
+    def test_pre_image_seeds_home_on_data(self):
         content = (IMAGE_DIR / "pre-image.sh").read_text()
         self.assertIn("data/sovereign/identity", content)
-        self.assertIn("for f in passwd shadow group gshadow", content)
-        self.assertIn('cp -a "${filesystem}/etc/$f"', content)
-        self.assertIn("etc/sudoers.d", content)
         self.assertIn('"${filesystem}/home/"', content)
 
-    def test_setup_binds_identity_state_over_etc_and_home(self):
+    def test_setup_binds_home_over_the_empty_mount_point(self):
         content = (IMAGE_DIR / "setup.sh").read_text()
-        for source, target in (
-            ("/data/sovereign/identity/passwd", "/etc/passwd"),
-            ("/data/sovereign/identity/shadow", "/etc/shadow"),
-            ("/data/sovereign/identity/group", "/etc/group"),
-            ("/data/sovereign/identity/gshadow", "/etc/gshadow"),
-            ("/data/sovereign/identity/sudoers.d", "/etc/sudoers.d"),
-            ("/data/sovereign/identity/home", "/home"),
-        ):
-            self.assertRegex(
-                content,
-                rf"{source}\s+{target}\s+none\s+bind,x-systemd\.requires-mounts-for=/data",
-            )
+        self.assertRegex(
+            content,
+            r"/data/sovereign/identity/home\s+/home\s+none\s+bind,x-systemd\.requires-mounts-for=/data",
+        )
 
     def test_pre_image_and_setup_have_valid_shell_syntax(self):
         for script in ("pre-image.sh", "setup.sh"):
@@ -91,6 +80,43 @@ class AbDataIdentityPersistenceTests(unittest.TestCase):
                 ["bash", "-n", str(IMAGE_DIR / script)], capture_output=True
             )
             self.assertEqual(0, result.returncode, result.stderr)
+
+
+class AbDataEtcOverlayTests(unittest.TestCase):
+    OVERLAY_UNIT = IMAGE_DIR / "device/rootfs-overlay/etc/systemd/system/sovereign-etc-overlay.service"
+    OVERLAY_SCRIPT = IMAGE_DIR / "device/rootfs-overlay/usr/lib/sovereign/mount-etc-overlay"
+
+    def test_unit_runs_early_and_depends_on_data(self):
+        content = self.OVERLAY_UNIT.read_text()
+        self.assertIn("Requires=data.mount", content)
+        self.assertIn("After=data.mount", content)
+        self.assertIn("Before=local-fs.target", content)
+        self.assertIn("ExecStart=/usr/lib/sovereign/mount-etc-overlay", content)
+
+    def test_enabled_in_customize90(self):
+        content = (IMAGE_DIR / "bdebstrap/customize90-sovereign-ab").read_text()
+        self.assertIn("sovereign-etc-overlay.service", content)
+
+    def test_script_mounts_overlay_with_shared_not_per_slot_upper(self):
+        self.assertTrue(self.OVERLAY_SCRIPT.is_file())
+        self.assertTrue(
+            self.OVERLAY_SCRIPT.stat().st_mode & 0o111, "script must be executable"
+        )
+        result = subprocess.run(
+            ["sh", "-n", str(self.OVERLAY_SCRIPT)], capture_output=True
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+
+        content = self.OVERLAY_SCRIPT.read_text()
+        self.assertIn("mount --bind /etc /run/sovereign/etc-lower", content)
+        self.assertIn("-t overlay overlay", content)
+        self.assertIn("lowerdir=/run/sovereign/etc-lower", content)
+        # Shared (not under data/sovereign/slots/<slot>/) so account and
+        # imager-provisioned state survives a slot switch instead of
+        # resetting with it.
+        self.assertIn("upperdir=/data/sovereign/identity/etc-upper", content)
+        self.assertIn("workdir=/data/sovereign/identity/etc-work", content)
+        self.assertNotIn("slots/", content)
 
 
 if __name__ == "__main__":

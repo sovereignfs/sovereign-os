@@ -1,0 +1,31 @@
+#!/bin/sh
+# Overlay /etc with a persistent, writable upper layer on /data (RFC-0016).
+#
+# Root is read-only at runtime, so bind-mounting individual files like
+# /etc/passwd is not enough: passwd/usermod/chpasswd/PAM all write
+# account files by creating a sibling temp file in the SAME directory
+# (e.g. /etc/passwd+) and renaming it over the original -- and creating
+# that sibling requires the whole /etc directory to be writable, not
+# just the one file. Confirmed on real hardware: individual-file bind
+# mounts left the ADR-0003 forced first-login password change failing
+# with "Authentication token manipulation error".
+#
+# lowerdir is a snapshot of THIS slot's real /etc, taken before the
+# overlay replaces the visible /etc, so files nobody ever writes keep
+# coming from the current slot's image untouched -- a base-OS update's
+# new defaults still apply normally next boot. upperdir/workdir are
+# shared (not per-slot) on /data, so anything actually written (account
+# database, imager-provisioned sudoers/ssh/wifi-country/timezone config)
+# persists across slot switches instead of reverting to build-time
+# defaults.
+
+set -eu
+
+mkdir -p /run/sovereign/etc-lower
+mount --bind /etc /run/sovereign/etc-lower
+
+mkdir -p /data/sovereign/identity/etc-upper /data/sovereign/identity/etc-work
+
+mount -t overlay overlay \
+  -o lowerdir=/run/sovereign/etc-lower,upperdir=/data/sovereign/identity/etc-upper,workdir=/data/sovereign/identity/etc-work \
+  /etc

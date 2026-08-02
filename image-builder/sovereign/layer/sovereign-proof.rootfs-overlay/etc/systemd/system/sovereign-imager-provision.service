@@ -10,24 +10,14 @@ ConditionPathExists=!/data/sovereign/imager-provisioned
 
 [Service]
 Type=oneshot
-# Root is read-only at runtime on RFC-0016's A/B images (not on today's
-# single-root images, where root is already rw and this is a harmless
-# no-op). apply-imager-provisioning writes directly to /etc/passwd,
-# /etc/shadow, /etc/group, and /etc/sudoers.d/ -- a real requirement,
-# not a mistake to work around by making /etc persistent/shared, since
-# most of /etc legitimately differs per base-OS version and must stay
-# per-slot. This is a one-time (ConditionPathExists guards re-runs),
-# well-scoped writable window instead: remount rw only for this run,
-# then restore whatever /etc/fstab actually declares for root
-# (ro on read-only-root images, rw on today's images) rather than
-# hardcoding either direction.
-ExecStartPre=/bin/mount -o remount,rw /
+# apply-imager-provisioning writes directly to /etc/passwd, /etc/shadow,
+# /etc/group, /etc/sudoers.d/, and a few other /etc paths. Root is
+# read-only at runtime on RFC-0016's A/B images, but /etc itself is a
+# persistent, writable overlay there (sovereign-etc-overlay.service, an
+# earlier-boot dependency of this one via ordering on local-fs.target) --
+# not on today's single-root images, where /etc is just part of the
+# already-writable root. Either way, no special handling is needed here.
 ExecStart=/usr/lib/sovereign/apply-imager-provisioning
-# ExecStopPost, not ExecStartPost: the latter only runs if ExecStart
-# succeeds, which would leave root permanently read-write after any
-# provisioning failure (malformed rpi-preseed.toml, etc.) until the next
-# reboot. ExecStopPost runs regardless of ExecStart's outcome.
-ExecStopPost=/usr/lib/sovereign/restore-root-mount-mode
 RemainAfterExit=yes
 
 [Install]

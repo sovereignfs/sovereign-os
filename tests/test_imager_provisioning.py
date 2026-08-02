@@ -105,46 +105,18 @@ class ImagerProvisionServiceUnitTests(unittest.TestCase):
         Path(__file__).resolve().parents[1]
         / "image-builder/sovereign/layer/sovereign-proof.rootfs-overlay/etc/systemd/system/sovereign-imager-provision.service"
     )
-    RESTORE_SCRIPT = (
-        Path(__file__).resolve().parents[1]
-        / "image-builder/sovereign/layer/sovereign-proof.rootfs-overlay/usr/lib/sovereign/restore-root-mount-mode"
-    )
 
-    def test_brackets_provisioning_with_a_scoped_writable_window(self):
-        # apply-imager-provisioning writes directly to /etc/passwd,
-        # /etc/shadow, /etc/group, and /etc/sudoers.d/ -- root is
-        # read-only at runtime on RFC-0016's A/B images, so this needs a
-        # real, one-time writable window, not a workaround. Confirmed on
-        # real hardware: without this, first-boot Imager provisioning
-        # (the operator account/password) silently never applies, and
-        # the device is unreachable over SSH with any password.
+    def test_runs_apply_imager_provisioning_directly(self):
+        # No remount wrapper needed: /etc is a persistent, writable
+        # overlay on RFC-0016's A/B images (sovereign-etc-overlay.service)
+        # and is just part of the already-writable root on today's
+        # single-root images. An earlier commit added a scoped
+        # remount-root-rw workaround here, then removed it once the /etc
+        # overlay made it redundant (and insufficient anyway: PAM's own
+        # password-change flow writes /etc/shadow outside of any service
+        # that could bracket a remount).
         content = self.SERVICE_UNIT.read_text()
-        self.assertIn("ExecStartPre=/bin/mount -o remount,rw /", content)
         self.assertIn(
             "ExecStart=/usr/lib/sovereign/apply-imager-provisioning", content
         )
-        # ExecStopPost, not ExecStartPost: the latter is skipped if
-        # ExecStart fails, which would leave root permanently read-write
-        # after any provisioning failure until the next reboot.
-        self.assertIn(
-            "ExecStopPost=/usr/lib/sovereign/restore-root-mount-mode", content
-        )
-        self.assertNotIn("ExecStartPost=", content)
-
-    def test_restore_script_never_hardcodes_a_direction(self):
-        # Must work correctly on both image generations: read-only-root
-        # A/B images (restore to ro) and today's single-root images
-        # (fstab already says rw, so this is a harmless no-op) -- decided
-        # by reading /etc/fstab at runtime, not by assuming either image
-        # generation.
-        self.assertTrue(self.RESTORE_SCRIPT.is_file())
-        mode = self.RESTORE_SCRIPT.stat().st_mode
-        self.assertTrue(mode & 0o111, "restore script must be executable")
-
-        result = subprocess.run(["sh", "-n", str(self.RESTORE_SCRIPT)], capture_output=True)
-        self.assertEqual(0, result.returncode, result.stderr)
-
-        content = self.RESTORE_SCRIPT.read_text()
-        self.assertIn("/etc/fstab", content)
-        self.assertIn("remount,ro", content)
-        self.assertNotIn("remount,rw", content)
+        self.assertNotIn("remount", content)

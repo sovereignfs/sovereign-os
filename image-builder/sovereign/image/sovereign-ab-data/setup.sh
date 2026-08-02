@@ -24,15 +24,14 @@ case "$1" in
 # not the reclaimed skeleton that briefly exists before var.mount runs.
 /data/sovereign/log/journal      /var/log/journal  none  bind,x-systemd.requires-mounts-for=/data,x-systemd.after=var.mount  0  0
 
-# Account/identity state persists across slot switches and stays writable
-# even though root is read-only -- required for PAM password changes
-# (ADR-0003) and so imager-provisioned accounts/keys/sudo grants survive a
-# base-OS update instead of reverting to build-time defaults.
-/data/sovereign/identity/passwd     /etc/passwd     none  bind,x-systemd.requires-mounts-for=/data  0  0
-/data/sovereign/identity/shadow     /etc/shadow     none  bind,x-systemd.requires-mounts-for=/data  0  0
-/data/sovereign/identity/group      /etc/group      none  bind,x-systemd.requires-mounts-for=/data  0  0
-/data/sovereign/identity/gshadow    /etc/gshadow    none  bind,x-systemd.requires-mounts-for=/data  0  0
-/data/sovereign/identity/sudoers.d  /etc/sudoers.d  none  bind,x-systemd.requires-mounts-for=/data  0  0
+# /etc's own persistence is handled by sovereign-etc-overlay.service (an
+# overlayfs, not a plain bind mount -- passwd/usermod/PAM write account
+# files via a sibling-temp-file-then-rename in the SAME directory, which
+# needs the whole directory writable, not just the individual file).
+#
+# /home persists across slot switches for the same two reasons as /etc:
+# imager-provisioned SSH authorized_keys must survive a base-OS update,
+# not revert to build-time (empty) defaults.
 /data/sovereign/identity/home       /home           none  bind,x-systemd.requires-mounts-for=/data  0  0
 EOF
     ;;
