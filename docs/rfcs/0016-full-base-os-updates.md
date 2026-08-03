@@ -306,14 +306,26 @@ boot_partition=3
 section currently names (partition 2, i.e. boot A, initially). A
 **trial** boot — triggered from Linux userspace via `reboot "0
 tryboot"`, not by editing this file — uses the `[tryboot]` section's
-`boot_partition` (3, i.e. boot B) for exactly that one boot. Critically,
-promotion is handled by the firmware itself, not by any userspace script
-rewriting `autoboot.txt`: if a trial boot is itself followed by an
-*ordinary* (non-tryboot) reboot, the firmware treats that as
-confirmation and promotes the trial slot to be the new `[all]` default
-for all future normal boots. Nothing in the reference example's
-`device/rootfs-overlay` content rewrites `autoboot.txt` at runtime — the
-promotion logic lives entirely in firmware.
+`boot_partition` (3, i.e. boot B) for exactly that one boot.
+
+**Corrected (2026-08-02, hardware-verified — supersedes this
+paragraph's original text):** promotion is *not* automatic. An initial
+draft of this RFC, written before any hardware testing, claimed the
+firmware treats an ordinary reboot following a trial boot as implicit
+confirmation and promotes the trial slot on its own. Direct hardware
+testing disproves this: from an uncommitted trial boot, a plain `sudo
+reboot` reverts to the *original* slot, not the trial slot. `[all]` in
+`autoboot.txt` only ever changes when something explicitly writes it —
+`rpi-slot-tryboot` (from `rpi-ab-slot-mapper`) prints the promoted
+config fragment to stdout for exactly this purpose, but nothing invokes
+it automatically; that is deliberately left to policy in a higher
+layer, per that layer's own documentation ("it simply exposes stable
+by-slot device links leaving policy to higher layers"). This is
+actually a *safer* default than the originally-assumed behavior — it
+means a trial that merely reboots itself, for any reason, reverts
+automatically rather than committing — but it does mean
+`sovereign-update` must perform an explicit commit step, not just an
+ordinary reboot, to make a trial slot permanent.
 
 At a high level, applied to Sovereign's existing transaction model:
 
@@ -328,23 +340,27 @@ At a high level, applied to Sovereign's existing transaction model:
    `verify-update-health` gates appliance activation today — reusing
    that pattern, not just its name — confirms DNS, HTTP, Console, and
    Docker health.
-4. On success, the device performs an ordinary reboot (not another
-   `tryboot`). The firmware promotes the trial slot to the new default
-   as a side effect of that plain reboot; the transaction reaches
-   `committed` in the same `sovereign-update status` surface appliance
-   updates already report through.
+4. On success, `sovereign-update` explicitly commits: it runs
+   `rpi-slot-tryboot` and writes its output over `autoboot.txt` on the
+   (writable) `bootconfig` partition, making the trial slot the new
+   `[all]` default, then performs an ordinary reboot (not another
+   `tryboot`) into it. The transaction reaches `committed` in the same
+   `sovereign-update status` surface appliance updates already report
+   through.
 5. On failure — health checks fail, or the trial boot never completes at
    all (crash, hang, power loss) — the device is still running the
-   trial slot's kernel with `[all]` in `autoboot.txt` still pointing at
-   the *original* slot. A power cycle or reboot without an explicit
-   "confirm" step returns to a normal boot, which uses `[all]`'s
-   unchanged value — the original slot — automatically. No software
-   fallback logic is required for the crash/hang/power-loss case; a
-   deliberate "roll back" action after a *detected* health failure
-   (case 3 succeeding at running Sovereign's own code, but reporting bad
-   health) still needs `sovereign-update` to explicitly initiate that
-   same plain reboot back to the known-good slot rather than confirming
-   forward.
+   trial slot's kernel (if it's running at all) with `[all]` in
+   `autoboot.txt` still pointing at the *original* slot, since nothing
+   in step 4 ran. Any reboot or power cycle without that explicit commit
+   returns to a normal boot using `[all]`'s unchanged value — the
+   original slot — automatically. No software fallback logic is required
+   for the crash/hang/power-loss case, and this now includes a hard
+   power cut, hardware-verified directly (see Testing Strategy): a
+   *detected* health failure (case 3 succeeding at running Sovereign's
+   own code, but reporting bad health) simply means `sovereign-update`
+   skips the step-4 commit and reboots or power-cycles back to the
+   known-good slot — the same "do nothing, let it revert" path as any
+   other failure, not a separate rollback mechanism.
 
 ### Build on `rpi-image-gen`'s own A/B layers, not a hand-rolled equivalent
 
@@ -602,6 +618,21 @@ Not yet done: a hard power cut *during* an active, uncommitted trial
 and the actual automated `sovereign-update`-side integration (health
 gate + commit step) that item 6 on the roadmap still needs — today's
 commit step was a manual qualification action, not product code.
+
+**Progress (2026-08-02, forced-failure test):** the hard-power-cut case
+above, now also qualified. Power was pulled within seconds of issuing
+`sudo reboot "0 tryboot"` — before the trial slot could plausibly have
+finished, likely even started, booting — then restored for a normal
+cold boot. Result: the device came up cleanly on the committed default
+(`system_b`), `uptime` confirming a genuine fresh boot; `autoboot.txt`
+unchanged; no `systemd-fsck` errors logged. A dry-run `e2fsck -fn`
+against the interrupted trial slot's own root filesystem afterward
+found zero errors across all five passes — the interruption left no
+corruption on either slot, not just on the one that ended up booting.
+Both halves of RFC-0016's Testing Strategy forced-failure requirement
+(interrupted trial boot, forced health-check failure) are covered for
+the interrupted-boot half; forced health-check failure has no product
+code to test yet (see below).
 
 ## Alternatives Considered
 

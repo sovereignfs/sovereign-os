@@ -48,6 +48,9 @@ STATE_ROOT = pathlib.Path(
 UPDATE_STATUS_PATH = pathlib.Path(
     os.environ.get("SOVEREIGN_UPDATE_STATUS", str(STATE_ROOT / "update-status.json"))
 )
+BASE_OS_UPDATE_STATUS_PATH = pathlib.Path(
+    os.environ.get("SOVEREIGN_BASE_OS_UPDATE_STATUS", str(STATE_ROOT / "base-os-update-status.json"))
+)
 RELEASES_ROOT = pathlib.Path(
     os.environ.get("SOVEREIGN_RELEASES_ROOT", "/opt/sovereign")
 )
@@ -81,6 +84,45 @@ UPDATE_INSTALL_MAX_ARTIFACT_BYTES = int(
     os.environ.get("SOVEREIGN_UPDATE_INSTALL_MAX_ARTIFACT_BYTES", str(500 * 1024 * 1024))
 )
 UPDATE_INSTALL_DOWNLOAD_TIMEOUT_SECONDS = 300
+
+# --- Base-OS (RFC-0016 tryboot A/B) update support ---
+#
+# A base-OS release is independently versioned and independently
+# triggered from an appliance release (RFC-0016's own explicit design
+# decision), and its artifacts are a raw boot-partition image and a raw
+# root-partition image, not a tar bundle extracted into an existing
+# writable filesystem -- appliance updates' prepare/backup/stage/activate
+# pipeline doesn't apply, so this is a parallel set of functions and a
+# parallel manifest schema, reusing shared primitives (signature
+# verification, the atomic-write/journal-event pattern, the health-check
+# command) rather than the appliance-specific transaction machinery.
+BASE_OS_RELEASE_PATH = pathlib.Path(
+    os.environ.get("SOVEREIGN_BASE_OS_RELEASE_PATH", "/etc/sovereign-base-os-release")
+)
+BASE_OS_BOOT_MEDIA_TYPE = "application/vnd.sovereign.base-os.boot.v1+raw"
+BASE_OS_ROOT_MEDIA_TYPE = "application/vnd.sovereign.base-os.root.v1+raw"
+# The rpi-ab-slot-mapper-provided by-slot symlinks are the same,
+# already-hardware-verified mechanism the running system boots through
+# (RFC-0016's Testing Strategy) -- writes always target "other", read
+# fresh at write time, never a slot identity computed independently by
+# this script, so there is exactly one source of truth for which device
+# node is safe to overwrite. Overridable for testing.
+SLOT_OTHER_BOOT_DEVICE = pathlib.Path(
+    os.environ.get("SOVEREIGN_SLOT_OTHER_BOOT_DEVICE", "/dev/disk/by-slot/other/boot")
+)
+SLOT_OTHER_SYSTEM_DEVICE = pathlib.Path(
+    os.environ.get("SOVEREIGN_SLOT_OTHER_SYSTEM_DEVICE", "/dev/disk/by-slot/other/system")
+)
+SLOT_ACTIVE_BOOT_DEVICE = pathlib.Path(
+    os.environ.get("SOVEREIGN_SLOT_ACTIVE_BOOT_DEVICE", "/dev/disk/by-slot/active/boot")
+)
+SLOT_ACTIVE_SYSTEM_DEVICE = pathlib.Path(
+    os.environ.get("SOVEREIGN_SLOT_ACTIVE_SYSTEM_DEVICE", "/dev/disk/by-slot/active/system")
+)
+AUTOBOOT_PATH = pathlib.Path(os.environ.get("SOVEREIGN_AUTOBOOT_PATH", "/bootfs/autoboot.txt"))
+RPI_SLOT_TRYBOOT = os.environ.get("SOVEREIGN_RPI_SLOT_TRYBOOT", "/usr/bin/rpi-slot-tryboot")
+REBOOT = os.environ.get("SOVEREIGN_REBOOT", "/usr/sbin/reboot")
+BASE_OS_WRITE_CHUNK_BYTES = 4 * 1024 * 1024
 
 APPLIANCE_FILES = {
     "appliance/bin/console-auth": 0o755,
@@ -239,6 +281,21 @@ def read_release_version():
     return version
 
 
+def read_base_os_version():
+    try:
+        lines = BASE_OS_RELEASE_PATH.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as error:
+        raise UpdateError("BASE_OS_RELEASE_UNAVAILABLE", "Installed base-OS metadata is unavailable") from error
+    values = {}
+    for line in lines:
+        key, separator, value = line.partition("=")
+        if separator:
+            values[key.strip()] = value.strip().strip('"').strip("'")
+    version = values.get("VERSION")
+    parse_version(version)
+    return version
+
+
 def installed_pihole_env_path():
     if PIHOLE_ENV_OVERRIDE:
         return pathlib.Path(PIHOLE_ENV_OVERRIDE)
@@ -345,6 +402,84 @@ def validate_manifest(manifest):
     exact_keys(signing, ["algorithm", "key_id"], "signing")
     fail(signing["algorithm"] == "Ed25519", "INVALID_MANIFEST", "Only Ed25519 is supported")
     fail(isinstance(signing["key_id"], str) and SAFE_KEY_ID.fullmatch(signing["key_id"]), "INVALID_MANIFEST", "Invalid signing key id")
+
+
+def validate_base_os_manifest(manifest):
+    top = ["schema_version", "release", "compatibility", "artifacts", "components", "requirements", "rollback", "signing"]
+    exact_keys(manifest, top, "base-OS manifest")
+    fail(manifest["schema_version"] == 1, "UNSUPPORTED_SCHEMA", "Only base-OS manifest schema 1 is supported")
+
+    release = manifest["release"]
+    exact_keys(release, ["id", "version", "published_at", "channel", "notes_url"], "release")
+    fail(isinstance(release["id"], str) and SAFE_ID.fullmatch(release["id"]), "INVALID_MANIFEST", "Invalid release id")
+    parse_version(release["version"])
+    fail(release["channel"] in ("preview", "stable"), "INVALID_MANIFEST", "Invalid channel")
+    fail(isinstance(release["published_at"], str) and release["published_at"].endswith("Z"), "INVALID_MANIFEST", "Invalid publication time")
+    fail(isinstance(release["notes_url"], str) and release["notes_url"].startswith("https://"), "INVALID_MANIFEST", "Release notes must use HTTPS")
+
+    compatibility = manifest["compatibility"]
+    exact_keys(compatibility, ["devices", "source_versions", "allow_downgrade"], "compatibility")
+    fail(isinstance(compatibility["devices"], list) and compatibility["devices"], "INVALID_MANIFEST", "Compatible devices are required")
+    fail(all(device == "rpi5-arm64" for device in compatibility["devices"]), "INVALID_MANIFEST", "Unknown device compatibility value")
+    fail(compatibility["allow_downgrade"] is False, "INVALID_MANIFEST", "Downgrades cannot be enabled by a manifest")
+    source = compatibility["source_versions"]
+    exact_keys(source, ["minimum", "maximum_exclusive"], "source_versions")
+    parse_version(source["minimum"])
+    parse_version(source["maximum_exclusive"])
+
+    artifacts = manifest["artifacts"]
+    fail(isinstance(artifacts, list) and len(artifacts) == 2, "INVALID_MANIFEST", "Exactly a boot and a root image are required")
+    by_role = {artifact.get("role"): artifact for artifact in artifacts if isinstance(artifact, dict)}
+    fail(set(by_role) == {"system_boot", "system_root"}, "INVALID_MANIFEST", "Invalid artifact roles")
+    for role, media_type in (("system_boot", BASE_OS_BOOT_MEDIA_TYPE), ("system_root", BASE_OS_ROOT_MEDIA_TYPE)):
+        artifact = by_role[role]
+        exact_keys(artifact, ["role", "url", "size", "sha256", "media_type"], f"{role} artifact")
+        fail(isinstance(artifact["url"], str) and artifact["url"].startswith("https://"), "INVALID_MANIFEST", "Artifact URL must use HTTPS")
+        fail(isinstance(artifact["size"], int) and artifact["size"] > 0, "INVALID_MANIFEST", "Invalid artifact size")
+        fail(isinstance(artifact["sha256"], str) and SHA256.fullmatch(artifact["sha256"]), "INVALID_MANIFEST", "Invalid artifact digest")
+        fail(artifact["media_type"] == media_type, "INVALID_MANIFEST", "Invalid artifact media type")
+
+    components = manifest["components"]
+    exact_keys(components, ["image_base"], "components")
+    exact_keys(components["image_base"], ["version"], "image_base component")
+    parse_version(components["image_base"]["version"])
+    fail(components["image_base"]["version"] == release["version"], "VERSION_MISMATCH", "Component and release versions differ")
+
+    requirements = manifest["requirements"]
+    exact_keys(requirements, ["free_bytes", "reboot"], "requirements")
+    fail(isinstance(requirements["free_bytes"], int) and requirements["free_bytes"] > 0, "INVALID_MANIFEST", "Invalid storage requirement")
+    fail(requirements["reboot"] is True, "INVALID_MANIFEST", "A base-OS update always requires a reboot")
+
+    rollback = manifest["rollback"]
+    exact_keys(rollback, ["supported", "requires_data_restore", "limitations"], "rollback")
+    fail(type(rollback["supported"]) is bool and type(rollback["requires_data_restore"]) is bool, "INVALID_MANIFEST", "Invalid rollback flags")
+    fail(isinstance(rollback["limitations"], list) and all(isinstance(item, str) and item for item in rollback["limitations"]), "INVALID_MANIFEST", "Invalid rollback limitations")
+
+    signing = manifest["signing"]
+    exact_keys(signing, ["algorithm", "key_id"], "signing")
+    fail(signing["algorithm"] == "Ed25519", "INVALID_MANIFEST", "Only Ed25519 is supported")
+    fail(isinstance(signing["key_id"], str) and SAFE_KEY_ID.fullmatch(signing["key_id"]), "INVALID_MANIFEST", "Invalid signing key id")
+    return by_role
+
+
+def verify_base_os_policy(manifest, policy):
+    exact_keys(policy, ["schema_version", "channel", "device", "trust_store"], "update policy")
+    fail(policy["schema_version"] == 1, "INVALID_POLICY", "Unsupported update policy")
+    release = manifest["release"]
+    compatibility = manifest["compatibility"]
+    fail(release["channel"] == policy["channel"], "WRONG_CHANNEL", "Release channel does not match device policy")
+    fail(policy["device"] in compatibility["devices"], "INCOMPATIBLE_DEVICE", "Release does not support this device")
+    current = read_base_os_version()
+    bounds = compatibility["source_versions"]
+    fail(compare_versions(current, bounds["minimum"]) >= 0, "UNSUPPORTED_SOURCE", "Installed base-OS version is below the supported range")
+    fail(compare_versions(current, bounds["maximum_exclusive"]) < 0, "UNSUPPORTED_SOURCE", "Installed base-OS version is above the supported range")
+    fail(compare_versions(release["version"], current) > 0, "DOWNGRADE_REJECTED", "Target version must be newer than the installed base-OS version")
+    try:
+        free_bytes = shutil.disk_usage(DATA_PATH).free
+    except OSError as error:
+        raise UpdateError("STORAGE_UNAVAILABLE", "Persistent storage is unavailable") from error
+    fail(free_bytes >= manifest["requirements"]["free_bytes"], "INSUFFICIENT_STORAGE", "Not enough free persistent storage")
+    return current
 
 
 def load_trusted_key(policy, key_id, channel):
@@ -507,6 +642,28 @@ def atomic_json(path, value, mode=0o600):
             pass
 
 
+def atomic_write_autoboot(content):
+    # Mirrors atomic_json's write-temp-then-rename approach, but for plain
+    # text on /bootfs (vfat, not the ext4 STATE_ROOT atomic_json otherwise
+    # assumes) -- the temp file must live in the *same* directory as
+    # AUTOBOOT_PATH for os.replace to be an atomic rename rather than a
+    # cross-filesystem copy.
+    path = AUTOBOOT_PATH
+    temporary = path.with_name(f".{path.name}.{secrets.token_hex(4)}.tmp")
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        try:
+            temporary.unlink()
+        except OSError:
+            pass
+
+
 @contextlib.contextmanager
 def update_lock():
     UPDATE_ROOT.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -629,6 +786,186 @@ def load_transaction(transaction_id, required_state=None):
             f"Transaction must be {required_state}",
         )
     return snapshot
+
+
+# --- Base-OS transaction state machine ---
+#
+# staged: both partition images verified and written to the inactive
+#   slot's boot/root devices, but nothing about booting them has
+#   happened yet.
+# trial: a tryboot trial boot into the staged slot has been triggered.
+#   Recorded *before* the reboot -- /data survives the reboot unchanged,
+#   so this is what a trial-boot health-check unit reads on the other
+#   side to know a trial is in flight, and what a plain `status` call
+#   reports if the trial boot never came back at all.
+# validated: the trial slot's own health checks passed, but autoboot.txt
+#   has not been rewritten yet -- still one uncommitted reboot away from
+#   the original slot remaining the real default (see RFC-0016's
+#   corrected, hardware-verified promotion semantics).
+# committed: autoboot.txt has been rewritten to make the trial slot the
+#   new default; the transaction's terminal success state.
+# recovery_required: mirrors the appliance transaction machinery's own
+#   safety-net state for anything unexpected.
+BASE_OS_ALLOWED_TRANSITIONS = {
+    "staged": {"trial", "recovery_required"},
+    "trial": {"validated", "trial_failed", "recovery_required"},
+    "validated": {"committed", "recovery_required"},
+    "committed": {"discarded"},
+    # A detected health failure (as opposed to the trial boot never
+    # coming back at all, which needs no state transition -- there's
+    # nothing running to record one) is not routed through
+    # recovery_required. It's an expected, handled outcome: record it,
+    # then reboot without committing, exactly the same "do nothing
+    # special, let the one-shot trial flag lapse" path a crash or power
+    # loss already takes for free.
+    "trial_failed": {"discarded"},
+    "recovery_required": {"discarded"},
+}
+
+
+def base_os_transaction_path(transaction_id):
+    fail(bool(SAFE_ID.fullmatch(transaction_id)), "INVALID_TRANSACTION", "Invalid transaction id")
+    return UPDATE_ROOT / "base-os-transactions" / transaction_id
+
+
+def append_base_os_event(directory, previous, snapshot, reason):
+    event = {
+        "transaction_id": snapshot["transaction_id"],
+        "sequence": snapshot["sequence"],
+        "previous_state": previous,
+        "next_state": snapshot["state"],
+        "timestamp": snapshot["updated_at"],
+        "reason": reason,
+    }
+    path = directory / "events.jsonl"
+    descriptor = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    with os.fdopen(descriptor, "a", encoding="utf-8") as stream:
+        stream.write(json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+    sync_directory(directory)
+
+
+def publish_base_os_status(snapshot):
+    atomic_json(
+        BASE_OS_UPDATE_STATUS_PATH,
+        {
+            "schema_version": 1,
+            "state": snapshot["state"],
+            "target_version": snapshot["target_version"],
+            "updated_at": snapshot["updated_at"],
+        },
+        mode=0o644,
+    )
+
+
+def create_base_os_transaction(source_version, target_version, boot_digest, root_digest):
+    now = timestamp()
+    compact = now.replace("-", "").replace(":", "").lower()
+    transaction_id = f"base-os-{compact}-{secrets.token_hex(4)}"
+    directory = base_os_transaction_path(transaction_id)
+    directory.mkdir(parents=True, mode=0o700)
+    snapshot = {
+        "schema_version": 1,
+        "transaction_id": transaction_id,
+        "sequence": 0,
+        "state": "staged",
+        "source_version": source_version,
+        "target_version": target_version,
+        "boot_sha256": boot_digest,
+        "root_sha256": root_digest,
+        "created_at": now,
+        "updated_at": now,
+        "failure": None,
+    }
+    atomic_json(directory / "state.json", snapshot)
+    append_base_os_event(directory, None, snapshot, "MANIFEST_ACCEPTED")
+    publish_base_os_status(snapshot)
+    return snapshot
+
+
+def base_os_transition(snapshot, next_state, reason, **changes):
+    # Deliberately not a call to transition(): that function hardcodes the
+    # appliance transaction's own directory (transaction_path) and status
+    # file (publish_update_status) internally, not just its state table --
+    # reusing it here previously wrote base-OS transitions into the
+    # appliance's transactions/ directory and status file by mistake.
+    fail(
+        next_state in BASE_OS_ALLOWED_TRANSITIONS.get(snapshot["state"], set()),
+        "INVALID_TRANSITION",
+        f"Cannot move from {snapshot['state']} to {next_state}",
+    )
+    previous = snapshot["state"]
+    snapshot = dict(snapshot)
+    snapshot.update(changes)
+    snapshot["state"] = next_state
+    snapshot["sequence"] += 1
+    snapshot["updated_at"] = timestamp()
+    directory = base_os_transaction_path(snapshot["transaction_id"])
+    atomic_json(directory / "state.json", snapshot)
+    append_base_os_event(directory, previous, snapshot, reason)
+    publish_base_os_status(snapshot)
+    return snapshot
+
+
+def load_base_os_transaction(transaction_id, required_state=None):
+    snapshot = read_json(
+        base_os_transaction_path(transaction_id) / "state.json", "INVALID_TRANSACTION"
+    )
+    fail(snapshot.get("transaction_id") == transaction_id, "INVALID_TRANSACTION", "Transaction identity does not match")
+    if required_state:
+        fail(snapshot.get("state") == required_state, "INVALID_TRANSACTION_STATE", f"Transaction must be {required_state}")
+    return snapshot
+
+
+def current_slot_label():
+    try:
+        target = os.readlink(SLOT_ACTIVE_SYSTEM_DEVICE)
+    except OSError as error:
+        raise UpdateError("SLOT_DETECTION_FAILED", "Could not resolve the active slot") from error
+    name = pathlib.PurePosixPath(target).name
+    match = re.search(r"(system_[ab])$", name)
+    return match.group(1) if match else name
+
+
+def assert_writable_other_slot_device(other, active, role):
+    fail(other.exists(), "SLOT_DEVICE_MISSING", f"The inactive slot's {role} device is missing")
+    try:
+        other_real = other.resolve(strict=True)
+    except OSError as error:
+        raise UpdateError("SLOT_DEVICE_MISSING", f"Could not resolve the inactive slot's {role} device") from error
+    # The single most important safety property this whole subsystem has:
+    # never let a resolution quirk (a stale symlink, a udev race) result in
+    # writing over the slot that's actually running right now. Checked
+    # freshly against the by-slot symlinks at write time, not cached from
+    # an earlier read or computed independently of them.
+    if active.exists():
+        try:
+            active_real = active.resolve(strict=True)
+        except OSError:
+            active_real = None
+        fail(active_real != other_real, "REFUSING_ACTIVE_SLOT_WRITE", f"The resolved {role} write target matches the active slot -- refusing to write")
+    # Real block devices don't exist in a test sandbox; this specific check
+    # (unlike the active-slot comparison just above, which stays on
+    # unconditionally) is skipped under SOVEREIGN_UPDATE_TEST_MODE so tests
+    # can point SLOT_OTHER_*_DEVICE at plain files.
+    if os.environ.get("SOVEREIGN_UPDATE_TEST_MODE") != "1":
+        fail(stat.S_ISBLK(other_real.stat().st_mode), "SLOT_DEVICE_INVALID", f"The inactive slot's {role} device is not a block device")
+    return other_real
+
+
+def write_raw_artifact(source, device, expected_size):
+    written = 0
+    with open(source, "rb") as source_stream, open(device, "r+b", buffering=0) as device_stream:
+        while True:
+            chunk = source_stream.read(BASE_OS_WRITE_CHUNK_BYTES)
+            if not chunk:
+                break
+            device_stream.write(chunk)
+            written += len(chunk)
+        device_stream.flush()
+        os.fsync(device_stream.fileno())
+    fail(written == expected_size, "ARTIFACT_WRITE_INCOMPLETE", f"Wrote {written} bytes, expected {expected_size}")
 
 
 def copy_verified(source, destination, expected_size=None, expected_digest=None):
@@ -2336,10 +2673,125 @@ def install_available_update(_args):
     activate_release(argparse.Namespace(transaction=transaction_id))
 
 
+def stage_base_os(args):
+    fail(
+        os.geteuid() == 0 or os.environ.get("SOVEREIGN_UPDATE_TEST_MODE") == "1",
+        "ROOT_REQUIRED",
+        "Staging a base-OS update requires administrator privileges",
+    )
+    with update_lock():
+        policy = read_json(POLICY_PATH, "INVALID_POLICY")
+        manifest = read_json(args.manifest, "INVALID_MANIFEST")
+        by_role = validate_base_os_manifest(manifest)
+        public_key = load_trusted_key(policy, manifest["signing"]["key_id"], manifest["release"]["channel"])
+        verify_signature(args.manifest, args.signature, public_key)
+        source_version = verify_base_os_policy(manifest, policy)
+
+        verify_artifact(args.boot, by_role["system_boot"])
+        verify_artifact(args.root, by_role["system_root"])
+
+        other_boot = assert_writable_other_slot_device(SLOT_OTHER_BOOT_DEVICE, SLOT_ACTIVE_BOOT_DEVICE, "boot")
+        other_system = assert_writable_other_slot_device(SLOT_OTHER_SYSTEM_DEVICE, SLOT_ACTIVE_SYSTEM_DEVICE, "root")
+
+        write_raw_artifact(args.boot, other_boot, by_role["system_boot"]["size"])
+        write_raw_artifact(args.root, other_system, by_role["system_root"]["size"])
+
+        snapshot = create_base_os_transaction(
+            source_version,
+            manifest["release"]["version"],
+            by_role["system_boot"]["sha256"],
+            by_role["system_root"]["sha256"],
+        )
+    print(json.dumps({"status": "staged", "transaction_id": snapshot["transaction_id"], "target_version": snapshot["target_version"]}, sort_keys=True))
+
+
+def trial_base_os(args):
+    fail(
+        os.geteuid() == 0 or os.environ.get("SOVEREIGN_UPDATE_TEST_MODE") == "1",
+        "ROOT_REQUIRED",
+        "Triggering a base-OS trial boot requires administrator privileges",
+    )
+    with update_lock():
+        snapshot = load_base_os_transaction(args.transaction, required_state="staged")
+        snapshot = base_os_transition(snapshot, "trial", "TRIAL_BOOT_TRIGGERED")
+    print(json.dumps({"status": "trial", "transaction_id": snapshot["transaction_id"]}, sort_keys=True))
+    # The literal single-argument form "0 tryboot" (not two argv words) --
+    # hardware-verified during RFC-0016 qualification. REBOOT is
+    # overridable so tests can point it at a stub instead of actually
+    # rebooting the test host.
+    run_checked([REBOOT, "0 tryboot"], "REBOOT_FAILED", "Could not trigger a trial boot")
+
+
+def find_trial_base_os_transaction():
+    root = UPDATE_ROOT / "base-os-transactions"
+    if not root.is_dir():
+        return None
+    candidates = []
+    for entry in sorted(root.iterdir()):
+        state_path = entry / "state.json"
+        if not state_path.is_file():
+            continue
+        snapshot = read_json(state_path, "INVALID_TRANSACTION")
+        if snapshot.get("state") == "trial":
+            candidates.append(snapshot)
+    fail(len(candidates) <= 1, "MULTIPLE_TRIAL_TRANSACTIONS", "More than one base-OS transaction is in trial state")
+    return candidates[0] if candidates else None
+
+
+def verify_base_os_trial(_args):
+    """Invoked by a systemd unit gated the same way appliance activation's
+    verify-update-health is gated, on every boot -- a no-op unless a
+    base-OS transaction is actually mid-trial. On a detected health
+    failure, reboots back to the known-good slot immediately rather than
+    waiting for an operator: the transaction record survives (on /data,
+    unaffected by the reboot) for `status`/`recover` to report on, but
+    nothing about recovering the device's own availability depends on
+    that happening first."""
+    with update_lock():
+        snapshot = find_trial_base_os_transaction()
+        if snapshot is None:
+            print(json.dumps({"status": "no_trial_in_progress"}, sort_keys=True))
+            return
+        try:
+            run_health_check("BASE_OS_TRIAL_HEALTH_FAILED", "Base-OS trial boot health check failed")
+        except UpdateError as error:
+            snapshot = base_os_transition(
+                snapshot, "trial_failed", str(error),
+                failure={"code": error.code, "message": str(error)},
+            )
+            print(json.dumps({"status": "trial_failed", "transaction_id": snapshot["transaction_id"], "code": error.code}, sort_keys=True))
+            run_checked([REBOOT], "REBOOT_FAILED", "Could not reboot back to the known-good slot")
+            return
+        snapshot = base_os_transition(snapshot, "validated", "TRIAL_HEALTH_CHECK_PASSED")
+    print(json.dumps({"status": "validated", "transaction_id": snapshot["transaction_id"]}, sort_keys=True))
+
+
+def commit_base_os(args):
+    fail(
+        os.geteuid() == 0 or os.environ.get("SOVEREIGN_UPDATE_TEST_MODE") == "1",
+        "ROOT_REQUIRED",
+        "Committing a base-OS update requires administrator privileges",
+    )
+    with update_lock():
+        snapshot = load_base_os_transaction(args.transaction, required_state="validated")
+        try:
+            promoted = subprocess.run(
+                [RPI_SLOT_TRYBOOT], check=True, capture_output=True, text=True, timeout=10,
+            ).stdout
+        except (OSError, subprocess.SubprocessError) as error:
+            raise UpdateError("TRYBOOT_HELPER_FAILED", "Could not compute the promoted boot configuration") from error
+        fail(bool(promoted.strip()), "TRYBOOT_HELPER_FAILED", "rpi-slot-tryboot produced no output")
+        atomic_write_autoboot(promoted)
+        snapshot = base_os_transition(snapshot, "committed", "AUTOBOOT_COMMITTED")
+    print(json.dumps({"status": "committed", "transaction_id": snapshot["transaction_id"], "version": snapshot["target_version"]}, sort_keys=True))
+    run_checked([REBOOT], "REBOOT_FAILED", "Could not reboot into the committed slot")
+
+
 def show_status(_args):
     policy = read_json(POLICY_PATH, "INVALID_POLICY")
     latest = read_json(UPDATE_STATUS_PATH) if UPDATE_STATUS_PATH.is_file() else None
     check = read_json(UPDATE_CHECK_STATUS_PATH) if UPDATE_CHECK_STATUS_PATH.is_file() else None
+    base_os_latest = read_json(BASE_OS_UPDATE_STATUS_PATH) if BASE_OS_UPDATE_STATUS_PATH.is_file() else None
     result = {
         "installed_version": read_release_version(),
         "channel": policy.get("channel"),
@@ -2347,8 +2799,24 @@ def show_status(_args):
         "update_state": latest["state"] if latest else "idle",
         "target_version": latest["target_version"] if latest else None,
         "update_check": check,
+        # base-OS (RFC-0016) fields are only meaningful on a tryboot A/B
+        # image -- this script is shared with today's single-root
+        # production image, which has neither an active/other slot
+        # concept nor BASE_OS_RELEASE_PATH, so these are best-effort and
+        # simply absent there rather than a hard error.
+        "installed_base_os_version": _try_or_none(read_base_os_version),
+        "active_slot": _try_or_none(current_slot_label),
+        "base_os_update_state": base_os_latest["state"] if base_os_latest else "idle",
+        "base_os_target_version": base_os_latest["target_version"] if base_os_latest else None,
     }
     print(json.dumps(result, sort_keys=True))
+
+
+def _try_or_none(callback):
+    try:
+        return callback()
+    except UpdateError:
+        return None
 
 
 def parser():
@@ -2421,6 +2889,29 @@ def parser():
         help="discover, verify, download, and install the latest compatible update",
     )
     install.set_defaults(handler=install_available_update)
+    stage_base_os_parser = subcommands.add_parser(
+        "stage-base-os", help="verify and write a signed base-OS image pair to the inactive slot"
+    )
+    stage_base_os_parser.add_argument("--manifest", required=True)
+    stage_base_os_parser.add_argument("--signature", required=True)
+    stage_base_os_parser.add_argument("--boot", required=True)
+    stage_base_os_parser.add_argument("--root", required=True)
+    stage_base_os_parser.set_defaults(handler=stage_base_os)
+    trial_base_os_parser = subcommands.add_parser(
+        "trial-base-os", help="trigger a tryboot trial boot of a staged base-OS transaction"
+    )
+    trial_base_os_parser.add_argument("transaction")
+    trial_base_os_parser.set_defaults(handler=trial_base_os)
+    verify_base_os_trial_parser = subcommands.add_parser(
+        "verify-base-os-trial",
+        help="health-gate an in-progress base-OS trial boot (invoked by systemd, not interactively)",
+    )
+    verify_base_os_trial_parser.set_defaults(handler=verify_base_os_trial)
+    commit_base_os_parser = subcommands.add_parser(
+        "commit-base-os", help="promote a validated base-OS trial slot to the permanent default"
+    )
+    commit_base_os_parser.add_argument("transaction")
+    commit_base_os_parser.set_defaults(handler=commit_base_os)
     return command
 
 

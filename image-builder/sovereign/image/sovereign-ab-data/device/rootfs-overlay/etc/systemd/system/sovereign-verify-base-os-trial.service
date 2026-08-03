@@ -1,0 +1,20 @@
+[Unit]
+Description=Health-gate an in-progress base-OS tryboot trial boot (RFC-0016)
+Documentation=https://github.com/sovereignfs/sovereign-os
+After=network-online.target sovereign-pihole.service sovereign-console.service nginx.service
+Wants=network-online.target
+RequiresMountsFor=/data
+# Cheap early exit on every ordinary boot: this directory only exists once
+# a base-OS transaction has ever reached "staged". The handler itself is
+# also a no-op with nothing in "trial" state, but there is no reason to
+# even invoke Python and run health checks on the overwhelming majority of
+# boots that were never a trial in the first place.
+ConditionPathExists=/data/sovereign/update-state/base-os-transactions
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/sovereign-update verify-base-os-trial
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

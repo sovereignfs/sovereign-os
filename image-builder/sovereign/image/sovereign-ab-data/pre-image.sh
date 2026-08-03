@@ -49,6 +49,18 @@ sed \
   -e "s|<BOOT_UUID>|$BOOT_UUID|g" \
   genimage.cfg.in > "${genimage_input}/genimage.cfg"
 
+# --- Base-OS release version (RFC-0016) ---
+# Baked per-slot at build time, unlike the appliance's /etc/sovereign-release
+# (which activate_release rewrites in place after the fact): a base-OS
+# "install" is a wholesale new root filesystem, so its version naturally
+# lives with that filesystem's own /etc rather than something a script
+# updates post-boot. Placeholder version until real release tooling (out
+# of scope for this milestone) parameterizes it the way
+# create-update-release.py does for appliance releases.
+cat > "${filesystem}/etc/sovereign-base-os-release" <<'EOF'
+VERSION="0.1.0-proof.1"
+EOF
+
 # --- /data skeleton (existing Sovereign layout, unchanged) ---
 install -d -m 0755 "${filesystem}/data/sovereign"
 install -d -m 0755 "${filesystem}/data/sovereign/apps/pihole/etc-pihole"

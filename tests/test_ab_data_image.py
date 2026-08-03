@@ -119,5 +119,26 @@ class AbDataEtcOverlayTests(unittest.TestCase):
         self.assertNotIn("slots/", content)
 
 
+class AbDataBaseOsTrialHealthGateTests(unittest.TestCase):
+    UNIT = IMAGE_DIR / "device/rootfs-overlay/etc/systemd/system/sovereign-verify-base-os-trial.service"
+
+    def test_unit_runs_after_appliance_services_and_gates_on_a_trial_existing(self):
+        content = self.UNIT.read_text()
+        self.assertIn("ExecStart=/usr/sbin/sovereign-update verify-base-os-trial", content)
+        for dependency in ("sovereign-pihole.service", "sovereign-console.service", "nginx.service"):
+            self.assertIn(dependency, content)
+        self.assertIn(
+            "ConditionPathExists=/data/sovereign/update-state/base-os-transactions", content
+        )
+
+    def test_enabled_in_customize90(self):
+        content = (IMAGE_DIR / "bdebstrap/customize90-sovereign-ab").read_text()
+        self.assertIn("sovereign-verify-base-os-trial.service", content)
+
+    def test_pre_image_bakes_a_per_slot_base_os_version(self):
+        content = (IMAGE_DIR / "pre-image.sh").read_text()
+        self.assertIn("sovereign-base-os-release", content)
+
+
 if __name__ == "__main__":
     unittest.main()
