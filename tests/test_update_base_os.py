@@ -16,6 +16,7 @@ CLIENT = (
     / "image-builder/sovereign/layer/sovereign-proof.rootfs-overlay/usr/sbin/sovereign-update"
 )
 OPENSSL = shutil.which("openssl")
+ZSTD = shutil.which("zstd")
 
 _TEMP_FOR_IMPORT = tempfile.TemporaryDirectory()
 os.environ.setdefault("SOVEREIGN_UPDATE_TEST_MODE", "1")
@@ -136,7 +137,7 @@ class BaseOsSlotSafetyTests(unittest.TestCase):
         self.assertEqual("SLOT_DEVICE_MISSING", caught.exception.code)
 
 
-@unittest.skipIf(OPENSSL is None, "OpenSSL is unavailable")
+@unittest.skipIf(OPENSSL is None or ZSTD is None, "OpenSSL or zstd is unavailable")
 class BaseOsTransactionFlowTests(unittest.TestCase):
     """Exercises stage-base-os / trial-base-os / verify-base-os-trial /
     commit-base-os as a real subprocess pipeline, mirroring the fixture
@@ -224,10 +225,21 @@ class BaseOsTransactionFlowTests(unittest.TestCase):
         self.health.write_text("#!/bin/sh\nexit 0\n")
         self.health.chmod(0o755)
 
-        self.boot_image = self.directory / "artifact-boot.img"
-        self.boot_image.write_bytes(b"BOOT" * 256)
-        self.root_image = self.directory / "artifact-root.img"
-        self.root_image.write_bytes(b"ROOT" * 512)
+        # Artifacts are zstd-compressed on the wire (matching what a real
+        # release produces and what write_raw_artifact now expects to
+        # decompress while writing) -- keep the plain content around
+        # separately so tests can assert against what actually lands on
+        # the device, which is the decompressed bytes, not the artifact
+        # file's own bytes.
+        self.boot_plain = b"BOOT" * 256
+        self.root_plain = b"ROOT" * 512
+        self.boot_image = self.directory / "artifact-boot.img.zst"
+        self.root_image = self.directory / "artifact-root.img.zst"
+        for plain, compressed in ((self.boot_plain, self.boot_image), (self.root_plain, self.root_image)):
+            plain_path = self.directory / "plain.tmp"
+            plain_path.write_bytes(plain)
+            subprocess.run([ZSTD, "-q", "-o", str(compressed), str(plain_path)], check=True)
+            plain_path.unlink()
 
         self.manifest = {
             "schema_version": 1,
@@ -249,14 +261,14 @@ class BaseOsTransactionFlowTests(unittest.TestCase):
                     "url": "https://example.invalid/boot.img",
                     "size": self.boot_image.stat().st_size,
                     "sha256": self._sha256(self.boot_image),
-                    "media_type": "application/vnd.sovereign.base-os.boot.v1+raw",
+                    "media_type": MODULE.BASE_OS_BOOT_MEDIA_TYPE,
                 },
                 {
                     "role": "system_root",
                     "url": "https://example.invalid/root.img",
                     "size": self.root_image.stat().st_size,
                     "sha256": self._sha256(self.root_image),
-                    "media_type": "application/vnd.sovereign.base-os.root.v1+raw",
+                    "media_type": MODULE.BASE_OS_ROOT_MEDIA_TYPE,
                 },
             ],
             "components": {"image_base": {"version": "0.1.0-proof.2"}},
@@ -294,6 +306,7 @@ class BaseOsTransactionFlowTests(unittest.TestCase):
             "SOVEREIGN_UPDATE_ROOT": str(self.directory / "update-state"),
             "SOVEREIGN_STATE_ROOT": str(self.state_root),
             "SOVEREIGN_OPENSSL": OPENSSL,
+            "SOVEREIGN_ZSTD": ZSTD,
             "SOVEREIGN_UPDATE_TEST_MODE": "1",
             "SOVEREIGN_SLOT_OTHER_BOOT_DEVICE": str(self.other_boot_link),
             "SOVEREIGN_SLOT_OTHER_SYSTEM_DEVICE": str(self.other_system_link),
@@ -324,8 +337,10 @@ class BaseOsTransactionFlowTests(unittest.TestCase):
 
     def test_stage_writes_both_images_to_the_inactive_slot_only(self):
         self.stage()
-        self.assertEqual(self.boot_image.read_bytes(), self.other_boot_target.read_bytes())
-        self.assertEqual(self.root_image.read_bytes(), self.other_system_target.read_bytes())
+        # The device receives the decompressed content, not a byte-for-byte
+        # copy of the (zstd-compressed) artifact file.
+        self.assertEqual(self.boot_plain, self.other_boot_target.read_bytes())
+        self.assertEqual(self.root_plain, self.other_system_target.read_bytes())
         # The active slot's own files must be completely untouched.
         self.assertEqual(b"active boot\n", self.active_boot_target.read_bytes())
         self.assertEqual(b"active system\n", self.active_system_target.read_bytes())

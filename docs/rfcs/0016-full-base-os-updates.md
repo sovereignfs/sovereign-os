@@ -696,11 +696,34 @@ unrelated to RFC-0016.
 RFC-0016's core acceptance criteria — a working `tryboot` A/B cycle with
 signed artifacts, health-gating, and both graceful and forced-failure
 recovery — are now met and hardware-verified. Remaining before this is
-production-ready: release-tooling to actually produce signed base-OS
-manifests/artifacts (today's qualification manifest was hand-built),
-Console UI surfacing for base-OS update state, and `recover`/`prune`
-integration for base-OS transactions (not yet extended to this new
-transaction kind).
+production-ready: Console UI surfacing for base-OS update state, and
+`recover`/`prune` integration for base-OS transactions (not yet extended
+to this new transaction kind).
+
+**Progress (2026-08-04, release tooling):** `scripts/create-base-os-release.py`
+now exists, mirroring `create-update-release.py`'s own shape and
+conventions (unsigned manifest + artifacts out; signing stays a
+separate, explicit step via the existing `sign-update-manifest.py`, per
+ADR-0006's key-custody boundary). It takes already-built raw
+`boot.vfat`/`root.ext4` images as input rather than building them
+itself — the same relationship `create-update-release.py` has to a
+pre-built Pi-hole OCI archive — since genimage's own deploy step
+produces android-sparse-format output, not the plain raw images
+`stage-base-os` writes sequentially onto a block device.
+
+This surfaced a real gap in the `stage-base-os` implementation itself,
+fixed alongside the release tooling: it had only ever been exercised
+against uncompressed qualification artifacts, but real release artifacts
+need zstd compression to be practical (a 3G raw root image compresses
+to a fraction of that) — `write_raw_artifact` now decompresses while
+streaming directly onto the device rather than assuming the artifact is
+already raw. `BASE_OS_BOOT_MEDIA_TYPE`/`BASE_OS_ROOT_MEDIA_TYPE` gained
+an explicit `+zstd` suffix to say so, matching the existing
+`update_bundle` artifact's own `+tar+zstd` convention. Not yet wired
+into `.github/workflows/build-image.yml`: doing so needs the image-build
+pipeline itself to export the raw boot/root images somewhere accessible
+before genimage's sparse conversion, which today's `deploy/` output
+doesn't do — a real, separate piece of work, not attempted here.
 
 ## Alternatives Considered
 

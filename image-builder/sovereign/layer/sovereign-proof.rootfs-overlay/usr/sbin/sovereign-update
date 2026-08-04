@@ -99,8 +99,14 @@ UPDATE_INSTALL_DOWNLOAD_TIMEOUT_SECONDS = 300
 BASE_OS_RELEASE_PATH = pathlib.Path(
     os.environ.get("SOVEREIGN_BASE_OS_RELEASE_PATH", "/etc/sovereign-base-os-release")
 )
-BASE_OS_BOOT_MEDIA_TYPE = "application/vnd.sovereign.base-os.boot.v1+raw"
-BASE_OS_ROOT_MEDIA_TYPE = "application/vnd.sovereign.base-os.root.v1+raw"
+# Artifacts are zstd-compressed for realistic distribution size (a 3G raw
+# root image compresses to well under a third of that) -- the media type
+# says so explicitly, matching the existing update_bundle convention
+# (+tar+zstd). write_raw_artifact decompresses while writing; nothing
+# about the manifest's size/sha256 fields changes, since those still
+# describe exactly the compressed bytes that get downloaded and verified.
+BASE_OS_BOOT_MEDIA_TYPE = "application/vnd.sovereign.base-os.boot.v1+raw+zstd"
+BASE_OS_ROOT_MEDIA_TYPE = "application/vnd.sovereign.base-os.root.v1+raw+zstd"
 # The rpi-ab-slot-mapper-provided by-slot symlinks are the same,
 # already-hardware-verified mechanism the running system boots through
 # (RFC-0016's Testing Strategy) -- writes always target "other", read
@@ -122,7 +128,6 @@ SLOT_ACTIVE_SYSTEM_DEVICE = pathlib.Path(
 AUTOBOOT_PATH = pathlib.Path(os.environ.get("SOVEREIGN_AUTOBOOT_PATH", "/bootfs/autoboot.txt"))
 RPI_SLOT_TRYBOOT = os.environ.get("SOVEREIGN_RPI_SLOT_TRYBOOT", "/usr/bin/rpi-slot-tryboot")
 REBOOT = os.environ.get("SOVEREIGN_REBOOT", "/usr/sbin/reboot")
-BASE_OS_WRITE_CHUNK_BYTES = 4 * 1024 * 1024
 
 APPLIANCE_FILES = {
     "appliance/bin/console-auth": 0o755,
@@ -954,18 +959,25 @@ def assert_writable_other_slot_device(other, active, role):
     return other_real
 
 
-def write_raw_artifact(source, device, expected_size):
-    written = 0
-    with open(source, "rb") as source_stream, open(device, "r+b", buffering=0) as device_stream:
-        while True:
-            chunk = source_stream.read(BASE_OS_WRITE_CHUNK_BYTES)
-            if not chunk:
-                break
-            device_stream.write(chunk)
-            written += len(chunk)
+def write_raw_artifact(source, device):
+    # source's compressed digest/size were already verified against the
+    # manifest (verify_artifact, before this runs) -- this decompresses
+    # while writing directly onto the block device, avoiding a second
+    # full-size (up to several GB) temporary copy. zstd's own frame
+    # checksums make a separate expected-byte-count check on the
+    # decompressed output unnecessary: a truncated or corrupted stream
+    # makes the subprocess itself exit non-zero.
+    with open(device, "r+b", buffering=0) as device_stream:
+        try:
+            subprocess.run(
+                [ZSTD, "--decompress", "--quiet", "--stdout", str(source)],
+                stdout=device_stream,
+                check=True,
+            )
+        except (OSError, subprocess.SubprocessError) as error:
+            raise UpdateError("ARTIFACT_WRITE_FAILED", "Could not decompress and write the artifact to the device") from error
         device_stream.flush()
         os.fsync(device_stream.fileno())
-    fail(written == expected_size, "ARTIFACT_WRITE_INCOMPLETE", f"Wrote {written} bytes, expected {expected_size}")
 
 
 def copy_verified(source, destination, expected_size=None, expected_digest=None):
@@ -2693,8 +2705,8 @@ def stage_base_os(args):
         other_boot = assert_writable_other_slot_device(SLOT_OTHER_BOOT_DEVICE, SLOT_ACTIVE_BOOT_DEVICE, "boot")
         other_system = assert_writable_other_slot_device(SLOT_OTHER_SYSTEM_DEVICE, SLOT_ACTIVE_SYSTEM_DEVICE, "root")
 
-        write_raw_artifact(args.boot, other_boot, by_role["system_boot"]["size"])
-        write_raw_artifact(args.root, other_system, by_role["system_root"]["size"])
+        write_raw_artifact(args.boot, other_boot)
+        write_raw_artifact(args.root, other_system)
 
         snapshot = create_base_os_transaction(
             source_version,
