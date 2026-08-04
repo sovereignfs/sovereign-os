@@ -1,10 +1,10 @@
 # Research: systemd-networkd DHCP client fails with ENOMEDIUM on eth0 despite a stable carrier
 
-**Status:** Concluded (root cause isolated; general fix unresolved)
+**Status:** Concluded — fixed (workaround shipped; upstream kernel/systemd-networkd root cause still unknown)
 **Author:** Claude (with kasunben), during RFC-0016 hardware qualification
 **Started:** 2026-08-03
-**Concluded:** 2026-08-03
-**Decision informed:** none yet — flagged as a real product reliability gap, not yet triaged into a roadmap item
+**Concluded:** 2026-08-04
+**Decision informed:** `image-builder/sovereign/layer/sovereign-proof.rootfs-overlay` now ships `01-eth0.network` + `sovereign-eth0-dhclient.service`, disabling systemd-networkd's own DHCPv4 client for `eth0` in favor of ISC `dhclient` — applied to both the production single-root image and the RFC-0016 A/B image
 
 ## Question
 
@@ -62,16 +62,25 @@ Separating what was directly observed from what was inferred.
 - No `ethtool` available on-device for lower-level PHY/link diagnostics beyond what `dmesg`/sysfs already provided.
 - The exact trigger for *why* this reproduced today, after presumably working correctly for the 22+ hours the device had been running before this session's heavy reboot/tryboot/power-cycle cycling, is not established. It's possible this bug has always been latent and simply never triggered before, or that something about repeated rapid reboots specifically increases the odds of hitting the race — this session's evidence can't distinguish between those.
 
-## Recommendation
+## Resolution (2026-08-04)
 
-Do not attempt a quick one-line fix in `image-builder` yet — the `IPv6AcceptRA=no` test proved the obvious fix is insufficient for the case that actually matters (real devices using DHCP on arbitrary networks). This needs a dedicated investigation pass (likely: reproduce reliably enough to bisect kernel/systemd versions, test a startup-delay workaround, or check upstream Raspberry Pi / systemd bug trackers for this exact `macb` + `ENOMEDIUM` signature) before proposing a change to the shipped `01-eth0.network` config. Track this as its own piece of work, separate from RFC-0016.
+The third unresolved question above was tested directly and answered: **yes**, a different DHCP client implementation sidesteps the bug entirely. Research into public reports (Raspberry Pi kernel issue tracker, a `ftgmac100` driver patch fixing a similar race on different hardware) turned up no exact match or known fix for this precise `macb`/`ENOMEDIUM` signature, but did surface a plausible general mechanism: PHY link-up can trigger an `adjust_link`-style MAC reconfiguration in some drivers that races against whatever tries to use the interface immediately afterward. No upstream fix was found or attempted — this remains a kernel/systemd-networkd-level mystery.
+
+Directly on the qualification device (root filesystem read-only, so `apt-get install` couldn't write to `/usr/sbin` — packages were extracted from the cached `.deb`s with `dpkg-deb -x` into a writable path instead):
+
+- `ethtool --show-eee eth0` showed EEE (Energy Efficient Ethernet) `enabled - inactive` on this BCM54213PE PHY, a chip with several public reports of EEE-related instability on Raspberry Pi 5 — investigated as a candidate cause but not tested in isolation, since the `dhclient` test (below) resolved the problem before this line of investigation was needed.
+- ISC `dhclient -1 -v -d eth0`, run standalone without touching the working static-IP config, acquired a real lease (`DHCPDISCOVER` → `DHCPOFFER` → `DHCPREQUEST` → `DHCPACK`) on the **first attempt**, immediately, with no delay and no retry needed — while systemd-networkd's own client continued to fail with the exact same `ENOMEDIUM` error on the exact same interface at the exact same point in the boot sequence. This is about as clean a confirmation as this class of bug allows: same kernel, same driver, same physical link, same moment in time, different client, different outcome.
+
+**Fix shipped:** `01-eth0.network` (new, added to `sovereign-proof.rootfs-overlay`, overriding the upstream Raspberry Pi/Debian default identified in Sources and Environment above) sets `DHCP=no` and `RequiredForOnline=no` for `eth0`, handing IPv4 addressing entirely to a new `sovereign-eth0-dhclient.service` that runs `dhclient` directly. The service models `dhclient`'s own default fork-after-first-lease behavior correctly for systemd (`Type=oneshot` + `RemainAfterExit=yes`, so `network-online.target` genuinely waits for a real address rather than just a launched process), and restarts on failure. `isc-dhcp-client` was added as an `mmdebstrap` package to both `sovereign-data/image.yaml` and `sovereign-ab-data/image.yaml` — this bug is not layout-specific, so both the production single-root image and the RFC-0016 A/B image get the fix.
+
+Hardware-verified on a genuine fresh reflash (not a warm reboot or a config reload on an already-running system): real DHCP lease acquired automatically (`inet 192.168.50.10/24 ... scope global dynamic eth0`), full routing table, working internet/DNS, and the appliance (Pi-hole) reporting healthy — all with zero manual intervention, replacing the earlier per-device static-IP workaround entirely.
 
 ## Unresolved Questions
 
-- Does a fixed startup delay (e.g., `systemd-networkd-wait-online` tuning, or a custom `ExecStartPre` sleep) reliably avoid the race, or does the window vary enough that no fixed delay is fully safe?
-- Is this reproducible on other qualification hardware, or specific to this one device/kernel build?
-- Would installing and using a different DHCP client sidestep the bug entirely (suggesting it's specific to systemd-networkd's implementation), or does the race exist at a lower level that any client would hit?
+- **Why** does systemd-networkd's DHCP client specifically fail while `dhclient` succeeds, on the same interface at the same moment? Not established — could be a difference in socket options, timing, or how each client probes interface readiness before sending. This remains genuinely unknown; the fix routes around the bug rather than explaining it.
+- Is this reproducible on other qualification hardware, or specific to this one device/kernel build? Not tested — only one physical unit is available.
+- Does disabling EEE (`ethtool --set-eee eth0 eee off`) independently resolve the systemd-networkd failure too, which would point at EEE renegotiation as the actual root cause? Not tested — `dhclient` resolved the practical problem first, so this line of investigation was left open rather than pursued further.
 
 ## Decision Impact
 
-None yet. This is a flagged finding, not yet triaged into an RFC, ADR, or ROADMAP item. It represents a real reliability gap worth prioritizing before this image ships more broadly, since a device that boots without working DHCP would be unreachable for any user who can't fall back to IPv6-link-local SSH the way this session did.
+Fixed in `image-builder/sovereign/layer/sovereign-proof.rootfs-overlay` (`01-eth0.network`, `sovereign-eth0-dhclient.service`), applied to both `sovereign-data` and `sovereign-ab-data` image layers. No RFC or ADR was needed — this is an infrastructure-level reliability fix, not a design decision — but it's worth linking from RFC-0016's own qualification notes, since it was discovered during that work even though it's unrelated to base-OS updates specifically.
