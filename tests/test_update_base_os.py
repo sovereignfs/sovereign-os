@@ -225,6 +225,22 @@ class BaseOsTransactionFlowTests(unittest.TestCase):
         self.health.write_text("#!/bin/sh\nexit 0\n")
         self.health.chmod(0o755)
 
+        # slot_label_for shells out to blkid -s PARTLABEL; stub it with a
+        # fixed mapping from this fixture's fake device paths (real
+        # partition labels can't be read from plain files) -- active is
+        # "system_b", other is "system_a", an arbitrary but consistent
+        # convention for these tests.
+        self.blkid = self.tools / "blkid"
+        self.blkid.write_text(
+            "#!/bin/sh\n"
+            "case \"$6\" in\n"
+            f"  {self.active_system_link}) echo system_b ;;\n"
+            f"  {self.other_system_link}) echo system_a ;;\n"
+            "  *) exit 1 ;;\n"
+            "esac\n"
+        )
+        self.blkid.chmod(0o755)
+
         # Artifacts are zstd-compressed on the wire (matching what a real
         # release produces and what write_raw_artifact now expects to
         # decompress while writing) -- keep the plain content around
@@ -316,12 +332,16 @@ class BaseOsTransactionFlowTests(unittest.TestCase):
             "SOVEREIGN_RPI_SLOT_TRYBOOT": str(self.tryboot_helper),
             "SOVEREIGN_REBOOT": str(self.reboot),
             "SOVEREIGN_SYSTEMCTL": str(self.systemctl),
+            "SOVEREIGN_BLKID": str(self.blkid),
             "SOVEREIGN_UPDATE_HEALTH_CHECK": str(self.health),
         }
 
-    def run_client(self, *args):
+    def run_client(self, *args, env_overrides=None):
+        env = self.environment()
+        if env_overrides:
+            env |= env_overrides
         return subprocess.run(
-            [str(CLIENT), *args], env=self.environment(), capture_output=True, text=True,
+            [str(CLIENT), *args], env=env, capture_output=True, text=True,
         )
 
     def stage(self):
@@ -414,6 +434,79 @@ class BaseOsTransactionFlowTests(unittest.TestCase):
         result = self.run_client("commit-base-os", transaction_id)
         self.assertEqual(2, result.returncode)
         self.assertEqual("INVALID_TRANSACTION_STATE", json.loads(result.stderr)["code"])
+
+    def test_recover_leaves_a_still_in_progress_trial_alone(self):
+        transaction_id = self.stage()
+        self.run_client("trial-base-os", transaction_id)
+
+        # Simulate actually being booted on the trial slot this transaction
+        # staged (target_slot="system_a" per this fixture's blkid stub) by
+        # swapping which link "active" resolves through for just this one
+        # call -- recover runs earlier in boot than
+        # verify-base-os-trial, so finding a "trial" transaction that
+        # matches the slot we're currently on is the expected, common
+        # case, not a stale one.
+        result = self.run_client(
+            "recover", env_overrides={"SOVEREIGN_SLOT_ACTIVE_SYSTEM_DEVICE": str(self.other_system_link)},
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual([], json.loads(result.stdout)["recovery_required"])
+
+        status = self.run_client("status")
+        self.assertEqual("trial", json.loads(status.stdout)["base_os_update_state"])
+
+    def test_recover_marks_an_abandoned_trial_as_recovery_required(self):
+        transaction_id = self.stage()
+        self.run_client("trial-base-os", transaction_id)
+
+        # Default environment: SOVEREIGN_SLOT_ACTIVE_SYSTEM_DEVICE still
+        # resolves to "system_b" -- the *original* slot, matching what
+        # the firmware's own one-shot trial fallback already guarantees
+        # happens on any reboot/crash/power-loss that never reaches
+        # verify-base-os-trial.
+        result = self.run_client("recover")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual([transaction_id], json.loads(result.stdout)["recovery_required"])
+
+        status = self.run_client("status")
+        self.assertEqual("recovery_required", json.loads(status.stdout)["base_os_update_state"])
+
+    def test_discard_base_os_requires_a_terminal_state(self):
+        transaction_id = self.stage()
+        result = self.run_client("discard-base-os", transaction_id)
+        self.assertEqual(2, result.returncode)
+        self.assertEqual("INVALID_TRANSACTION_STATE", json.loads(result.stderr)["code"])
+
+    def test_discard_base_os_from_recovery_required(self):
+        transaction_id = self.stage()
+        self.run_client("trial-base-os", transaction_id)
+        self.run_client("recover")
+
+        result = self.run_client("discard-base-os", transaction_id)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("discarded", json.loads(result.stdout)["status"])
+
+    def test_prune_removes_discarded_base_os_transactions_beyond_retention(self):
+        transaction_id = self.stage()
+        self.run_client("trial-base-os", transaction_id)
+        self.run_client("recover")
+        self.run_client("discard-base-os", transaction_id)
+
+        retention_policy = self.directory / "retention-policy.json"
+        retention_policy.write_text(json.dumps({
+            "schema_version": 1,
+            "backups": {"keep_count": 0, "keep_days": 0},
+            "releases": {"keep_count": 0},
+            "transactions": {"keep_count": 0, "keep_days": 0},
+        }))
+        result = self.run_client(
+            "prune", env_overrides={"SOVEREIGN_RETENTION_POLICY": str(retention_policy)},
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn(transaction_id, json.loads(result.stdout)["removed_transactions"])
+        self.assertFalse(
+            (self.directory / "update-state/base-os-transactions" / transaction_id).exists()
+        )
 
 
 if __name__ == "__main__":

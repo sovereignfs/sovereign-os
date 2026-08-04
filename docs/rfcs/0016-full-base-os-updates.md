@@ -696,9 +696,7 @@ unrelated to RFC-0016.
 RFC-0016's core acceptance criteria — a working `tryboot` A/B cycle with
 signed artifacts, health-gating, and both graceful and forced-failure
 recovery — are now met and hardware-verified. Remaining before this is
-production-ready: Console UI surfacing for base-OS update state, and
-`recover`/`prune` integration for base-OS transactions (not yet extended
-to this new transaction kind).
+production-ready: Console UI surfacing for base-OS update state.
 
 **Progress (2026-08-04, release tooling):** `scripts/create-base-os-release.py`
 now exists, mirroring `create-update-release.py`'s own shape and
@@ -724,6 +722,39 @@ into `.github/workflows/build-image.yml`: doing so needs the image-build
 pipeline itself to export the raw boot/root images somewhere accessible
 before genimage's sparse conversion, which today's `deploy/` output
 doesn't do — a real, separate piece of work, not attempted here.
+
+**Progress (2026-08-05, recover/prune integration):** `recover`/`prune`
+now cover base-OS transactions, closing the gap noted above. This
+needed more care than the appliance-transaction case it mirrors,
+because of a boot-ordering fact: `sovereign-update-recovery.service`
+runs early (`Before=sovereign-pihole.service`), while the trial
+health-gate (`sovereign-verify-base-os-trial.service`) runs later
+(`After=...sovereign-console.service, nginx.service`). That means
+recovery runs on *every* boot, including a genuinely in-progress
+trial boot, before the health-gate has had a chance to run — a naive
+sweep of `trial`-state transactions would misfire and recover a trial
+that hasn't failed at all. Fixed by recording which slot a trial
+transaction targets (`target_slot`, via a new `slot_label_for()`
+helper) at stage time, and comparing it against the currently active
+slot at recovery time: still on the target slot means the trial is
+genuinely in progress (leave it alone), already reverted means the
+transaction was abandoned (mark `recovery_required`). Added
+`discard-base-os` to close out terminal-state transactions, and
+extended `prune`'s sweep and post-prune `sync_directory` calls to
+include the `base-os-transactions` directory alongside the existing
+appliance one.
+
+This also surfaced and fixed a real, pre-existing bug:
+`current_slot_label()` parsed the by-slot symlink's `readlink` target
+for a `system_a`/`system_b` suffix, but that target is just a raw
+device node path (e.g. `../../mmcblk0p4`) and never contains the slot
+label at all — `sovereign-update status` had been silently reporting
+`"active_slot": "mmcblk0p4"` instead of a proper slot name since this
+was first written. The new recovery logic was the first consumer that
+actually needed a *correct* slot label to compare against, rather than
+one that was purely informational. Fixed by shelling out to
+`blkid -s PARTLABEL -o value`, matching the existing
+`sovereign-slot-var-generator` script's own approach.
 
 ## Alternatives Considered
 

@@ -128,6 +128,7 @@ SLOT_ACTIVE_SYSTEM_DEVICE = pathlib.Path(
 AUTOBOOT_PATH = pathlib.Path(os.environ.get("SOVEREIGN_AUTOBOOT_PATH", "/bootfs/autoboot.txt"))
 RPI_SLOT_TRYBOOT = os.environ.get("SOVEREIGN_RPI_SLOT_TRYBOOT", "/usr/bin/rpi-slot-tryboot")
 REBOOT = os.environ.get("SOVEREIGN_REBOOT", "/usr/sbin/reboot")
+BLKID = os.environ.get("SOVEREIGN_BLKID", "/usr/sbin/blkid")
 
 APPLIANCE_FILES = {
     "appliance/bin/console-auth": 0o755,
@@ -877,6 +878,13 @@ def create_base_os_transaction(source_version, target_version, boot_digest, root
         "state": "staged",
         "source_version": source_version,
         "target_version": target_version,
+        # The slot the artifacts were staged onto (always "other" at
+        # stage time) -- lets recover_transactions tell an interrupted
+        # trial (we're back on some *other* slot than this one) apart
+        # from a trial that's still genuinely in progress (we're
+        # currently booted on exactly this slot, and
+        # verify-base-os-trial just hasn't run yet this boot).
+        "target_slot": slot_label_for(SLOT_OTHER_SYSTEM_DEVICE),
         "boot_sha256": boot_digest,
         "root_sha256": root_digest,
         "created_at": now,
@@ -923,14 +931,27 @@ def load_base_os_transaction(transaction_id, required_state=None):
     return snapshot
 
 
-def current_slot_label():
+def slot_label_for(device):
+    # The by-slot symlink's own target is just a raw device node path
+    # (e.g. ../../mmcblk0p4) -- it doesn't encode "system_a"/"system_b"
+    # anywhere in it. The actual slot identity is the partition's own
+    # PARTLABEL, read the same way sovereign-slot-var-generator already
+    # does, not parsed out of the symlink text.
     try:
-        target = os.readlink(SLOT_ACTIVE_SYSTEM_DEVICE)
-    except OSError as error:
-        raise UpdateError("SLOT_DETECTION_FAILED", "Could not resolve the active slot") from error
-    name = pathlib.PurePosixPath(target).name
-    match = re.search(r"(system_[ab])$", name)
-    return match.group(1) if match else name
+        result = subprocess.run(
+            [BLKID, "-s", "PARTLABEL", "-o", "value", "--", str(device)],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        raise UpdateError("SLOT_DETECTION_FAILED", f"Could not resolve the slot for {device}") from error
+    fail(result.returncode == 0, "SLOT_DETECTION_FAILED", f"Could not resolve the slot for {device}")
+    label = result.stdout.strip().lower()
+    fail(label in ("system_a", "system_b"), "SLOT_DETECTION_FAILED", f"Unexpected partition label for {device}: {label!r}")
+    return label
+
+
+def current_slot_label():
+    return slot_label_for(SLOT_ACTIVE_SYSTEM_DEVICE)
 
 
 def assert_writable_other_slot_device(other, active, role):
@@ -1650,6 +1671,49 @@ def recover_transactions(_args):
                 recovery_action="manual",
             )
             reviewed.append(transaction_id)
+
+        # Only meaningful on a tryboot A/B image (today's single-root
+        # production image has no by-slot symlinks at all, so
+        # current_slot_label() fails cleanly and this is skipped).
+        base_os_root = UPDATE_ROOT / "base-os-transactions"
+        if base_os_root.is_dir():
+            try:
+                active_slot = current_slot_label()
+            except UpdateError:
+                active_slot = None
+            if active_slot is not None:
+                for state_path in sorted(base_os_root.glob("*/state.json")):
+                    snapshot = read_json(state_path, "INVALID_TRANSACTION")
+                    if snapshot.get("state") != "trial":
+                        continue
+                    if snapshot.get("target_slot") == active_slot:
+                        # Still genuinely in progress this boot: this is
+                        # exactly the trial slot the transaction staged,
+                        # and recovery deliberately runs earlier in boot
+                        # than sovereign-verify-base-os-trial.service, so
+                        # it hasn't had a chance to run yet -- not stale.
+                        continue
+                    # We're booted on some *other* slot than the one this
+                    # transaction staged: the trial was interrupted
+                    # (crash, power loss, or a plain reboot without ever
+                    # reaching verify-base-os-trial) and the firmware
+                    # already reverted to the safe slot with no software
+                    # involvement, exactly as designed. This just brings
+                    # the transaction's own record in line with what
+                    # already happened, and -- critically -- clears it
+                    # out of "trial" state so a future trial isn't
+                    # blocked by find_trial_base_os_transaction() seeing
+                    # two candidates at once.
+                    snapshot = base_os_transition(
+                        snapshot,
+                        "recovery_required",
+                        "INTERRUPTED_TRIAL",
+                        failure={
+                            "code": "INTERRUPTED_TRIAL",
+                            "message": "Base-OS trial boot never reached a terminal state",
+                        },
+                    )
+                    reviewed.append(snapshot["transaction_id"])
     print(json.dumps({"status": "reviewed", "recovery_required": reviewed}, sort_keys=True))
 
 
@@ -1663,6 +1727,30 @@ def transaction_event_reasons(directory):
         raise UpdateError(
             "INVALID_TRANSACTION", "Transaction event history is unreadable"
         ) from error
+
+
+def discard_base_os_transaction(args):
+    # Unlike discard_transaction, there's no staged payload to clean up
+    # here: stage_base_os never copies the boot/root artifacts into the
+    # transaction directory, it writes them straight onto the inactive
+    # slot's block device by path -- the transaction journal is purely a
+    # state-machine record. The device content itself isn't "cleaned up"
+    # either; it just gets overwritten whenever the next base-OS update
+    # is staged.
+    fail(
+        os.geteuid() == 0 or os.environ.get("SOVEREIGN_UPDATE_TEST_MODE") == "1",
+        "ROOT_REQUIRED",
+        "Discarding a base-OS transaction requires administrator privileges",
+    )
+    with update_lock():
+        snapshot = load_base_os_transaction(args.transaction)
+        fail(
+            snapshot["state"] in {"committed", "trial_failed", "recovery_required"},
+            "INVALID_TRANSACTION_STATE",
+            "Only committed, trial-failed, or recovery-required base-OS transactions can be discarded",
+        )
+        base_os_transition(snapshot, "discarded", "TRANSACTION_DISCARDED")
+    print(json.dumps({"status": "discarded", "transaction_id": args.transaction}, sort_keys=True))
 
 
 def discard_transaction(args):
@@ -2194,6 +2282,10 @@ def prune_transactions(policy, now, dry_run):
     for root, prunable_states in (
         (UPDATE_ROOT / "transactions", PRUNABLE_TRANSACTION_STATES),
         (UPDATE_ROOT / "restores", PRUNABLE_RESTORE_STATES),
+        # Same terminal state ("discarded") and the same retention
+        # policy as appliance transactions -- base-OS transactions are
+        # a parallel journal, not a different kind of thing to retain.
+        (UPDATE_ROOT / "base-os-transactions", PRUNABLE_TRANSACTION_STATES),
     ):
         if not root.is_dir():
             continue
@@ -2235,6 +2327,7 @@ def prune_state(args):
                 RELEASES_ROOT / "releases",
                 UPDATE_ROOT / "transactions",
                 UPDATE_ROOT / "restores",
+                UPDATE_ROOT / "base-os-transactions",
             ):
                 if root.is_dir():
                     sync_directory(root)
@@ -2933,6 +3026,11 @@ def parser():
     )
     commit_base_os_parser.add_argument("transaction")
     commit_base_os_parser.set_defaults(handler=commit_base_os)
+    discard_base_os_parser = subcommands.add_parser(
+        "discard-base-os", help="mark a terminal base-OS transaction as discarded (prunable)"
+    )
+    discard_base_os_parser.add_argument("transaction")
+    discard_base_os_parser.set_defaults(handler=discard_base_os_transaction)
     return command
 
 
