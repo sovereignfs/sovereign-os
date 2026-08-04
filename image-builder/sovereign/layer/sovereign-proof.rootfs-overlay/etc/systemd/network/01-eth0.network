@@ -1,0 +1,16 @@
+[Match]
+Name=eth0
+
+[Link]
+# IPv4 addressing is handled by sovereign-eth0-dhclient.service instead
+# (see docs/research/eth0-dhcp-carrier-race-finding.md): systemd-networkd's
+# own DHCPv4 client fails with ENOMEDIUM on this hardware despite a stable
+# carrier, hardware-verified across warm reboots, hard power cycles, and
+# manual retries well after boot -- a different DHCP client implementation
+# (ISC dhclient) succeeds immediately and reliably every time. With no
+# address configuration left for networkd itself to perform here, nothing
+# for network-online.target to wait on from this interface either.
+RequiredForOnline=no
+
+[Network]
+DHCP=no

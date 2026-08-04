@@ -1,0 +1,35 @@
+[Unit]
+Description=DHCPv4 client for eth0 (ISC dhclient, not systemd-networkd's built-in client)
+Documentation=https://github.com/sovereignfs/sovereign-os
+# systemd-networkd's own DHCPv4 client reliably fails with ENOMEDIUM on
+# this hardware despite a stable carrier -- see
+# docs/research/eth0-dhcp-carrier-race-finding.md. dhclient uses a
+# different code path for the same underlying raw-socket DHCP exchange
+# and succeeds immediately and reliably; the interface, driver, and
+# router-side DHCP server were all confirmed fully functional, so this
+# is a systemd-networkd-specific bug being routed around, not a
+# workaround for a hardware fault. 01-eth0.network disables networkd's
+# own DHCPv4 client for eth0 so the two never fight over the address.
+After=sys-subsystem-net-devices-eth0.device
+BindsTo=sys-subsystem-net-devices-eth0.device
+Before=network-online.target
+
+[Service]
+Type=oneshot
+# dhclient's own default behavior (no -d) is to stay in the foreground
+# only until it acquires its first lease, then fork into the background
+# to handle renewals -- exactly the semantics a oneshot unit with
+# RemainAfterExit needs: systemd only considers the unit "started" (and
+# anything ordered After=network-online.target only proceeds) once a
+# real address has actually been acquired, not just once a process has
+# been launched.
+RemainAfterExit=yes
+TimeoutStartSec=90
+Restart=on-failure
+RestartSec=15
+ExecStartPre=/usr/bin/install -d -m 0755 /var/lib/dhcp
+ExecStart=/usr/sbin/dhclient -4 -sf /usr/sbin/dhclient-script -lf /var/lib/dhcp/dhclient.eth0.leases -pf /run/dhclient.eth0.pid eth0
+ExecStop=/usr/sbin/dhclient -x -pf /run/dhclient.eth0.pid eth0
+
+[Install]
+WantedBy=network-online.target multi-user.target

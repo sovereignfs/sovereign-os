@@ -13,6 +13,12 @@ ENABLE_UNITS = (
     ROOT
     / "image-builder/sovereign/image/sovereign-data/bdebstrap/customize90-sovereign"
 )
+ENABLE_UNITS_AB = (
+    ROOT
+    / "image-builder/sovereign/image/sovereign-ab-data/bdebstrap/customize90-sovereign-ab"
+)
+DATA_IMAGE_YAML = ROOT / "image-builder/sovereign/image/sovereign-data/image.yaml"
+AB_DATA_IMAGE_YAML = ROOT / "image-builder/sovereign/image/sovereign-ab-data/image.yaml"
 
 
 class PhysicalQualificationFixTests(unittest.TestCase):
@@ -98,6 +104,40 @@ class PhysicalQualificationFixTests(unittest.TestCase):
         between = "\n".join(lines[nginx_t_index:health_until_index])
         self.assertIn("until", between)
         self.assertIn("http://127.0.0.1/console/", between)
+
+    def test_eth0_uses_dhclient_not_networkds_own_dhcp_client(self):
+        # systemd-networkd's own DHCPv4 client reliably fails with
+        # ENOMEDIUM on the qualification hardware despite a stable
+        # carrier -- hardware-verified across warm reboots, hard power
+        # cycles, and manual retries well after boot (see
+        # docs/research/eth0-dhcp-carrier-race-finding.md). ISC dhclient,
+        # exercising the same underlying raw-socket DHCP exchange via a
+        # different code path, acquired a real lease immediately and
+        # reliably every time -- confirming the interface, driver, and
+        # router-side DHCP server are all fully functional, and this is
+        # a systemd-networkd-specific bug being routed around.
+        network = (OVERLAY / "etc/systemd/network/01-eth0.network").read_text()
+        self.assertIn("Name=eth0", network)
+        self.assertIn("DHCP=no", network)
+        self.assertIn("RequiredForOnline=no", network)
+
+        service = (
+            OVERLAY / "etc/systemd/system/sovereign-eth0-dhclient.service"
+        ).read_text()
+        self.assertIn("Type=oneshot", service)
+        self.assertIn("RemainAfterExit=yes", service)
+        self.assertIn("Before=network-online.target", service)
+        self.assertIn(
+            "ExecStart=/usr/sbin/dhclient -4 -sf /usr/sbin/dhclient-script", service
+        )
+        self.assertIn("ExecStop=/usr/sbin/dhclient -x", service)
+
+        # Both today's single-root production image and the RFC-0016
+        # A/B image need this fix -- it's not layout-specific.
+        self.assertIn("sovereign-eth0-dhclient.service", ENABLE_UNITS.read_text())
+        self.assertIn("sovereign-eth0-dhclient.service", ENABLE_UNITS_AB.read_text())
+        self.assertIn("isc-dhcp-client", DATA_IMAGE_YAML.read_text())
+        self.assertIn("isc-dhcp-client", AB_DATA_IMAGE_YAML.read_text())
 
 
 if __name__ == "__main__":

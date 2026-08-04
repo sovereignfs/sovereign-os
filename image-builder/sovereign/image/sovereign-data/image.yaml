@@ -50,3 +50,4 @@
 mmdebstrap:
   packages:
     - initramfs-tools
+    - isc-dhcp-client
