@@ -2715,11 +2715,20 @@ def trial_base_os(args):
         snapshot = load_base_os_transaction(args.transaction, required_state="staged")
         snapshot = base_os_transition(snapshot, "trial", "TRIAL_BOOT_TRIGGERED")
     print(json.dumps({"status": "trial", "transaction_id": snapshot["transaction_id"]}, sort_keys=True))
-    # The literal single-argument form "0 tryboot" (not two argv words) --
-    # hardware-verified during RFC-0016 qualification. REBOOT is
-    # overridable so tests can point it at a stub instead of actually
-    # rebooting the test host.
-    run_checked([REBOOT, "0 tryboot"], "REBOOT_FAILED", "Could not trigger a trial boot")
+    # /usr/sbin/reboot on this system is a symlink to systemctl, not a
+    # standalone binary -- a bare positional "0 tryboot" argument (as if
+    # calling the kernel's reboot(2) directly) does NOT reliably reach the
+    # firmware: hardware-verified during RFC-0016 qualification to fall
+    # back to an ordinary reboot instead. --reboot-argument is systemctl's
+    # own documented option for exactly this ("Specify argument string to
+    # pass to reboot()") and was confirmed on hardware to trigger a real
+    # tryboot. SYSTEMCTL is overridable so tests can point it at a stub
+    # instead of actually rebooting the test host.
+    run_checked(
+        [SYSTEMCTL, "reboot", "--reboot-argument=0 tryboot"],
+        "REBOOT_FAILED",
+        "Could not trigger a trial boot",
+    )
 
 
 def find_trial_base_os_transaction():

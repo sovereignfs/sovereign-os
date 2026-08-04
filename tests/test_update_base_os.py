@@ -205,6 +205,16 @@ class BaseOsTransactionFlowTests(unittest.TestCase):
         self.reboot = self.tools / "reboot"
         self.reboot.write_text(f"#!/bin/sh\nprintf '%s\\n' \"$*\" >> {self.reboot_log}\n")
         self.reboot.chmod(0o755)
+        # trial_base_os calls systemctl directly (not REBOOT) with
+        # --reboot-argument=0 tryboot: /usr/sbin/reboot on real hardware is
+        # a symlink to systemctl, and a bare positional "0 tryboot" argument
+        # doesn't reliably reach the firmware through it (hardware-verified
+        # during RFC-0016 qualification) -- only the documented
+        # --reboot-argument option does.
+        self.systemctl_log = self.directory / "systemctl.log"
+        self.systemctl = self.tools / "systemctl"
+        self.systemctl.write_text(f"#!/bin/sh\nprintf '%s\\n' \"$*\" >> {self.systemctl_log}\n")
+        self.systemctl.chmod(0o755)
         self.tryboot_helper = self.tools / "rpi-slot-tryboot"
         self.tryboot_helper.write_text(
             "#!/bin/sh\nprintf '[all]\\ntryboot_a_b=1\\nboot_partition=3\\n[tryboot]\\nboot_partition=2\\n'\n"
@@ -292,6 +302,7 @@ class BaseOsTransactionFlowTests(unittest.TestCase):
             "SOVEREIGN_AUTOBOOT_PATH": str(self.autoboot),
             "SOVEREIGN_RPI_SLOT_TRYBOOT": str(self.tryboot_helper),
             "SOVEREIGN_REBOOT": str(self.reboot),
+            "SOVEREIGN_SYSTEMCTL": str(self.systemctl),
             "SOVEREIGN_UPDATE_HEALTH_CHECK": str(self.health),
         }
 
@@ -324,7 +335,10 @@ class BaseOsTransactionFlowTests(unittest.TestCase):
 
         trial = self.run_client("trial-base-os", transaction_id)
         self.assertEqual(0, trial.returncode, trial.stderr)
-        self.assertEqual("0 tryboot", self.reboot_log.read_text().strip())
+        self.assertEqual(
+            "reboot --reboot-argument=0 tryboot", self.systemctl_log.read_text().strip()
+        )
+        self.assertFalse(self.reboot_log.exists())
 
         verify = self.run_client("verify-base-os-trial")
         self.assertEqual(0, verify.returncode, verify.stderr)
@@ -336,10 +350,10 @@ class BaseOsTransactionFlowTests(unittest.TestCase):
 
         # The promoted config from the (stubbed) rpi-slot-tryboot helper
         # actually landed on the real autoboot.txt path, and a plain
-        # (non-tryboot) reboot was triggered to boot into it.
+        # (non-tryboot) reboot -- via REBOOT, not systemctl -- was
+        # triggered to boot into it.
         self.assertIn("boot_partition=3", self.autoboot.read_text())
-        log_lines = self.reboot_log.read_text().splitlines()
-        self.assertEqual(["0 tryboot", ""], log_lines)  # second reboot call passed no args
+        self.assertEqual("", self.reboot_log.read_text().strip())
 
         status = self.run_client("status")
         self.assertEqual(0, status.returncode, status.stderr)
@@ -350,6 +364,9 @@ class BaseOsTransactionFlowTests(unittest.TestCase):
     def test_health_check_failure_reboots_without_committing(self):
         transaction_id = self.stage()
         self.run_client("trial-base-os", transaction_id)
+        self.assertEqual(
+            "reboot --reboot-argument=0 tryboot", self.systemctl_log.read_text().strip()
+        )
 
         self.health.write_text("#!/bin/sh\necho boom >&2\nexit 1\n")
         self.health.chmod(0o755)
@@ -359,13 +376,13 @@ class BaseOsTransactionFlowTests(unittest.TestCase):
         payload = json.loads(verify.stdout)
         self.assertEqual("trial_failed", payload["status"])
 
-        # A plain reboot (no tryboot argument) was issued so the device
-        # falls back to the untouched, already-committed original slot --
-        # the same "just let the one-shot trial lapse" path a crash or
-        # power loss takes for free, made explicit here instead of left
-        # running on a demonstrably unhealthy trial slot.
-        log_lines = self.reboot_log.read_text().splitlines()
-        self.assertEqual(["0 tryboot", ""], log_lines)
+        # A plain reboot (no tryboot argument), via REBOOT rather than
+        # systemctl, was issued so the device falls back to the untouched,
+        # already-committed original slot -- the same "just let the
+        # one-shot trial lapse" path a crash or power loss takes for free,
+        # made explicit here instead of left running on a demonstrably
+        # unhealthy trial slot.
+        self.assertEqual("", self.reboot_log.read_text().strip())
 
         status = self.run_client("status")
         self.assertEqual(0, status.returncode, status.stderr)

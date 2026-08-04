@@ -634,6 +634,74 @@ Both halves of RFC-0016's Testing Strategy forced-failure requirement
 the interrupted-boot half; forced health-check failure has no product
 code to test yet (see below).
 
+**Progress (2026-08-03/04, automated integration, full cycle on
+hardware):** `sovereign-update` gained real product code for the base-OS
+transaction flow described in the Proposal section above —
+`stage-base-os`, `trial-base-os`, an automatic health-gate
+(`verify-base-os-trial`, invoked by a new boot-time systemd unit,
+`sovereign-verify-base-os-trial.service`, gated the same way appliance
+activation's `verify-update-health` is gated) and `commit-base-os` — reusing
+the existing Ed25519 signature/trust-store machinery for a new,
+independently-versioned base-OS manifest (two artifacts: `system_boot`,
+`system_root`). All four commands run against real, signed artifacts and
+real block devices, with a hard safety check that refuses to ever write
+to the currently-active slot's device, verified freshly at write time
+against the by-slot symlinks rather than any cached/independently-computed
+slot identity.
+
+Two real bugs were found and fixed before this reached hardware cleanly:
+
+- A state-machine bug where the generic `transition()` helper (written for
+  appliance transactions) was reused for base-OS transitions without
+  also overriding *where* it writes state — silently writing into the
+  appliance's own `transactions/` directory and status file instead of
+  `base-os-transactions/`. Caught by local unit tests before ever
+  touching hardware.
+- `/usr/sbin/reboot` on this image is a symlink to `systemctl`, not a
+  standalone binary. A bare positional `"0 tryboot"` argument (mimicking
+  traditional `reboot ARG` syntax) does **not** reliably reach the
+  firmware through it — hardware-verified to silently fall back to an
+  ordinary reboot instead, even though the exact same argument form had
+  worked in earlier manual qualification testing via an interactive
+  shell. `systemctl`'s own documented `--reboot-argument=ARG` option
+  ("Specify argument string to pass to reboot()") is required instead,
+  and was confirmed on hardware to trigger a real trial boot reliably.
+  This was **only** caught by hardware testing — every local test stub
+  is a fake `reboot`/`systemctl` script that simply logs its argv, which
+  can't distinguish real firmware-reaching behavior from a plain reboot
+  that happens to also succeed and return exit code 0.
+
+With both fixed, a complete, unattended (aside from the manual CLI
+invocations standing in for a future "install this update" trigger)
+cycle succeeded on the qualification device: `stage-base-os` verified
+and wrote a signed artifact pair to the inactive slot; `trial-base-os`
+triggered a real trial boot; the boot-time health gate ran automatically
+and reported `validated` against real Docker/DNS/Console health (not a
+stub); `commit-base-os` wrote the promoted `autoboot.txt` and rebooted;
+the device came up on the newly-committed slot as the permanent
+default, confirmed via a genuine fresh `uptime` and `autoboot.txt`'s
+`[all]` section now pointing at the promoted partition.
+
+This required first resolving an unrelated, real finding: the
+qualification device's `eth0` DHCP client had stopped acquiring an
+IPv4 lease (a driver/systemd-networkd race, `ENOMEDIUM` despite a stable
+carrier — see
+[`docs/research/eth0-dhcp-carrier-race-finding.md`](../research/eth0-dhcp-carrier-race-finding.md)),
+which was silently failing the appliance health check (no internet →
+Pi-hole's `gravity.db` never builds) independent of anything in this
+milestone's own code. Worked around with a persistent static IP on the
+qualification device; the general DHCP-client bug remains open and
+unrelated to RFC-0016.
+
+RFC-0016's core acceptance criteria — a working `tryboot` A/B cycle with
+signed artifacts, health-gating, and both graceful and forced-failure
+recovery — are now met and hardware-verified. Remaining before this is
+production-ready: release-tooling to actually produce signed base-OS
+manifests/artifacts (today's qualification manifest was hand-built),
+Console UI surfacing for base-OS update state, and `recover`/`prune`
+integration for base-OS transactions (not yet extended to this new
+transaction kind).
+
 ## Alternatives Considered
 
 ### RAUC or Mender (adopt a third-party A/B OTA framework)
