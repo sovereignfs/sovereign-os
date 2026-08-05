@@ -17,5 +17,10 @@ Operational guides will be written alongside the preview implementation and veri
 - Service lifecycle and reboot behavior
 - Troubleshooting and diagnostics
 - Known limitations
+- Base-OS (RFC-0016) update release checklist and device-owner recovery
+  guidance — the appliance-update equivalents above
+  ([appliance update release checklist](appliance-update-checklist.md),
+  [update compatibility, rollback limitations, and recovery](update-recovery-and-compatibility.md))
+  don't yet have a base-OS counterpart
 
 Commands must be tested against the documented OS and release before publication.

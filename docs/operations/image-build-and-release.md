@@ -17,7 +17,13 @@ In GitHub Actions, open **Build Raspberry Pi image**, choose **Run workflow**, a
 
 - a SemVer value without a leading `v`, such as `0.1.0-preview.1`;
 - the `preview` or `stable` channel;
-- whether to create a draft GitHub release.
+- whether to create a draft GitHub release;
+- whether to build an unsigned installed-device *appliance* update
+  candidate (`build_update_candidate`, plus its source-version bounds and
+  key id);
+- whether to build an unsigned *base-OS* update candidate
+  (`build_base_os_candidate`, plus its own source-version bounds and key
+  id) — see [Base-OS Candidate Build](#base-os-candidate-build) below.
 
 The job runs on GitHub's ARM64 Ubuntu runner, confirms the host architecture, invokes the same Sovereign image-build script used locally, and packages the result. ARM64 hosted runners are currently a GitHub public-preview capability. This makes the workflow an engineering-candidate builder, not by itself a qualified Sovereign release environment.
 
@@ -38,9 +44,38 @@ The output directory must be empty. The command fails rather than mixing files f
 
 The workflow uploads the clean-image release bundle as
 `sovereign-os-<version>-rpi5-arm64`. If installed-device update packaging is
-enabled, it separately uploads `sovereign-update-<version>-rpi5-arm64`.
-Operators preparing an installed-device update therefore do not need to
-download the much larger flashable-image artifact.
+enabled, it separately uploads `sovereign-update-<version>-rpi5-arm64`. If
+base-OS candidate packaging is enabled, it separately uploads
+`sovereign-base-os-<version>-rpi5-arm64`. Operators preparing an
+installed-device update therefore do not need to download the much larger
+flashable-image artifact.
+
+## Base-OS Candidate Build
+
+[RFC-0016](../rfcs/0016-full-base-os-updates.md) added a second, independent
+update path: a signed, health-gated **base-OS** (root filesystem) update
+delivered through the Raspberry Pi `tryboot` A/B mechanism, distinct from
+the appliance (`build_update_candidate`) update candidate described above.
+`sovereign-update stage-base-os` writes it to the currently inactive slot;
+`trial-base-os`/`commit-base-os` boot into it behind a health gate before
+it becomes permanent.
+
+Producing a base-OS candidate requires images built under the A/B tryboot
+layout (`sovereign-ab-proof.yaml`), not the plain image the primary build
+above targets — a `boot.vfat`/`root.ext4` pair from the plain image has no
+tryboot partitions to stage onto and cannot be used for this. Selecting
+`build_base_os_candidate` therefore runs a **second, complete image build**
+against the A/B config, roughly doubling the job's runtime; leave it off
+unless you specifically need a base-OS candidate out of this run.
+
+The raw `boot.vfat`/`root.ext4` genimage produces as an intermediate step
+(before its own android-sparse conversion, which is all `rpi-image-gen`'s
+deploy step normally exports) are pulled out of the build container by
+`scripts/build-sovereign-image.sh` into `evidence/base-os/`, then packaged
+by `scripts/create-base-os-release.py` — the same unsigned-manifest,
+signed-separately-offline shape as the appliance update candidate below,
+governed by the same [ADR-0006](../adrs/0006-production-signing-key-custody.md)
+key-custody boundary.
 
 ## Bundle Contents
 
@@ -98,6 +133,11 @@ this alone does not make the release discoverable by
 operator signs the manifest offline (`scripts/sign-update-manifest.py`,
 same as every other qualification in this project) and uploads the
 resulting `.sig` as an additional release asset before publishing.
+
+If `build_base_os_candidate` was also selected, the workflow additionally
+uploads the *unsigned* `base-os-manifest.json` and its boot/root artifacts
+to the same draft release, under the same offline-signing gap described
+above (`base-os-manifest.sig` instead of `release-manifest.sig`).
 
 Before making a release public:
 

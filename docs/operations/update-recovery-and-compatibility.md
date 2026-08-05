@@ -17,6 +17,15 @@ find out or recover. Nothing here is aspirational — every claim matches
 what's actually implemented and, where noted, hardware-tested on a real
 Raspberry Pi 5.
 
+This page covers only the **appliance-layer** commands
+(`prepare`/`backup`/`stage`/`activate`/`restore`/`prune`/`rotate-trust`/
+`check`). `sovereign-update` also has a separate, independent set of
+**base-OS** (root filesystem) commands
+(`stage-base-os`/`trial-base-os`/`commit-base-os`/`discard-base-os`) added
+by [RFC-0016](../rfcs/0016-full-base-os-updates.md) — hardware-verified,
+but without device-owner guidance here yet. Don't assume anything on this
+page applies to them.
+
 ## Where things stand right now
 
 Be clear-eyed about the current state before relying on this:
