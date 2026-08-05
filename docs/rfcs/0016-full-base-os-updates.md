@@ -786,6 +786,28 @@ ADR-0006 unsigned-manifest caveat in the draft-release step (CI never
 holds the signing key; an operator still signs offline before
 publishing).
 
+**Progress (2026-08-05, CI wiring live-verified):** the CI wiring above
+had only been proven against Docker-stubbed tests until now — actually
+dispatching the workflow (`build_base_os_candidate: true`, no draft
+release) against real Docker/`rpi-image-gen` was the natural next check,
+and it passed cleanly: both the primary and second (A/B) image builds
+succeeded, run
+[31030670477](https://github.com/sovereignfs/sovereign-os/actions/runs/31030670477),
+7m49s total. The uploaded `sovereign-base-os-0.1.0-preview.24-rpi5-arm64`
+artifact was downloaded and checked directly rather than just trusting a
+green run: both `boot.img.zst`/`root.img.zst` files' recomputed SHA-256
+matched `base-os-manifest.json`'s declared digests exactly, and the
+manifest validated cleanly against `sovereign-update`'s own
+`validate_base_os_manifest()` — the same validator `stage-base-os` runs
+on a device.
+
+This confirms the CI pipeline itself is correct end to end. It does not
+confirm the pipeline's *output* against real hardware — every hardware
+tryboot/trial/commit/recovery cycle qualified so far in this RFC used
+manually-built images, never an artifact that came out of this workflow.
+That's the natural next verification once there's a reason to cut a real
+base-OS release, not attempted here.
+
 ## Alternatives Considered
 
 ### RAUC or Mender (adopt a third-party A/B OTA framework)
