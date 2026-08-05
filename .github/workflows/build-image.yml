@@ -40,6 +40,26 @@ on:
         required: false
         default: preview-local
         type: string
+      build_base_os_candidate:
+        description: Also build the A/B image and package an unsigned base-OS update candidate (RFC-0016)
+        required: true
+        default: false
+        type: boolean
+      base_os_source_minimum:
+        description: Minimum installed base-OS version accepted by the update candidate
+        required: false
+        default: ""
+        type: string
+      base_os_source_maximum_exclusive:
+        description: Exclusive upper installed base-OS version bound
+        required: false
+        default: "0.2.0"
+        type: string
+      base_os_key_id:
+        description: Public key identifier expected when the base-OS candidate is signed offline
+        required: false
+        default: preview-local
+        type: string
 
 permissions:
   contents: read
@@ -107,6 +127,44 @@ jobs:
             --notes-url "https://github.com/sovereignfs/sovereign-os/releases/tag/v${RELEASE_VERSION}" \
             --source-date-epoch "$source_date_epoch"
 
+      # A base-OS candidate needs boot/root images built under the A/B
+      # tryboot layout (RFC-0016), which the primary build above never
+      # produces -- it targets the plain, non-A/B image. This is a real
+      # second full image build (roughly doubling this job's runtime),
+      # so it only runs when explicitly requested rather than on every
+      # invocation.
+      - name: Build base-OS image
+        if: inputs.build_base_os_candidate
+        env:
+          SOVEREIGN_VERSION: ${{ inputs.version }}
+          SOVEREIGN_CHANNEL: ${{ inputs.channel }}
+          SOVEREIGN_IMAGE_CONFIG: sovereign-ab-proof.yaml
+        run: ./scripts/build-sovereign-image.sh
+
+      - name: Package unsigned base-OS update candidate
+        if: inputs.build_base_os_candidate
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_CHANNEL: ${{ inputs.channel }}
+          BASE_OS_SOURCE_MINIMUM: ${{ inputs.base_os_source_minimum }}
+          BASE_OS_SOURCE_MAXIMUM_EXCLUSIVE: ${{ inputs.base_os_source_maximum_exclusive }}
+          BASE_OS_KEY_ID: ${{ inputs.base_os_key_id }}
+        run: |
+          test -n "$BASE_OS_SOURCE_MINIMUM"
+          source_date_epoch=$(git show -s --format=%ct HEAD)
+          ./scripts/create-base-os-release.py \
+            --version "$RELEASE_VERSION" \
+            --channel "$RELEASE_CHANNEL" \
+            --source-minimum "$BASE_OS_SOURCE_MINIMUM" \
+            --source-maximum-exclusive "$BASE_OS_SOURCE_MAXIMUM_EXCLUSIVE" \
+            --boot build/sovereign-image-sovereign-ab-proof/evidence/base-os/boot.vfat \
+            --root build/sovereign-image-sovereign-ab-proof/evidence/base-os/root.ext4 \
+            --output-dir build/base-os-release \
+            --key-id "$BASE_OS_KEY_ID" \
+            --artifact-base-url "https://github.com/sovereignfs/sovereign-os/releases/download/v${RELEASE_VERSION}" \
+            --notes-url "https://github.com/sovereignfs/sovereign-os/releases/tag/v${RELEASE_VERSION}" \
+            --source-date-epoch "$source_date_epoch"
+
       - name: Upload image release artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -126,6 +184,16 @@ jobs:
           compression-level: 0
           retention-days: 14
 
+      - name: Upload base-OS update artifact
+        if: inputs.build_base_os_candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sovereign-base-os-${{ inputs.version }}-rpi5-arm64
+          path: build/base-os-release/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
       - name: Publish draft release
         if: inputs.publish_draft_release
         env:
@@ -133,6 +201,7 @@ jobs:
           RELEASE_VERSION: ${{ inputs.version }}
           RELEASE_CHANNEL: ${{ inputs.channel }}
           BUILD_UPDATE_CANDIDATE: ${{ inputs.build_update_candidate }}
+          BUILD_BASE_OS_CANDIDATE: ${{ inputs.build_base_os_candidate }}
         run: |
           assets=(build/release/*)
           if [ "$BUILD_UPDATE_CANDIDATE" = "true" ]; then
@@ -144,6 +213,11 @@ jobs:
             # the manifest offline and upload the resulting .sig before
             # publishing.
             assets+=(build/update-release/*)
+          fi
+          if [ "$BUILD_BASE_OS_CANDIDATE" = "true" ]; then
+            # Same offline-signing gap as the appliance candidate above,
+            # via base-os-manifest.json/.sig instead (ADR-0006).
+            assets+=(build/base-os-release/*)
           fi
           gh release create "v${RELEASE_VERSION}" "${assets[@]}" \
             --draft \

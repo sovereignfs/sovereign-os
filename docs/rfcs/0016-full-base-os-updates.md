@@ -718,10 +718,10 @@ streaming directly onto the device rather than assuming the artifact is
 already raw. `BASE_OS_BOOT_MEDIA_TYPE`/`BASE_OS_ROOT_MEDIA_TYPE` gained
 an explicit `+zstd` suffix to say so, matching the existing
 `update_bundle` artifact's own `+tar+zstd` convention. Not yet wired
-into `.github/workflows/build-image.yml`: doing so needs the image-build
-pipeline itself to export the raw boot/root images somewhere accessible
-before genimage's sparse conversion, which today's `deploy/` output
-doesn't do — a real, separate piece of work, not attempted here.
+into `.github/workflows/build-image.yml` at this point: doing so needs
+the image-build pipeline itself to export the raw boot/root images
+somewhere accessible before genimage's sparse conversion, which the
+`deploy/` output alone doesn't do — see the next entry below.
 
 **Progress (2026-08-05, recover/prune integration):** `recover`/`prune`
 now cover base-OS transactions, closing the gap noted above. This
@@ -755,6 +755,36 @@ actually needed a *correct* slot label to compare against, rather than
 one that was purely informational. Fixed by shelling out to
 `blkid -s PARTLABEL -o value`, matching the existing
 `sovereign-slot-var-generator` script's own approach.
+
+**Progress (2026-08-05, CI wiring):** `.github/workflows/build-image.yml`
+can now produce an unsigned base-OS update candidate end to end, closing
+the gap left by the release-tooling entry above. This turned out to need
+more than a packaging step: CI's existing "Build image" run only ever
+targets `sovereign-proof.yaml`, the plain non-A/B config, and that
+image's `boot.vfat`/`root.ext4` are structurally the wrong shape for a
+base-OS update (no tryboot partitions to stage onto). Producing a base-OS
+candidate genuinely requires a second, separate image build against
+`sovereign-ab-proof.yaml` — so it's gated behind a new opt-in
+`build_base_os_candidate` dispatch input (default `false`, mirroring
+`build_update_candidate`'s own shape) rather than doubling every build's
+runtime unconditionally.
+
+Getting at the raw `boot.vfat`/`root.ext4` at all needed a small
+`scripts/build-sovereign-image.sh` change: `rpi-image-gen`'s own deploy
+step (`layer/base/deploy.sh` in the vendored tool) only ever exports
+`*.sparse` files out of its work directory, even though genimage builds
+the plain raw images too, as an intermediate step, on the way to its
+android-sparse conversion. `build-sovereign-image.sh` now `docker cp`s
+those two raw files out of the container directly (into
+`evidence/base-os/`, alongside the script's existing oci/bootstrap/
+sovereign-release evidence exports) — a tolerated no-op for configs,
+like the plain image, that were never meant to feed a base-OS release.
+The workflow's new "Build base-OS image" / "Package unsigned base-OS
+update candidate" / "Upload base-OS update artifact" steps mirror the
+existing appliance-update-candidate ones exactly, including the same
+ADR-0006 unsigned-manifest caveat in the draft-release step (CI never
+holds the signing key; an operator still signs offline before
+publishing).
 
 ## Alternatives Considered
 
