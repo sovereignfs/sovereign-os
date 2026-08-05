@@ -210,6 +210,41 @@ class UpdateReleaseTests(unittest.TestCase):
             workflow[image_upload:update_upload],
         )
 
+    def test_workflow_builds_and_packages_base_os_candidate_before_upload(self):
+        workflow = (ROOT / ".github/workflows/build-image.yml").read_text()
+
+        # A base-OS candidate needs its own A/B-layout image build (the
+        # primary "Build image" step above targets the plain, non-A/B
+        # config and can never produce it) -- build, then package, then
+        # upload, same shape as the appliance update candidate.
+        build_base_os = workflow.index("Build base-OS image")
+        package_base_os = workflow.index("Package unsigned base-OS update candidate")
+        upload_base_os = workflow.index("Upload base-OS update artifact")
+        self.assertLess(build_base_os, package_base_os)
+        self.assertLess(package_base_os, upload_base_os)
+
+        self.assertIn("SOVEREIGN_IMAGE_CONFIG: sovereign-ab-proof.yaml", workflow)
+        self.assertIn("build/base-os-release/", workflow)
+        self.assertIn(
+            "name: sovereign-base-os-${{ inputs.version }}-rpi5-arm64",
+            workflow,
+        )
+
+        image_upload = workflow.index("Upload image release artifact")
+        self.assertLess(image_upload, upload_base_os)
+        self.assertNotIn(
+            "build/base-os-release/",
+            workflow[image_upload:upload_base_os],
+        )
+
+        # The primary build never sets SOVEREIGN_IMAGE_CONFIG -- only the
+        # dedicated base-OS build step does.
+        primary_build = workflow.index("Build image")
+        self.assertNotIn(
+            "SOVEREIGN_IMAGE_CONFIG",
+            workflow[primary_build:build_base_os],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
