@@ -52,8 +52,15 @@ check_nginx_config() {
 }
 
 check_dns_admin_proxy() {
-  curl --fail --silent --show-error --max-time 10 \
-    --output /dev/null http://127.0.0.1/dns/admin/
+  # ADR-0010 gates /dns/admin/ behind a Console session; an unauthenticated
+  # request here now correctly gets bounced to Console's sign-in instead of
+  # served Pi-hole's UI. `curl --fail` alone would not catch a regression
+  # either direction here, since neither a 302 nor an unexpected 200 is a
+  # curl failure -- comparing the actual redirect target is load-bearing.
+  redirect_url=$(curl --silent --show-error --max-time 10 \
+    --output /dev/null --write-out '%{redirect_url}' \
+    http://127.0.0.1/dns/admin/)
+  test "$redirect_url" = "http://127.0.0.1/console/?next=/dns/admin/"
 }
 
 check_admin_404() {

@@ -83,6 +83,44 @@ class PhysicalQualificationFixTests(unittest.TestCase):
         self.assertIn("sleep 1", verifier)
         self.assertIn("StartLimitBurst=6", service)
 
+    def test_pihole_ui_boot_check_expects_the_adr_0010_signin_gate(self):
+        # verify-local-access previously expected to reach real Pi-hole
+        # content unauthenticated at /dns/admin/; ADR-0010 gates that path,
+        # so the boot check must now expect the sign-in redirect instead --
+        # otherwise this readiness check would silently stop verifying
+        # anything real about that path.
+        verifier = (APPLIANCE / "bin/verify-local-access").read_text()
+
+        self.assertIn(
+            'http://127.0.0.1/console/?next=/dns/admin/', verifier
+        )
+        self.assertIn("pihole_gate=pass", verifier)
+        self.assertNotIn("pihole_ui=pass", verifier)
+        self.assertNotIn(
+            "curl --fail --silent --show-error --max-time 10 \\\n  --output /dev/null http://127.0.0.1/dns/admin/",
+            verifier,
+        )
+
+    def test_update_health_gate_expects_the_adr_0010_signin_gate(self):
+        # sovereign-update's activate/trial health gate (ADR-0009's rollback
+        # safety net) previously expected real Pi-hole content at
+        # /dns/admin/ unauthenticated. `curl --fail` treats a 3xx the same
+        # as a 2xx, so this check would have kept silently "passing" against
+        # the new redirect without ever confirming the gate is actually the
+        # thing being hit -- comparing the redirect target directly closes
+        # that gap in either direction (missing gate or broken gate).
+        verifier = (APPLIANCE / "bin/verify-update-health").read_text()
+
+        self.assertIn(
+            'http://127.0.0.1/console/?next=/dns/admin/', verifier
+        )
+        self.assertIn("redirect_url", verifier)
+        self.assertNotIn(
+            "curl --fail --silent --show-error --max-time 10 \\\n"
+            "    --output /dev/null http://127.0.0.1/dns/admin/",
+            verifier,
+        )
+
     def test_root_redirect_and_console_checks_retry_instead_of_racing_startup(self):
         # nginx and sovereign-console.service both just (re)started when
         # this script runs -- an unretried curl here can race a backend

@@ -42,8 +42,16 @@ dns_redirect=$(curl --silent --show-error --max-time 10 \
   http://127.0.0.1/dns/)
 test "$dns_redirect" = http://127.0.0.1/dns/admin/
 
-curl --fail --silent --show-error --max-time 10 \
-  --output /dev/null http://127.0.0.1/dns/admin/
+# ADR-0010: /dns/admin/ is now gated behind a Console session -- this
+# unauthenticated request is expected to be bounced to Console's sign-in
+# with the original path preserved, not served Pi-hole's UI directly.
+# Pi-hole's own liveness is already covered by health_api above
+# (console-health's pihole check is a direct TCP probe of its own port);
+# this step instead confirms the auth_request gate itself is live.
+pihole_gate_redirect=$(curl --silent --show-error --max-time 10 \
+  --output /dev/null --write-out '%{redirect_url}' \
+  http://127.0.0.1/dns/admin/)
+test "$pihole_gate_redirect" = "http://127.0.0.1/console/?next=/dns/admin/"
 
 test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --max-time 10 http://127.0.0.1/admin/)" = 404
@@ -59,7 +67,7 @@ install -d -m 0755 "$state_dir"
   printf 'console=pass\n'
   printf 'health_api=pass\n'
   printf 'dns_redirect=pass\n'
-  printf 'pihole_ui=pass\n'
+  printf 'pihole_gate=pass\n'
   printf 'reserved_paths=pass\n'
   printf 'path_escape=pass\n'
 } > "${marker}.tmp"

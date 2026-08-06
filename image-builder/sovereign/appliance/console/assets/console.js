@@ -136,6 +136,20 @@ function setAuthMessage(text, isError) {
   authMessage.classList.toggle("error", Boolean(isError));
 }
 
+// ADR-0010: Nginx sends an unauthenticated visitor to a gated panel here
+// with ?next= set to where they were headed. Only ever trust it as a
+// redirect target if it matches a known gated-service prefix -- add to
+// this list as ADR-0010 gates more panels, never widen it to "any path".
+const NEXT_REDIRECT_PREFIXES = ["/dns/"];
+
+function pendingNextPath() {
+  const next = new URLSearchParams(window.location.search).get("next");
+  if (!next) return null;
+  if (next.startsWith("//") || next.includes("\\")) return null;
+  if (!NEXT_REDIRECT_PREFIXES.some((prefix) => next.startsWith(prefix))) return null;
+  return next;
+}
+
 let isSignedIn = false;
 
 function showSignedIn() {
@@ -199,6 +213,9 @@ authForm.addEventListener("submit", async (event) => {
     if (response.ok && data.authenticated) {
       csrfToken = data.csrf_token;
       showSignedIn();
+      if (nextPath) {
+        window.location.assign(nextPath);
+      }
       return;
     }
     if (response.status === 429) {
@@ -232,6 +249,14 @@ authSignout.addEventListener("click", async () => {
     showSignedOut();
   }
 });
+
+const nextPath = pendingNextPath();
+if (nextPath) {
+  authToggle.setAttribute("aria-expanded", "true");
+  authForm.hidden = false;
+  setAuthMessage("Sign in to continue.");
+  authCredential.focus();
+}
 
 loadSession();
 
@@ -445,3 +470,51 @@ installForm.addEventListener("submit", async (event) => {
 });
 
 loadUpdateCheck();
+
+const baseOsSummary = document.querySelector("#base-os-summary");
+const baseOsDetails = document.querySelector("#base-os-details");
+const baseOsDetailVersion = document.querySelector("#base-os-detail-version");
+const baseOsDetailUpdated = document.querySelector("#base-os-detail-updated");
+
+const baseOsStateLabels = {
+  idle: "No base-OS update in progress.",
+  staged: "Preparing a base-OS update…",
+  trial: "Trial-booting a base-OS update… A reboot is in progress.",
+  validated: "Base-OS update passed its trial boot; finishing…",
+  committed: "Base-OS update installed.",
+  trial_failed: "Base-OS update failed its trial boot and was rolled back safely.",
+  recovery_required: "Base-OS update needs attention. See the recovery guide.",
+  discarded: "Base-OS update was discarded.",
+  unreadable: "Base-OS update status is currently unavailable.",
+};
+
+const baseOsTerminalStates = ["idle", "committed", "trial_failed", "recovery_required", "discarded", "unreadable"];
+
+function renderBaseOsStatus(status) {
+  baseOsSummary.textContent = baseOsStateLabels[status.state] || status.state;
+  if (status.target_version) {
+    baseOsDetailVersion.textContent = status.target_version;
+    baseOsDetailUpdated.textContent = status.updated_at
+      ? new Date(status.updated_at).toLocaleString()
+      : "Unknown";
+    baseOsDetails.hidden = false;
+  } else {
+    baseOsDetails.hidden = true;
+  }
+  if (!baseOsTerminalStates.includes(status.state)) {
+    setTimeout(loadBaseOsStatus, 4000);
+  }
+}
+
+async function loadBaseOsStatus() {
+  try {
+    const response = await fetch("/api/v1/update/base-os-status", {cache: "no-store"});
+    if (!response.ok) throw new Error("Base-OS status request failed");
+    renderBaseOsStatus(await response.json());
+  } catch (error) {
+    baseOsSummary.textContent = "Base-OS update status is currently unavailable.";
+    setTimeout(loadBaseOsStatus, 4000);
+  }
+}
+
+loadBaseOsStatus();

@@ -15,3 +15,4 @@ Use the [ADR template](../templates/adr.md) and zero-padded sequential identifie
 - [ADR-0007: Sovereign Console authentication](0007-console-authentication.md) - Accepted
 - [ADR-0008: Console privileged action invocation](0008-console-privileged-action-invocation.md) - Accepted
 - [ADR-0009: Console-triggered update install](0009-console-triggered-install.md) - Accepted
+- [ADR-0010: Shared Console-session gate for Pi-hole and future service panels](0010-shared-console-session-gate.md) - Accepted

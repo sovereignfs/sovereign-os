@@ -321,6 +321,8 @@ class AuthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/api/v1/auth/session":
             self._handle_session()
+        elif self.path == "/api/v1/auth/verify":
+            self._handle_verify()
         else:
             self.send_error(404)
 
@@ -444,6 +446,20 @@ class AuthHandler(BaseHTTPRequestHandler):
             self._send_json(503, {"triggered": False, "error": "trigger_unavailable"})
         else:
             self._send_json(202, {"triggered": True})
+
+    def _handle_verify(self):
+        # ADR-0010: this exists only to be called as an Nginx auth_request
+        # subrequest, gating other LAN-facing service panels (Pi-hole today,
+        # more later) behind the same session Console itself uses. Status
+        # code is the entire contract auth_request reads -- no JSON body
+        # either way -- and there is deliberately no CSRF check here: CSRF
+        # protects state-changing POSTs, not read navigation to a panel
+        # that's about to enforce its own login next regardless.
+        session = lookup_session(self._session_token())
+        self.send_response(204 if session is not None else 401)
+        self.send_header("Content-Length", "0")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
 
     def _handle_session(self):
         session = lookup_session(self._session_token())

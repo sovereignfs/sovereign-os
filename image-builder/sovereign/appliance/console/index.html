@@ -132,6 +132,21 @@
           <p id="install-message" role="status" aria-live="polite"></p>
         </form>
       </section>
+
+      <section class="panel update-panel" aria-labelledby="base-os-title">
+        <div class="update-panel-row">
+          <div>
+            <p class="eyebrow">Software updates</p>
+            <h2 id="base-os-title">Base-OS version</h2>
+            <p id="base-os-summary" class="placeholder">Checking…</p>
+            <dl id="base-os-details" class="update-details" hidden>
+              <div><dt>Target version</dt><dd id="base-os-detail-version"></dd></div>
+              <div><dt>Reboot required</dt><dd>Yes</dd></div>
+              <div><dt>Updated</dt><dd id="base-os-detail-updated"></dd></div>
+            </dl>
+          </div>
+        </div>
+      </section>
     </main>
 
     <footer>

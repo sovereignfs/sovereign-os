@@ -30,6 +30,12 @@ UPDATE_CHECK_PATH = pathlib.Path(
         "/data/sovereign/update-check.json",
     )
 )
+BASE_OS_UPDATE_STATUS_PATH = pathlib.Path(
+    os.environ.get(
+        "SOVEREIGN_BASE_OS_UPDATE_STATUS_PATH",
+        "/data/sovereign/base-os-update-status.json",
+    )
+)
 
 
 def read_key_values(path):
@@ -277,6 +283,20 @@ def read_update_status():
         return {"state": "unreadable"}
 
 
+def read_base_os_update_status():
+    # base-os-update-status.json (RFC-0016) is the base-OS transaction's
+    # counterpart to update-status.json above: same schema_version/state/
+    # target_version/updated_at shape, same 0o644 world-readable intent
+    # (sovereign-update's publish_base_os_status()) -- no new sensitivity
+    # is introduced by serving it here either.
+    if not BASE_OS_UPDATE_STATUS_PATH.is_file():
+        return {"state": "idle"}
+    try:
+        return json.loads(BASE_OS_UPDATE_STATUS_PATH.read_text())
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return {"state": "unreadable"}
+
+
 class HealthHandler(BaseHTTPRequestHandler):
     server_version = "SovereignHealth/1"
     sys_version = ""
@@ -302,6 +322,8 @@ class HealthHandler(BaseHTTPRequestHandler):
             self._send_json(read_update_check())
         elif self.path == "/api/v1/update/status":
             self._send_json(read_update_status())
+        elif self.path == "/api/v1/update/base-os-status":
+            self._send_json(read_base_os_update_status())
         else:
             self.send_error(404)
 
