@@ -1,8 +1,17 @@
 # RFC-0016: Full Base-OS Updates (A/B Root Filesystem)
 
-**Status:** Accepted — direction and migration approach decided
-(2026-08-01); implementation and hardware qualification not yet started.
-See Decision.
+**Status:** Accepted (2026-08-01). **Implementation status (as of
+2026-08-05):** the `tryboot` A/B cycle (stage/trial/verify/commit),
+signed-manifest release tooling, `recover`/`prune` transaction
+integration, and CI release-candidate wiring are all done and
+hardware- or live-verified — see the dated progress entries under
+Testing Strategy for evidence of each, most recently a live CI run
+([31030670477](https://github.com/sovereignfs/sovereign-os/actions/runs/31030670477))
+producing a real, digest-verified base-OS artifact. **Not done:**
+Console UI surfacing for base-OS update state — see Interfaces and
+Data Flow for a concrete implementation spec. That is the only
+remaining item before this RFC's own Acceptance Criteria are fully
+met; nothing else here is pending.
 **Author:** Project creator and Claude
 **Created:** 2026-08-01
 **Reviewers:**
@@ -435,20 +444,70 @@ draft.
 
 ## Interfaces and Data Flow
 
-Pending implementation detail; sketched here for review:
+**Resolved and implemented** (this section originally sketched these as
+open questions; corrected here now that they're built, so a reader
+doesn't mistake settled, shipped behavior for an unresolved draft):
 
-- `sovereign-update` gains new subcommands or extends existing ones —
-  exact CLI shape (`sovereign-update stage-base-os`, or a `--layer`
-  flag on existing verbs, or something else) is an open question, not
-  decided in this draft.
-- `sovereign-update status` gains fields distinguishing an in-flight
-  base-OS transaction from an appliance one, and reports which root
-  slot is currently active/trial/committed.
-- Console's update panel (just extended in this milestone to show
-  channel/size/reboot/rollback for appliance updates) needs the same
-  treatment for base-OS updates, including communicating that a
+- `sovereign-update` gained new, dedicated subcommands rather than a
+  `--layer` flag on the existing appliance verbs — a real reuse of
+  RFC-0014's *machinery* (signing, manifest validation, transaction
+  journal, health-gating) but a genuinely separate transaction kind and
+  CLI surface, because a base-OS transaction's shape doesn't map
+  cleanly onto the appliance one's (no backup/restore step; the "slot"
+  concept has no appliance equivalent). The verbs: `stage-base-os`,
+  `trial-base-os`, `verify-base-os-trial` (systemd-invoked health gate,
+  not typically run by hand), `commit-base-os`, `discard-base-os`. All
+  in `image-builder/sovereign/layer/sovereign-proof.rootfs-overlay/usr/sbin/sovereign-update`.
+- `sovereign-update status` reports base-OS fields alongside the
+  existing appliance ones, best-effort/absent (not an error) on the
+  plain non-A/B image, which has no slot concept at all: `installed_base_os_version`,
+  `active_slot`, `base_os_update_state`, `base_os_target_version` (see
+  `show_status()`). The full base-OS transaction state machine these
+  values move through is `staged → trial → validated → committed`, with
+  `trial_failed`/`recovery_required` → `discarded` as the failure exits
+  (see `BASE_OS_ALLOWED_TRANSITIONS`); `base_os_update_state` is `idle`
+  when no transaction is in flight.
+
+**Not yet implemented — Console UI surfacing for base-OS update state,**
+the one item this RFC still needs. Concrete starting points for
+whoever picks this up:
+
+- *Backend gap:* `image-builder/sovereign/appliance/bin/console-health`
+  (the Console health HTTP server) already has a `read_update_status()`
+  function and a `/api/v1/update/status` route that reads the
+  *appliance* `update-status.json` and serves it verbatim — deliberately
+  bounded to `schema_version`/`state`/`target_version`/`updated_at` and
+  world-readable by design, per that function's own comment. `sovereign-update`
+  writes a structurally identical file for base-OS
+  (`publish_base_os_status()` → `base-os-update-status.json`, same four
+  fields, same `0o644` mode) that Console never reads today — no route
+  serves it. Adding a mirrored `read_base_os_update_status()` +
+  `/api/v1/update/base-os-status` route needs no new privacy/security
+  review; the shape and exposure reasoning are already identical to the
+  appliance file's.
+- *Frontend gap:* `image-builder/sovereign/appliance/console/assets/console.js`
+  has `renderUpdateDetails()`/`renderUpdateCheck()`/`loadUpdateCheck()`
+  for the appliance panel and nothing base-OS-aware at all. The RFC's
+  original framing ("needs the same treatment... communicating that a
   base-OS update *always* requires a reboot, unlike most appliance
-  updates today.
+  updates today") still holds as the design intent — mirror that
+  pattern against the new route above.
+- *Scope note:* "Console UI surfacing for base-OS update state" means
+  read-only status *display* (mirroring how the appliance panel itself
+  started, under ADR-0008, before ADR-0009 later added a Console-triggered
+  *install* action). A Console-triggered base-OS install
+  (`stage-base-os`→`trial-base-os`→`commit-base-os` from a button, not
+  just SSH) is a natural follow-on but a separate scope decision — if
+  wanted, reuse ADR-0009's trigger-file-per-privileged-action pattern
+  (`sovereign-console-install-trigger.service`) rather than inventing a
+  new mechanism; don't assume it's bundled into "the remaining gap"
+  without confirming.
+- There is no dedicated Console design brief for this panel —
+  [`docs/design/console-health.md`](../design/console-health.md) predates
+  it and explicitly excludes "update... controls" from its own scope.
+  This RFC and [ADR-0009](../adrs/0009-console-triggered-install.md) are
+  the authoritative specs; don't look for a separate design doc that
+  doesn't exist.
 
 ## Security and Privacy
 
