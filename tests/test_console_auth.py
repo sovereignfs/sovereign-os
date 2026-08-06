@@ -160,6 +160,27 @@ class AuthEndpointTests(unittest.TestCase):
         self.assertTrue(body["authenticated"])
         self.assertEqual(login_body["csrf_token"], body["csrf_token"])
 
+    def test_verify_endpoint_reflects_session_state_with_no_body(self):
+        connection = self.live.connection()
+        connection.request("GET", "/api/v1/auth/verify")
+        anonymous_response = connection.getresponse()
+        anonymous_body = anonymous_response.read()
+        connection.close()
+        self.assertEqual(401, anonymous_response.status)
+        self.assertEqual(b"", anonymous_body)
+
+        self.live.set_password("correct horse battery staple")
+        login_response, _ = self._login("correct horse battery staple")
+        cookie = login_response.getheader("Set-Cookie").split(";")[0]
+
+        connection = self.live.connection()
+        connection.request("GET", "/api/v1/auth/verify", headers={"Cookie": cookie})
+        response = connection.getresponse()
+        body = response.read()
+        connection.close()
+        self.assertEqual(204, response.status)
+        self.assertEqual(b"", body)
+
     def test_logout_requires_matching_csrf_token(self):
         self.live.set_password("correct horse battery staple")
         login_response, login_body = self._login("correct horse battery staple")
@@ -599,6 +620,45 @@ class InstallTriggerProvisioningTests(unittest.TestCase):
         read_start = nginx.index("location = /api/v1/update/status {")
         read_block = nginx[read_start : nginx.index("}", read_start)]
         self.assertIn("127.0.0.1:8090/api/v1/update/status", read_block)
+
+
+class ServiceGatingProvisioningTests(unittest.TestCase):
+    """ADR-0010: /dns/ gated behind Console's session via auth_request."""
+
+    LAYER = ROOT / "image-builder/sovereign/layer/sovereign-proof.yaml"
+
+    def test_nginx_package_is_unchanged(self):
+        # Confirmed on real hardware qualification (2026-08-06): this
+        # image's Debian 13 (trixie) base no longer splits nginx into
+        # nginx-light/-full/-extras -- "nginx-full" isn't even an
+        # installable package on trixie -- and the single unified "nginx"
+        # package already ships --with-http_auth_request_module. No package
+        # change is needed for ADR-0010's auth_request gate.
+        packages = self.LAYER.read_text()
+        self.assertIn("- nginx\n", packages)
+        self.assertNotIn("nginx-full", packages)
+
+    def test_verify_internal_location_is_internal_only(self):
+        nginx = NGINX.read_text()
+        start = nginx.index("location = /api/v1/auth/verify-internal {")
+        block = nginx[start : nginx.index("}", start)]
+        self.assertIn("internal;", block)
+        self.assertIn("127.0.0.1:8091/api/v1/auth/verify", block)
+        self.assertIn("proxy_pass_request_body off;", block)
+
+    def test_dns_location_is_gated_behind_the_verify_subrequest(self):
+        nginx = NGINX.read_text()
+        start = nginx.index("location /dns/ {")
+        block = nginx[start : nginx.index("\n    }", start)]
+        self.assertIn("auth_request /api/v1/auth/verify-internal;", block)
+        self.assertIn("error_page 401 = @signin;", block)
+        self.assertIn("127.0.0.1:8080/", block)
+
+    def test_signin_redirect_preserves_the_original_path(self):
+        nginx = NGINX.read_text()
+        start = nginx.index("location @signin {")
+        block = nginx[start : nginx.index("}", start)]
+        self.assertIn("return 302 /console/?next=$request_uri;", block)
 
 
 if __name__ == "__main__":

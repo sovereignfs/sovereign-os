@@ -169,6 +169,37 @@ class ConsoleTests(unittest.TestCase):
             result = module["read_update_status"]()
         self.assertEqual("idle", result["state"])
 
+    def test_read_base_os_update_status_reflects_the_transaction_state_file(self):
+        module = runpy.run_path(str(HEALTH_SERVICE))
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            status = Path(temporary_directory) / "base-os-update-status.json"
+            status.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "state": "trial",
+                        "target_version": "0.1.0-preview.24",
+                        "updated_at": "2026-08-05T20:00:00Z",
+                    }
+                )
+            )
+            with mock.patch.dict(
+                module["read_base_os_update_status"].__globals__,
+                {"BASE_OS_UPDATE_STATUS_PATH": status},
+            ):
+                result = module["read_base_os_update_status"]()
+        self.assertEqual("trial", result["state"])
+        self.assertEqual("0.1.0-preview.24", result["target_version"])
+
+    def test_read_base_os_update_status_reports_idle_when_absent(self):
+        module = runpy.run_path(str(HEALTH_SERVICE))
+        with mock.patch.dict(
+            module["read_base_os_update_status"].__globals__,
+            {"BASE_OS_UPDATE_STATUS_PATH": Path("/nonexistent/base-os-update-status.json")},
+        ):
+            result = module["read_base_os_update_status"]()
+        self.assertEqual("idle", result["state"])
+
     def test_console_routes_and_privilege_boundary(self):
         nginx = NGINX.read_text()
         service = SYSTEMD_SERVICE.read_text()
@@ -183,6 +214,8 @@ class ConsoleTests(unittest.TestCase):
         self.assertIn("location = /console/health/", nginx)
         self.assertIn("location = /api/v1/health", nginx)
         self.assertIn("127.0.0.1:8090/api/v1/health", nginx)
+        self.assertIn("location = /api/v1/update/base-os-status", nginx)
+        self.assertIn("127.0.0.1:8090/api/v1/update/base-os-status", nginx)
         self.assertIn("try_files /index.html =404;", nginx)
         self.assertNotIn("alias /usr/share/sovereign-console/index.html", nginx)
         self.assertIn("DynamicUser=yes", service)
@@ -300,6 +333,50 @@ class ConsoleTests(unittest.TestCase):
         details_block = javascript[render_details : javascript.index("\n}", render_details)]
         self.assertIn('data.status !== "update_available"', details_block)
         self.assertIn("updateDetails.hidden = true", details_block)
+
+    def test_base_os_panel_shows_read_only_transaction_status(self):
+        javascript = JAVASCRIPT.read_text()
+        html = HTML.read_text()
+
+        self.assertIn('id="base-os-summary"', html)
+        self.assertIn('id="base-os-details"', html)
+        self.assertIn('id="base-os-detail-version"', html)
+        self.assertIn('id="base-os-detail-updated"', html)
+        # Read-only status display only (see RFC-0016) -- no install
+        # trigger, password field, or CSRF token for this panel.
+        self.assertNotIn("base-os-install", html)
+        self.assertNotIn("base-os-credential", html)
+
+        self.assertIn('fetch("/api/v1/update/base-os-status"', javascript)
+        self.assertIn("recovery_required", javascript)
+        self.assertIn("trial_failed", javascript)
+
+        render_status = javascript.index("function renderBaseOsStatus")
+        status_block = javascript[render_status : javascript.index("\n}", render_status)]
+        self.assertIn("baseOsDetails.hidden = true", status_block)
+
+    def test_next_redirect_only_trusts_known_gated_prefixes(self):
+        javascript = JAVASCRIPT.read_text()
+
+        self.assertIn("NEXT_REDIRECT_PREFIXES", javascript)
+        self.assertIn('"/dns/"', javascript)
+
+        pending_next = javascript.index("function pendingNextPath")
+        block = javascript[pending_next : javascript.index("\n}", pending_next)]
+        # Must reject protocol-relative ("//host/...") and backslash-based
+        # redirect tricks, and must not accept an arbitrary path outside
+        # the allowlist -- this is the one thing standing between ADR-0010's
+        # sign-in redirect and an open redirect.
+        self.assertIn('next.startsWith("//")', block)
+        self.assertIn("NEXT_REDIRECT_PREFIXES.some", block)
+
+    def test_successful_login_redirects_to_the_pending_next_path(self):
+        javascript = JAVASCRIPT.read_text()
+
+        submit_start = javascript.index('authForm.addEventListener("submit"')
+        submit_block = javascript[submit_start : javascript.index("\n});", submit_start)]
+        self.assertIn("if (nextPath) {", submit_block)
+        self.assertIn("window.location.assign(nextPath);", submit_block)
 
 
 if __name__ == "__main__":
