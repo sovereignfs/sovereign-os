@@ -1,17 +1,21 @@
 # RFC-0016: Full Base-OS Updates (A/B Root Filesystem)
 
 **Status:** Accepted (2026-08-01). **Implementation status (as of
-2026-08-05):** the `tryboot` A/B cycle (stage/trial/verify/commit),
+2026-08-06):** the `tryboot` A/B cycle (stage/trial/verify/commit),
 signed-manifest release tooling, `recover`/`prune` transaction
 integration, and CI release-candidate wiring are all done and
 hardware- or live-verified — see the dated progress entries under
 Testing Strategy for evidence of each, most recently a live CI run
 ([31030670477](https://github.com/sovereignfs/sovereign-os/actions/runs/31030670477))
-producing a real, digest-verified base-OS artifact. **Not done:**
-Console UI surfacing for base-OS update state — see Interfaces and
-Data Flow for a concrete implementation spec. That is the only
-remaining item before this RFC's own Acceptance Criteria are fully
-met; nothing else here is pending.
+producing a real, digest-verified base-OS artifact. Console UI
+surfacing for base-OS update state is now also implemented — a
+read-only `/api/v1/update/base-os-status` route and a matching Console
+panel (target version, reboot requirement, last-updated time) — and
+unit-tested, but not yet exercised end to end against a live base-OS
+transaction on hardware; see Interfaces and Data Flow. The remaining
+Acceptance Criteria item — the qualification device receiving a
+second base-OS update without a second reflash — also has not yet
+been exercised; see Acceptance Criteria.
 **Author:** Project creator and Claude
 **Created:** 2026-08-01
 **Reviewers:**
@@ -468,40 +472,41 @@ doesn't mistake settled, shipped behavior for an unresolved draft):
   (see `BASE_OS_ALLOWED_TRANSITIONS`); `base_os_update_state` is `idle`
   when no transaction is in flight.
 
-**Not yet implemented — Console UI surfacing for base-OS update state,**
-the one item this RFC still needs. Concrete starting points for
-whoever picks this up:
+**Implemented (2026-08-06) — Console UI surfacing for base-OS update
+state,** the last item this RFC needed:
 
-- *Backend gap:* `image-builder/sovereign/appliance/bin/console-health`
-  (the Console health HTTP server) already has a `read_update_status()`
-  function and a `/api/v1/update/status` route that reads the
-  *appliance* `update-status.json` and serves it verbatim — deliberately
-  bounded to `schema_version`/`state`/`target_version`/`updated_at` and
-  world-readable by design, per that function's own comment. `sovereign-update`
-  writes a structurally identical file for base-OS
-  (`publish_base_os_status()` → `base-os-update-status.json`, same four
-  fields, same `0o644` mode) that Console never reads today — no route
-  serves it. Adding a mirrored `read_base_os_update_status()` +
-  `/api/v1/update/base-os-status` route needs no new privacy/security
-  review; the shape and exposure reasoning are already identical to the
+- *Backend:* `image-builder/sovereign/appliance/bin/console-health`
+  gained `read_base_os_update_status()` and a mirrored
+  `/api/v1/update/base-os-status` route, reading the base-OS
+  `base-os-update-status.json` (`schema_version`/`state`/`target_version`/`updated_at`,
+  `0o644`, world-readable) the same way the existing appliance route
+  already reads `update-status.json` — no new privacy/security review
+  needed, since the shape and exposure reasoning are identical to the
   appliance file's.
-- *Frontend gap:* `image-builder/sovereign/appliance/console/assets/console.js`
-  has `renderUpdateDetails()`/`renderUpdateCheck()`/`loadUpdateCheck()`
-  for the appliance panel and nothing base-OS-aware at all. The RFC's
-  original framing ("needs the same treatment... communicating that a
-  base-OS update *always* requires a reboot, unlike most appliance
-  updates today") still holds as the design intent — mirror that
-  pattern against the new route above.
-- *Scope note:* "Console UI surfacing for base-OS update state" means
-  read-only status *display* (mirroring how the appliance panel itself
-  started, under ADR-0008, before ADR-0009 later added a Console-triggered
-  *install* action). A Console-triggered base-OS install
+- *Frontend:* `image-builder/sovereign/appliance/console/assets/console.js`
+  gained a base-OS panel alongside the existing appliance
+  `renderUpdateDetails()`/`renderUpdateCheck()`/`loadUpdateCheck()`,
+  showing target version, reboot requirement (base-OS updates always
+  require one, unlike most appliance updates), and last-updated time
+  while a base-OS transaction is staged/trialing/committing.
+- *Scope, as shipped:* read-only status *display* only (mirroring how
+  the appliance panel itself started under ADR-0008, before ADR-0009
+  later added a Console-triggered *install* action). A
+  Console-triggered base-OS install
   (`stage-base-os`→`trial-base-os`→`commit-base-os` from a button, not
-  just SSH) is a natural follow-on but a separate scope decision — if
-  wanted, reuse ADR-0009's trigger-file-per-privileged-action pattern
-  (`sovereign-console-install-trigger.service`) rather than inventing a
-  new mechanism; don't assume it's bundled into "the remaining gap"
-  without confirming.
+  just SSH) remains a separate, undecided follow-on scope, not bundled
+  into this work.
+- Unit-tested (`tests/test_console.py`, e.g.
+  `test_base_os_panel_shows_read_only_transaction_status`,
+  `test_read_base_os_update_status_reflects_the_transaction_state_file`).
+  Built and verified during the same session as the ADR-0010 session-gate
+  hardware qualification pass, which surfaced and fixed a real
+  `display:flex`/`[hidden]` CSS specificity bug affecting this panel — see
+  the
+  [shared Console session gate hardware qualification report](../research/shared-console-session-gate-hardware-qualification-report.md).
+  That report does not itself exercise the base-OS panel end to end
+  against a live base-OS transaction; no dedicated report for that exists
+  yet.
 - There is no dedicated Console design brief for this panel —
   [`docs/design/console-health.md`](../design/console-health.md) predates
   it and explicitly excludes "update... controls" from its own scope.

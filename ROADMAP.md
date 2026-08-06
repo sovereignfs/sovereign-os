@@ -339,7 +339,7 @@ network access.
 ### 6. Full Base-OS Updates
 
 **Status:** 🟡 Core mechanism hardware-verified, Console UI surfacing
-remaining —
+implemented but not yet hardware-verified end to end —
 [RFC-0016](docs/rfcs/0016-full-base-os-updates.md) (accepted
 2026-08-01): A/B root on Raspberry Pi's native `tryboot` mechanism,
 reusing RFC-0014's signed/staged/health-gated/rollback machinery rather
@@ -348,8 +348,13 @@ than adopting a third-party OTA framework. Existing single-root devices
 one-time reflash, then receive base-OS updates like any new device from
 that point forward. The `tryboot`/trial/commit/recovery cycle, release
 tooling, `recover`/`prune` transaction integration, and CI release-candidate
-wiring are all hardware- or live-verified; Console UI surfacing for
-base-OS update state is the remaining gap before production-ready.
+wiring are all hardware- or live-verified. Console UI surfacing for
+base-OS update state — a read-only `/api/v1/update/base-os-status`
+route and matching Console panel — is now implemented and unit-tested;
+it has not yet been exercised against a live base-OS transaction on
+hardware. The remaining gap before production-ready is that hardware
+qualification, plus confirming a device can receive a second base-OS
+update without a second reflash.
 
 **Depends on:** Stable appliance updater and persistent partition contract
 
@@ -390,7 +395,8 @@ This milestone closes the remaining “flash once” gap.
 - ⚪ Home Assistant capability integration
 - 🟡 A/B full base-OS updates (RFC-0016): core `tryboot` cycle, release
   tooling, and CI wiring hardware/live-verified; Console UI surfacing
-  remaining
+  implemented and unit-tested, hardware verification against a live
+  transaction remaining
 
 ---
 
