@@ -338,9 +338,11 @@ network access.
 
 ### 6. Full Base-OS Updates
 
-**Status:** 🟡 Core mechanism hardware-verified end to end, including a
-second base-OS update with no reflash; Console UI surfacing still needs
-its own live-hardware pass —
+**Status:** 🟡 Every RFC-0016 Acceptance Criteria item is now
+hardware-verified, including a second base-OS update with no reflash
+and the Console panel's own live-hardware pass; four real defects the
+qualification surfaced still need actual fixes before this milestone
+is production-ready —
 [RFC-0016](docs/rfcs/0016-full-base-os-updates.md) (accepted
 2026-08-01): A/B root on Raspberry Pi's native `tryboot` mechanism,
 reusing RFC-0014's signed/staged/health-gated/rollback machinery rather
@@ -349,27 +351,27 @@ than adopting a third-party OTA framework. Existing single-root devices
 one-time reflash, then receive base-OS updates like any new device from
 that point forward. The `tryboot`/trial/commit/recovery cycle, release
 tooling, `recover`/`prune` transaction integration, and CI release-candidate
-wiring are all hardware- or live-verified. Console UI surfacing for
-base-OS update state — a read-only `/api/v1/update/base-os-status`
-route and matching Console panel — is implemented and unit-tested but
-still not exercised against a live base-OS transaction on hardware.
+wiring are all hardware- or live-verified.
 
 The qualification device — already migrated to A/B on 2026-08-02 —
 received a genuine **second** base-OS update on 2026-08-06 with no
 further reflash: staged, trialed, health-gated, and committed, confirmed
-persistent across an ordinary reboot. See the
-[second base-OS update qualification report](docs/research/second-base-os-update-hardware-qualification-report.md).
-That pass found and worked around four real already-flashed-device
-compatibility gaps — a pre-fix `sovereign-update` binary rejecting
-modern manifests, a `"proof"`/`"preview"` semver-ordering collision that
-permanently blocks such devices from real `preview.N` base-OS releases,
-a stale-binary transaction missing a field the recovery logic needs
-(causing a healthy trial to be falsely flagged as interrupted), and
-`installed_base_os_version` being a hardcoded build-time placeholder
-that never reflects the real installed version. None of the four block
-a freshly-flashed device; all four still need real fixes before this
-milestone is production-ready, alongside the Console panel's own
-hardware pass.
+persistent across an ordinary reboot. The Console base-OS panel — a
+read-only `/api/v1/update/base-os-status` route and matching panel,
+deployed the same day onto the device's separately-stale Console — was
+then confirmed genuinely serving that real transaction data through the
+real nginx proxy. See the
+[second base-OS update qualification report](docs/research/second-base-os-update-hardware-qualification-report.md)
+for both. That work found and worked around four real
+already-flashed-device compatibility gaps — a pre-fix `sovereign-update`
+binary rejecting modern manifests, a `"proof"`/`"preview"`
+semver-ordering collision that permanently blocks such devices from
+real `preview.N` base-OS releases, a stale-binary transaction missing a
+field the recovery logic needs (causing a healthy trial to be falsely
+flagged as interrupted), and `installed_base_os_version` being a
+hardcoded build-time placeholder that never reflects the real installed
+version. None of the four block a freshly-flashed device; all four
+still need real fixes before this milestone is production-ready.
 
 **Depends on:** Stable appliance updater and persistent partition contract
 
@@ -408,11 +410,11 @@ This milestone closes the remaining “flash once” gap.
 - ⏳ Local inference benchmark and conversation/capability RFCs
 - ⚪ SearXNG-backed web-search capability
 - ⚪ Home Assistant capability integration
-- 🟡 A/B full base-OS updates (RFC-0016): core `tryboot` cycle, release
-  tooling, and CI wiring hardware/live-verified, including a second
-  base-OS update with no reflash; Console UI surfacing implemented and
-  unit-tested but not yet hardware-verified against a live transaction;
-  four real already-flashed-device defects found and still need fixes
+- 🟡 A/B full base-OS updates (RFC-0016): every Acceptance Criteria item
+  hardware-verified, including a second base-OS update with no reflash
+  and the Console panel against a live transaction; four real
+  already-flashed-device defects found and still need fixes before
+  production-ready
 
 ---
 

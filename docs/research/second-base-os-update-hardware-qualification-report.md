@@ -210,12 +210,29 @@ man-in-the-middle warning.
 - Four real defects found and documented (Findings 1–4), all specific to
   already-flashed devices carrying binaries or baked-in content that
   predate current `main` — not defects a freshly-flashed device would hit.
-- The Console base-OS status panel itself (RFC-0016's other recent
-  addition) was **not** exercised against this live transaction — the
-  device's running Console (`sovereign-console.service`, serving from
-  `/opt/sovereign/releases/0.1.0-dev/appliance/`) also predates the panel's
-  backend route, and updating it was deliberately deferred out of this
-  session's scope. Still open.
+- **The Console base-OS status panel was subsequently exercised too**
+  (2026-08-06, same day, follow-on to this report): the device's
+  `sovereign-console.service` was also stale — same root cause as
+  Findings 1 and 3, a different binary this time
+  (`bin/console-health`) — and was deployed to current `main`
+  (`console-health`, `console.js`, `console.css`, `index.html`, plus a
+  targeted nginx patch adding just the new
+  `location = /api/v1/update/base-os-status` block, deliberately
+  *not* a wholesale nginx.conf replace since that file also carries
+  the unrelated ADR-0010 session-gate change, already tested and
+  reverted off this device in its own qualification pass). Confirmed
+  via `curl` against the real nginx proxy (no browser access available
+  in this session): the served `index.html`/`console.js`/`console.css`
+  are byte-identical to what was deployed, the base-OS panel markup
+  (`base-os-title`, `base-os-summary`, `base-os-details`,
+  `base-os-detail-version`, `base-os-detail-updated`) is present in the
+  served HTML, and `/api/v1/update/base-os-status` genuinely returns
+  this device's real committed transaction
+  (`{"state":"committed","target_version":"0.1.0-proof.2",...}`) through
+  the real proxy — which `console.js`'s `renderBaseOsStatus()` maps to
+  "Base-OS update installed." with the target version and update time
+  populated. This closes the Console-panel item that was open when this
+  report was first written.
 
 ## Cleanup
 
@@ -248,5 +265,5 @@ running the `0.1.0-preview.25`-built image content, committed, as
   again for base-OS-tooling-level fixes on an already-migrated device,
   until base-OS content itself gains a way to update `sovereign-update`
   out-of-band from a full slot write.
-- The Console base-OS panel still needs its own live hardware pass against
-  a real transaction — deferred here, not done.
+- The Console base-OS panel's own live-hardware pass is now also done
+  (see Result above) — no longer open.

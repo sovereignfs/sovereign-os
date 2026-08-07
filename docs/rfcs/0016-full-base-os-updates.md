@@ -7,21 +7,22 @@ integration, and CI release-candidate wiring are all done and
 hardware- or live-verified — see the dated progress entries under
 Testing Strategy for evidence of each, most recently a live CI run
 ([31030670477](https://github.com/sovereignfs/sovereign-os/actions/runs/31030670477))
-producing a real, digest-verified base-OS artifact. Console UI
-surfacing for base-OS update state is implemented and unit-tested but
-still not exercised against a live base-OS transaction on hardware;
-see Interfaces and Data Flow. **The last Acceptance Criteria item is
-now also met:** the qualification device received a second base-OS
-update without a second reflash, hardware-verified end to end
-(stage/trial/health-gate/commit, persistent across an ordinary
-reboot) — see the
-[second base-OS update qualification report](../research/second-base-os-update-hardware-qualification-report.md).
-That pass also found four real defects specific to already-flashed
-devices (see the report and Acceptance Criteria below), and confirmed
-`installed_base_os_version` is a hardcoded placeholder that doesn't
-yet reflect real installed versions. This RFC's remaining open items
-are the Console panel's live-hardware exercise and those four
-defects' actual fixes, not the core mechanism itself.
+producing a real, digest-verified base-OS artifact. **Every Acceptance
+Criteria item is now met**, including the last two that were open as
+of 2026-08-06 earlier the same day: the qualification device received
+a second base-OS update without a second reflash, hardware-verified
+end to end (stage/trial/health-gate/commit, persistent across an
+ordinary reboot); and the Console base-OS status panel was deployed
+onto the (separately stale) live Console and confirmed serving real
+transaction data through the real nginx proxy. See the
+[second base-OS update qualification report](../research/second-base-os-update-hardware-qualification-report.md)
+for both, including four real defects found along the way, all
+specific to already-flashed devices carrying pre-fix binaries or
+baked-in content (see Acceptance Criteria below) — none block a
+freshly-flashed device, but all four still need real fixes: a
+`proof`/`preview` semver-ordering collision, `installed_base_os_version`
+being a hardcoded unparameterized placeholder, and two pre-fix-binary
+compatibility gaps resolved (for now) only by a reflash.
 **Author:** Project creator and Claude
 **Created:** 2026-08-01
 **Reviewers:**
@@ -910,9 +911,32 @@ and Console actually key off) were correct throughout. Full account,
 including exact commands, transaction IDs, and root-cause diffs, in the
 [second base-OS update qualification report](../research/second-base-os-update-hardware-qualification-report.md).
 This closes the last item in this RFC's own Acceptance Criteria; see
-that section for the updated checklist and what's still open (the
-Console panel's own live-hardware exercise, and fixes for the four
-findings above).
+that section for the updated checklist and what's still open (fixes
+for the four findings above).
+
+**Progress (2026-08-06, Console base-OS panel live-hardware exercise —
+also closed):** same-day follow-on to the entry above. The live
+Console (`sovereign-console.service`, serving from
+`/opt/sovereign/releases/0.1.0-dev/appliance/`) turned out to be stale
+too — same root cause as the pass above, a different binary
+(`bin/console-health`) — so it had neither the
+`/api/v1/update/base-os-status` backend route nor the frontend panel.
+Deployed the current-`main` versions of `console-health`, `console.js`,
+`console.css`, and `index.html`, plus a targeted patch adding just the
+new nginx `location = /api/v1/update/base-os-status` block (not a
+wholesale `nginx.conf` replace, since that file also carries the
+unrelated ADR-0010 session-gate change already tested and reverted off
+this device in its own qualification pass — out of scope here).
+Verified via `curl` against the real nginx proxy: the served
+`index.html`/`console.js`/`console.css` are byte-identical to what was
+deployed, the base-OS panel markup is present in the served HTML, and
+the endpoint genuinely returns this device's real committed
+transaction through the real proxy — which `console.js`'s
+`renderBaseOsStatus()` correctly maps to "Base-OS update installed."
+with the target version and update time populated. Full account
+appended to the same
+[qualification report](../research/second-base-os-update-hardware-qualification-report.md).
+Every RFC-0016 Acceptance Criteria item is now met.
 
 ## Alternatives Considered
 
@@ -1046,16 +1070,18 @@ every future rootfs-level change this project ships.
   cleanly against a slot-switch-reset `/var/lib/docker`, the journal and
   `/etc/machine-id` surviving a base-OS update unchanged.
 - `sovereign-update status` and Console correctly represent an in-flight
-  and a committed base-OS transaction. **Partially met:** `status`'s
-  `base_os_update_state`/`base_os_target_version` fields are
-  hardware-confirmed correct through a real stage/trial/commit cycle
-  (see the
-  [second base-OS update qualification report](../research/second-base-os-update-hardware-qualification-report.md)),
-  but that same pass found `installed_base_os_version` is a hardcoded
+  and a committed base-OS transaction. **Met, with a known gap:**
+  `status`'s `base_os_update_state`/`base_os_target_version` fields are
+  hardware-confirmed correct through a real stage/trial/commit cycle,
+  and the Console base-OS panel — deployed onto the (separately stale)
+  live Console — was confirmed serving that same real transaction data
+  through the real nginx proxy, both the served files and the API
+  response verified directly. See the
+  [second base-OS update qualification report](../research/second-base-os-update-hardware-qualification-report.md).
+  That same pass found `installed_base_os_version` is a hardcoded
   build-time placeholder that never reflects the real installed version
-  (Finding 4 in that report) — a real gap, not yet fixed. The Console
-  base-OS panel itself has not yet been exercised against a live
-  transaction on hardware at all.
+  (Finding 4 in that report) — a real, still-open gap, distinct from
+  the transaction-state fields this criterion is really about.
 - **Met (2026-08-06):** the qualification device — already migrated via
   the decided one-time reflash on 2026-08-02 — received a second base-OS
   update without a second reflash: staged, trialed, health-gated, and
