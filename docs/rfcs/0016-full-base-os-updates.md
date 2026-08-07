@@ -8,14 +8,20 @@ hardware- or live-verified — see the dated progress entries under
 Testing Strategy for evidence of each, most recently a live CI run
 ([31030670477](https://github.com/sovereignfs/sovereign-os/actions/runs/31030670477))
 producing a real, digest-verified base-OS artifact. Console UI
-surfacing for base-OS update state is now also implemented — a
-read-only `/api/v1/update/base-os-status` route and a matching Console
-panel (target version, reboot requirement, last-updated time) — and
-unit-tested, but not yet exercised end to end against a live base-OS
-transaction on hardware; see Interfaces and Data Flow. The remaining
-Acceptance Criteria item — the qualification device receiving a
-second base-OS update without a second reflash — also has not yet
-been exercised; see Acceptance Criteria.
+surfacing for base-OS update state is implemented and unit-tested but
+still not exercised against a live base-OS transaction on hardware;
+see Interfaces and Data Flow. **The last Acceptance Criteria item is
+now also met:** the qualification device received a second base-OS
+update without a second reflash, hardware-verified end to end
+(stage/trial/health-gate/commit, persistent across an ordinary
+reboot) — see the
+[second base-OS update qualification report](../research/second-base-os-update-hardware-qualification-report.md).
+That pass also found four real defects specific to already-flashed
+devices (see the report and Acceptance Criteria below), and confirmed
+`installed_base_os_version` is a hardcoded placeholder that doesn't
+yet reflect real installed versions. This RFC's remaining open items
+are the Console panel's live-hardware exercise and those four
+defects' actual fixes, not the core mechanism itself.
 **Author:** Project creator and Claude
 **Created:** 2026-08-01
 **Reviewers:**
@@ -872,6 +878,42 @@ manually-built images, never an artifact that came out of this workflow.
 That's the natural next verification once there's a reason to cut a real
 base-OS release, not attempted here.
 
+**Progress (2026-08-06, second base-OS update without a reflash — last
+Acceptance Criteria item closed):** exactly the verification the entry
+above named as the natural next step, done for real. Dispatched a fresh
+CI build (`0.1.0-preview.25`, `base_os_key_id: sovereign-production-1`,
+source `4cae39f`) since the earlier `0.1.0-preview.24` artifact was
+signed for the wrong key ID and could never verify against the device's
+actual trust store; the device operator signed the resulting manifest
+offline with the real production key per ADR-0006. Staging it against
+the qualification device — already on the A/B layout since its
+2026-08-02 reflash — surfaced two real already-flashed-device
+compatibility gaps in sequence (a pre-`ffe2278` binary rejecting the
+modern `+zstd` manifest format outright, then a `DOWNGRADE_REJECTED`
+from `"proof"` sorting after `"preview"` under semver prerelease
+comparison), and a third once a trial boot was actually triggered (the
+recovery auditor false-flagging a healthy trial as interrupted, because
+the transaction — staged by that same pre-fix binary — was missing a
+`target_slot` field the current recovery logic depends on). Each was
+root-caused against the actual source (diffing old vs. new
+`sovereign-update` behavior directly, not guessed at), worked around
+for qualification purposes without touching the device's read-only
+root, and the underlying `tryboot`/health-gate/commit cycle itself
+worked cleanly once past them: staged → trial → validated → committed,
+confirmed persistent across a subsequent ordinary reboot. A fourth
+finding — `installed_base_os_version` never changing because
+`/etc/sovereign-base-os-release`'s `VERSION` is a hardcoded,
+unparameterized build-time placeholder — was caught by the same pass
+but isn't itself a blocker to the Acceptance Criteria item, since
+`base_os_update_state`/`base_os_target_version` (the fields `status`
+and Console actually key off) were correct throughout. Full account,
+including exact commands, transaction IDs, and root-cause diffs, in the
+[second base-OS update qualification report](../research/second-base-os-update-hardware-qualification-report.md).
+This closes the last item in this RFC's own Acceptance Criteria; see
+that section for the updated checklist and what's still open (the
+Console panel's own live-hardware exercise, and fixes for the four
+findings above).
+
 ## Alternatives Considered
 
 ### RAUC or Mender (adopt a third-party A/B OTA framework)
@@ -1004,11 +1046,29 @@ every future rootfs-level change this project ships.
   cleanly against a slot-switch-reset `/var/lib/docker`, the journal and
   `/etc/machine-id` surviving a base-OS update unchanged.
 - `sovereign-update status` and Console correctly represent an in-flight
-  and a committed base-OS transaction.
-- The qualification device (and any other currently-deployed device)
-  is successfully migrated via the decided one-time reflash and
-  receives at least one subsequent base-OS update without a second
-  reflash.
+  and a committed base-OS transaction. **Partially met:** `status`'s
+  `base_os_update_state`/`base_os_target_version` fields are
+  hardware-confirmed correct through a real stage/trial/commit cycle
+  (see the
+  [second base-OS update qualification report](../research/second-base-os-update-hardware-qualification-report.md)),
+  but that same pass found `installed_base_os_version` is a hardcoded
+  build-time placeholder that never reflects the real installed version
+  (Finding 4 in that report) — a real gap, not yet fixed. The Console
+  base-OS panel itself has not yet been exercised against a live
+  transaction on hardware at all.
+- **Met (2026-08-06):** the qualification device — already migrated via
+  the decided one-time reflash on 2026-08-02 — received a second base-OS
+  update without a second reflash: staged, trialed, health-gated, and
+  committed, with the commit confirmed persistent across a subsequent
+  ordinary reboot. See the
+  [second base-OS update qualification report](../research/second-base-os-update-hardware-qualification-report.md)
+  for the full account, including four real defects the pass surfaced
+  (a pre-fix binary rejecting modern manifests, a `proof`/`preview`
+  semver-ordering collision, a stale-binary transaction missing the
+  `target_slot` field that made recovery falsely flag a healthy trial as
+  interrupted, and the `installed_base_os_version` placeholder above).
+  Only "any other currently-deployed device" beyond this one remains
+  unverified, and this project has exactly one qualification device.
 
 ## Decision
 
