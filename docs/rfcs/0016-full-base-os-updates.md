@@ -16,13 +16,17 @@ ordinary reboot); and the Console base-OS status panel was deployed
 onto the (separately stale) live Console and confirmed serving real
 transaction data through the real nginx proxy. See the
 [second base-OS update qualification report](../research/second-base-os-update-hardware-qualification-report.md)
-for both, including four real defects found along the way, all
+for the full account, including four real defects the pass found — all
 specific to already-flashed devices carrying pre-fix binaries or
-baked-in content (see Acceptance Criteria below) — none block a
-freshly-flashed device, but all four still need real fixes: a
-`proof`/`preview` semver-ordering collision, `installed_base_os_version`
-being a hardcoded unparameterized placeholder, and two pre-fix-binary
-compatibility gaps resolved (for now) only by a reflash.
+baked-in content, none blocking a freshly-flashed device. **All four
+are now resolved (2026-08-07):** the `proof`/`preview` semver-ordering
+collision and the `installed_base_os_version` hardcoded-placeholder
+gap both got real code fixes (`compare_versions`'s
+`PRERELEASE_CHANNEL_ORDER` table; `pre-image.sh` now templates from
+`$SOVEREIGN_VERSION`), each with new test coverage; the other two
+needed no separate fix, since current `main` already contained their
+fixes — the qualification device just hadn't received them yet, which
+is precisely how the pass diagnosed both.
 **Author:** Project creator and Claude
 **Created:** 2026-08-01
 **Reviewers:**
@@ -938,6 +942,27 @@ appended to the same
 [qualification report](../research/second-base-os-update-hardware-qualification-report.md).
 Every RFC-0016 Acceptance Criteria item is now met.
 
+**Progress (2026-08-07, real fixes for the four qualification
+findings):** `compare_versions` gained an explicit
+`PRERELEASE_CHANNEL_ORDER = ("proof", "preview", "rc", "stable")`
+table so a known leading prerelease identifier is ranked by this
+project's actual release chronology instead of plain lexical
+comparison (which put `"proof"` after `"preview"`, backwards) — an
+unrecognized channel word still falls back to the original lexical
+behavior. Six new tests in `tests/test_update_version_compare.py`
+cover it, including that same-channel numeric comparison and
+release-core dominance are unaffected. Separately, `pre-image.sh` now
+templates `/etc/sovereign-base-os-release` from
+`$SOVEREIGN_VERSION`/`$SOVEREIGN_CHANNEL` (already validated and
+exported as Docker `ENV` vars before this hook runs) instead of a
+hardcoded `"0.1.0-proof.1"` literal, mirroring how
+`image-builder/build-sovereign-image` already templates the
+appliance's own `/etc/sovereign-release` — `tests/test_ab_data_image.py`
+now asserts the template is used and the old literal is gone. The
+other two findings from the qualification report needed no code
+change: both were fixed in `main` already, the qualification device
+simply hadn't received the fix yet. Full test suite (230 tests) passes.
+
 ## Alternatives Considered
 
 ### RAUC or Mender (adopt a third-party A/B OTA framework)
@@ -1070,18 +1095,20 @@ every future rootfs-level change this project ships.
   cleanly against a slot-switch-reset `/var/lib/docker`, the journal and
   `/etc/machine-id` surviving a base-OS update unchanged.
 - `sovereign-update status` and Console correctly represent an in-flight
-  and a committed base-OS transaction. **Met, with a known gap:**
-  `status`'s `base_os_update_state`/`base_os_target_version` fields are
+  and a committed base-OS transaction. **Fully met:** `status`'s
+  `base_os_update_state`/`base_os_target_version` fields are
   hardware-confirmed correct through a real stage/trial/commit cycle,
   and the Console base-OS panel — deployed onto the (separately stale)
   live Console — was confirmed serving that same real transaction data
   through the real nginx proxy, both the served files and the API
   response verified directly. See the
   [second base-OS update qualification report](../research/second-base-os-update-hardware-qualification-report.md).
-  That same pass found `installed_base_os_version` is a hardcoded
-  build-time placeholder that never reflects the real installed version
-  (Finding 4 in that report) — a real, still-open gap, distinct from
-  the transaction-state fields this criterion is really about.
+  That same pass found `installed_base_os_version` was a hardcoded
+  build-time placeholder that never reflected the real installed
+  version (Finding 4 in that report); fixed 2026-08-07 by templating
+  `pre-image.sh`'s `/etc/sovereign-base-os-release` from
+  `$SOVEREIGN_VERSION`, the same mechanism the appliance layer's own
+  version stamping already uses.
 - **Met (2026-08-06):** the qualification device — already migrated via
   the decided one-time reflash on 2026-08-02 — received a second base-OS
   update without a second reflash: staged, trialed, health-gated, and

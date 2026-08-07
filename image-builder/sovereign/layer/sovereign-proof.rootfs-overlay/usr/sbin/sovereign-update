@@ -246,6 +246,16 @@ def parse_version(value):
     return core, identifiers
 
 
+# The leading prerelease identifier names this project's own release
+# channel, not an arbitrary semver prerelease tag -- plain lexical
+# comparison would put "proof" after "preview" (alphabetically true, but
+# backwards from this project's actual history: proof builds predate the
+# preview channel entirely). Listed oldest-to-newest; a channel word not
+# in this tuple falls back to plain lexical comparison against another
+# unknown word, same as semver's own default.
+PRERELEASE_CHANNEL_ORDER = ("proof", "preview", "rc", "stable")
+
+
 def compare_versions(left, right):
     left_core, left_pre = parse_version(left)
     right_core, right_pre = parse_version(right)
@@ -255,9 +265,15 @@ def compare_versions(left, right):
         if left_pre == right_pre:
             return 0
         return 1 if left_pre is None else -1
-    for left_id, right_id in zip(left_pre, right_pre):
+    for index, (left_id, right_id) in enumerate(zip(left_pre, right_pre)):
         if left_id == right_id:
             continue
+        if index == 0 and left_id in PRERELEASE_CHANNEL_ORDER and right_id in PRERELEASE_CHANNEL_ORDER:
+            return (
+                -1
+                if PRERELEASE_CHANNEL_ORDER.index(left_id) < PRERELEASE_CHANNEL_ORDER.index(right_id)
+                else 1
+            )
         left_numeric = left_id.isdigit()
         right_numeric = right_id.isdigit()
         if left_numeric and right_numeric:

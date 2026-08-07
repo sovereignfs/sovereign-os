@@ -340,9 +340,11 @@ network access.
 
 **Status:** 🟡 Every RFC-0016 Acceptance Criteria item is now
 hardware-verified, including a second base-OS update with no reflash
-and the Console panel's own live-hardware pass; four real defects the
-qualification surfaced still need actual fixes before this milestone
-is production-ready —
+and the Console panel's own live-hardware pass; the four real defects
+the qualification surfaced are now fixed. What's left before this
+milestone is fully production-ready is the still-undesigned external
+recovery-image path (both-slots-corrupted / physical-media failure —
+`tryboot` fallback only covers ordinary boot failure) —
 [RFC-0016](docs/rfcs/0016-full-base-os-updates.md) (accepted
 2026-08-01): A/B root on Raspberry Pi's native `tryboot` mechanism,
 reusing RFC-0014's signed/staged/health-gated/rollback machinery rather
@@ -362,16 +364,21 @@ deployed the same day onto the device's separately-stale Console — was
 then confirmed genuinely serving that real transaction data through the
 real nginx proxy. See the
 [second base-OS update qualification report](docs/research/second-base-os-update-hardware-qualification-report.md)
-for both. That work found and worked around four real
-already-flashed-device compatibility gaps — a pre-fix `sovereign-update`
-binary rejecting modern manifests, a `"proof"`/`"preview"`
-semver-ordering collision that permanently blocks such devices from
-real `preview.N` base-OS releases, a stale-binary transaction missing a
-field the recovery logic needs (causing a healthy trial to be falsely
-flagged as interrupted), and `installed_base_os_version` being a
-hardcoded build-time placeholder that never reflects the real installed
-version. None of the four block a freshly-flashed device; all four
-still need real fixes before this milestone is production-ready.
+for both. That work found four real already-flashed-device
+compatibility gaps — a pre-fix `sovereign-update` binary rejecting
+modern manifests, a `"proof"`/`"preview"` semver-ordering collision
+that permanently blocked such devices from real `preview.N` base-OS
+releases, a stale-binary transaction missing a field the recovery
+logic needs (causing a healthy trial to be falsely flagged as
+interrupted), and `installed_base_os_version` being a hardcoded
+build-time placeholder that never reflected the real installed
+version. None of the four blocked a freshly-flashed device. As of
+2026-08-07, all four are resolved: the ordering collision and the
+placeholder both got real code fixes (`compare_versions`'s new
+`PRERELEASE_CHANNEL_ORDER` table; `pre-image.sh` now templates from
+`$SOVEREIGN_VERSION`), each with new test coverage; the other two
+needed no separate fix, since `main` already contained their fixes —
+the qualification device just hadn't received them yet.
 
 **Depends on:** Stable appliance updater and persistent partition contract
 
@@ -413,8 +420,8 @@ This milestone closes the remaining “flash once” gap.
 - 🟡 A/B full base-OS updates (RFC-0016): every Acceptance Criteria item
   hardware-verified, including a second base-OS update with no reflash
   and the Console panel against a live transaction; four real
-  already-flashed-device defects found and still need fixes before
-  production-ready
+  already-flashed-device defects found and now fixed; external
+  recovery-image path still undesigned
 
 ---
 

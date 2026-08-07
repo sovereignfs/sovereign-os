@@ -54,11 +54,19 @@ sed \
 # (which activate_release rewrites in place after the fact): a base-OS
 # "install" is a wholesale new root filesystem, so its version naturally
 # lives with that filesystem's own /etc rather than something a script
-# updates post-boot. Placeholder version until real release tooling (out
-# of scope for this milestone) parameterizes it the way
-# create-update-release.py does for appliance releases.
-cat > "${filesystem}/etc/sovereign-base-os-release" <<'EOF'
-VERSION="0.1.0-proof.1"
+# updates post-boot. Templated from $SOVEREIGN_VERSION/$SOVEREIGN_CHANNEL
+# the same way image-builder/build-sovereign-image already templates the
+# appliance's own /etc/sovereign-release, both already validated and
+# exported as Docker ENV vars before this hook runs (see
+# Dockerfile.sovereign) -- previously a hardcoded "0.1.0-proof.1"
+# placeholder regardless of what version the image was actually built as,
+# which meant `sovereign-update status`'s installed_base_os_version could
+# never reflect a real installed version. See the
+# second-base-os-update-hardware-qualification-report.md finding this
+# fixes.
+cat > "${filesystem}/etc/sovereign-base-os-release" <<EOF
+VERSION="$SOVEREIGN_VERSION"
+CHANNEL="$SOVEREIGN_CHANNEL"
 EOF
 
 # --- /data skeleton (existing Sovereign layout, unchanged) ---

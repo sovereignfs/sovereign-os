@@ -138,6 +138,15 @@ class AbDataBaseOsTrialHealthGateTests(unittest.TestCase):
     def test_pre_image_bakes_a_per_slot_base_os_version(self):
         content = (IMAGE_DIR / "pre-image.sh").read_text()
         self.assertIn("sovereign-base-os-release", content)
+        # Must be templated from the same env vars image-builder/build-
+        # sovereign-image already validates and exports, not a hardcoded
+        # placeholder -- otherwise installed_base_os_version can never
+        # reflect a real installed version (see the
+        # second-base-os-update-hardware-qualification-report.md finding
+        # this covers).
+        self.assertIn('VERSION="$SOVEREIGN_VERSION"', content)
+        self.assertIn('CHANNEL="$SOVEREIGN_CHANNEL"', content)
+        self.assertNotIn('VERSION="0.1.0-proof.1"', content)
 
 
 if __name__ == "__main__":

@@ -247,23 +247,31 @@ running the `0.1.0-preview.25`-built image content, committed, as
 
 ## Recommendation
 
-- Fix Finding 2 (the `proof`/`preview` ordering collision) before any real
-  `preview.N` base-OS release ships — otherwise every device still on a
-  `proof.N` base-OS version is permanently locked out of it. A version
-  scheme migration or a comparator special-case is needed, not just a
-  qualification-time workaround.
-- Fix Finding 4 by wiring `SOVEREIGN_VERSION` into
-  `pre-image.sh`'s `/etc/sovereign-base-os-release` generation, the same
-  way the appliance layer's own version stamping already works — otherwise
-  `installed_base_os_version` will misreport on every real base-OS release
-  going forward, not just this qualification device.
-- Findings 1 and 3 are inherent to any device caught on an old binary
-  before these fixes existed; no further mitigation needed beyond what
-  RFC-0016 already documents (a one-time reflash resolves both). Worth a
-  one-line callout in the RFC's Compatibility section that the reflash
-  requirement isn't just about A/B layout adoption — it can also be needed
-  again for base-OS-tooling-level fixes on an already-migrated device,
-  until base-OS content itself gains a way to update `sovereign-update`
-  out-of-band from a full slot write.
-- The Console base-OS panel's own live-hardware pass is now also done
-  (see Result above) — no longer open.
+- **Fixed (2026-08-07):** Finding 2, the `proof`/`preview` ordering
+  collision. `compare_versions` now ranks a known leading prerelease
+  identifier by an explicit `PRERELEASE_CHANNEL_ORDER = ("proof",
+  "preview", "rc", "stable")` tuple instead of plain lexical comparison,
+  falling back to the original lexical behavior for any word that tuple
+  doesn't know about. Covered by six new unit tests in
+  `tests/test_update_version_compare.py`.
+- **Fixed (2026-08-07):** Finding 4, the hardcoded
+  `installed_base_os_version` placeholder.
+  `pre-image.sh` now templates `/etc/sovereign-base-os-release` from
+  `$SOVEREIGN_VERSION`/`$SOVEREIGN_CHANNEL` — already validated and
+  exported as Docker `ENV` vars before this hook runs, the same
+  mechanism `image-builder/build-sovereign-image` already uses for the
+  appliance's own `/etc/sovereign-release`. Covered by a strengthened
+  assertion in `tests/test_ab_data_image.py`.
+- Findings 1 and 3 needed no separate code change: both were purely
+  staleness on the qualification device's already-flashed binary, and
+  current `main` already contains their fixes — that's precisely how
+  this pass diagnosed them, by diffing the device's stale binary
+  against current source. Any device caught on a binary that old will
+  still hit both until reflashed; a one-time reflash resolves both, per
+  RFC-0016's existing Compatibility section.
+- The Console base-OS panel's own live-hardware pass is done (see
+  Result above) — no longer open.
+
+All four findings from this report are now resolved: two by real code
+fixes (above), two already fixed in the codebase the qualification
+device just hadn't received yet.
