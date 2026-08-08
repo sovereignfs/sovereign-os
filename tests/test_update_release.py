@@ -245,6 +245,32 @@ class UpdateReleaseTests(unittest.TestCase):
             workflow[primary_build:build_base_os],
         )
 
+    def test_workflow_uploads_the_flashable_ab_image_gated_on_base_os_candidate(self):
+        workflow = (ROOT / ".github/workflows/build-image.yml").read_text()
+
+        # ADR-0011's external-recovery-image-path qualification needs the
+        # actual flashable A/B disk image, not just the boot/root
+        # partition images create-base-os-release.py extracts for the
+        # base-OS update candidate. It has no release-bundle packaging of
+        # its own -- create-release-bundle.py hardcodes plain-image
+        # assumptions that don't hold for the A/B config's differently
+        # named output -- so it's uploaded raw.
+        upload_ab_image = workflow.index("Upload flashable A/B image artifact")
+        build_base_os = workflow.index("Build base-OS image")
+        self.assertLess(build_base_os, upload_ab_image)
+        self.assertIn(
+            "name: sovereign-os-ab-${{ inputs.version }}-rpi5-arm64",
+            workflow,
+        )
+        self.assertIn(
+            "build/sovereign-image-sovereign-ab-proof/deploy/*.img.zst",
+            workflow,
+        )
+        # Gated the same way as every other base-OS-candidate step -- an
+        # ordinary plain-image build must never try to upload this.
+        section_start = workflow.index("Upload flashable A/B image artifact") - 200
+        self.assertIn("if: inputs.build_base_os_candidate", workflow[section_start:upload_ab_image + 200])
+
 
 if __name__ == "__main__":
     unittest.main()

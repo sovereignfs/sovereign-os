@@ -174,6 +174,27 @@ jobs:
           compression-level: 0
           retention-days: 14
 
+      # The flashable A/B disk image itself (as opposed to the boot/root
+      # partition images create-base-os-release.py extracts above) has no
+      # release-bundle packaging of its own -- create-release-bundle.py
+      # hardcodes plain-image assumptions (a fixed evidence path, a fixed
+      # "sovereign-proof.img.zst" filename) that don't hold for the A/B
+      # config's differently-named output. Uploaded raw and unpackaged
+      # here rather than extending that script for a need this milestone
+      # doesn't otherwise have: reflashing a device onto the A/B layout,
+      # or recovering one already on it, needs the disk image itself, not
+      # SHA256SUMS/SBOM/provenance ceremony designed around a public
+      # release.
+      - name: Upload flashable A/B image artifact
+        if: inputs.build_base_os_candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sovereign-os-ab-${{ inputs.version }}-rpi5-arm64
+          path: build/sovereign-image-sovereign-ab-proof/deploy/*.img.zst
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
       - name: Upload installed-device update artifact
         if: inputs.build_update_candidate
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
