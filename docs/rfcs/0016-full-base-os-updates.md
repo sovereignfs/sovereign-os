@@ -557,8 +557,14 @@ state,** the last item this RFC needed:
   never cleaned up before a second one started): needs a documented,
   qualified worst case, analogous to today's `recovery_required` state
   for appliance transactions, but with real physical-recovery
-  implications (external recovery-image path, named as a goal in
-  ROADMAP item 6, is the backstop here and needs its own design pass).
+  implications. **Design decided (2026-08-07):** see
+  [ADR-0011](../adrs/0011-external-recovery-image-path.md) — the
+  existing distributable image, reflashed via Raspberry Pi Imager, is
+  the external recovery vehicle (no new recovery-only OS), and the
+  currently-untested "reflash, then restore my data" gap closes by
+  qualifying an off-device backup/restore round trip through the
+  existing, unmodified `backup`/`restore` commands. Hardware
+  qualification of that round trip is still pending.
 
 ## Compatibility and Migration
 
@@ -1071,9 +1077,11 @@ every future rootfs-level change this project ships.
 - Sizing for root A/root B: fixed at build time from today's package
   list, or does the image-build layout need a configurable margin for
   future growth?
-- What "external recovery-image path" (named as a goal in ROADMAP item
-  6) actually looks like — this RFC's `tryboot` fallback covers boot
-  failure, not both-slots-corrupted or physical-media failure.
+- **Resolved (2026-08-07):** what "external recovery-image path" (named
+  as a goal in ROADMAP item 6) actually looks like — see
+  [ADR-0011](../adrs/0011-external-recovery-image-path.md) and Failure
+  and Recovery above. Hardware qualification of the decided procedure
+  is the remaining work, not the design itself.
 
 ## Acceptance Criteria
 

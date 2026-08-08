@@ -341,10 +341,14 @@ network access.
 **Status:** 🟡 Every RFC-0016 Acceptance Criteria item is now
 hardware-verified, including a second base-OS update with no reflash
 and the Console panel's own live-hardware pass; the four real defects
-the qualification surfaced are now fixed. What's left before this
-milestone is fully production-ready is the still-undesigned external
-recovery-image path (both-slots-corrupted / physical-media failure —
-`tryboot` fallback only covers ordinary boot failure) —
+the qualification surfaced are now fixed. The external recovery-image
+path's design is now decided
+([ADR-0011](docs/adrs/0011-external-recovery-image-path.md) — the
+existing distributable image is the recovery vehicle; closing the
+untested "reflash, then restore my data" gap needs no new code, only
+hardware qualification of the existing `backup`/`restore` commands
+used off-device) but not yet hardware-qualified — the one item left
+before this milestone is fully production-ready —
 [RFC-0016](docs/rfcs/0016-full-base-os-updates.md) (accepted
 2026-08-01): A/B root on Raspberry Pi's native `tryboot` mechanism,
 reusing RFC-0014's signed/staged/health-gated/rollback machinery rather

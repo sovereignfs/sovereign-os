@@ -16,3 +16,4 @@ Use the [ADR template](../templates/adr.md) and zero-padded sequential identifie
 - [ADR-0008: Console privileged action invocation](0008-console-privileged-action-invocation.md) - Accepted
 - [ADR-0009: Console-triggered update install](0009-console-triggered-install.md) - Accepted
 - [ADR-0010: Shared Console-session gate for Pi-hole and future service panels](0010-shared-console-session-gate.md) - Accepted
+- [ADR-0011: External recovery-image path for a fully unbootable device](0011-external-recovery-image-path.md) - Accepted; hardware qualification pending
