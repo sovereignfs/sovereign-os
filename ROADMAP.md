@@ -15,7 +15,7 @@ The Raspberry Pi 5 image build, flash, first-boot, Pi-hole, persistent DATA
 partition, local routing, first-login, and Sovereign Console health experience
 have been exercised on physical hardware.
 
-🟡 Milestone 01.1 — Appliance Update Foundation
+✅ Milestone 01.1 — Appliance Update Foundation
 
 The signed appliance updater can inspect, prepare, back up, stage, activate,
 health-check, commit, recover, and roll back versioned releases while preserving
@@ -49,8 +49,13 @@ see the
 [install](docs/research/first-production-signed-release-install-qualification-report.md),
 and
 [restore](docs/research/production-signed-restore-qualification-report.md)
-qualification reports. `prune` and `rotate-trust` have not yet been
-exercised as part of a real signed-release install cycle.
+qualification reports. `prune` and `rotate-trust` have since each been
+exercised as part of a real signed-release install cycle — `prune`
+against `v0.1.0-preview.23`, and `rotate-trust` with the real production
+key against the device's real trust store on 2026-08-09 — see the
+[rotate-trust real signed-cycle qualification report](docs/research/rotate-trust-real-signed-cycle-qualification-report.md).
+[RFC-0014](docs/rfcs/0014-appliance-update-system.md) is formally
+Accepted. See Milestone 2 below for the full closing summary.
 
 Unattended automatic installation remains disabled until the manual,
 health-gated update path and its operational controls are qualified.
@@ -89,7 +94,17 @@ for full evidence.
 
 ### 2. Production Update Operations
 
-**Status:** 🟡 In progress
+**Status:** ✅ Complete — every item below is implemented and
+hardware-qualified, including the three gaps that were still open as of
+early 2026-08-09: `restore`-into-rollback wiring is recorded as a
+deliberate deferral rather than left ambiguous (nothing in the update
+pipeline touches persistent data yet, so there is nothing for it to
+protect against), a genuine unattended `prune` timer fire was observed,
+and `rotate-trust` has now been exercised with the real production key
+against the real device trust store. [RFC-0014](docs/rfcs/0014-appliance-update-system.md)
+is formally Accepted, closing the last procedural gap (its Acceptance
+Criteria and Decision sections had lagged behind its own
+implementation, which raced ahead of the paperwork).
 
 **Depends on:** Completed preview.11 to preview.12 qualification
 
@@ -188,7 +203,13 @@ Planned work:
   running the command still depends on the Update Discovery work in
   item 3 below (now complete, so this is unblocked whenever a rotation
   is actually needed);
-- approve the update RFC and production manifest policy;
+- approve the update RFC and production manifest policy — the production
+  manifest policy has been live and deployed since early qualification
+  (`/etc/sovereign/update-policy.json`); [RFC-0014](docs/rfcs/0014-appliance-update-system.md)
+  itself was formally Accepted on 2026-08-09, after its Acceptance
+  Criteria and Decision sections were brought in line with the
+  implementation and hardware qualification that had already shipped
+  around it;
 - publish release compatibility, rollback limitations, and recovery
   guidance — published as
   [docs/operations/update-recovery-and-compatibility.md](docs/operations/update-recovery-and-compatibility.md),
@@ -442,8 +463,8 @@ This milestone closes the remaining “flash once” gap.
   demonstrated on Raspberry Pi 5
 - ✅ Fully versioned appliance-release qualification (preview.11 to
   preview.12), including readiness hardening
-- 🟡 Persistent restore automation, retention, and production signing operations
-- 🟡 Update discovery and Sovereign Console update controls
+- ✅ Persistent restore automation, retention, and production signing operations
+- ✅ Update discovery and Sovereign Console update controls
 - ⏳ Local inference benchmark and conversation/capability RFCs
 - ⚪ SearXNG-backed web-search capability
 - ⚪ Home Assistant capability integration

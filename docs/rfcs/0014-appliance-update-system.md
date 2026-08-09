@@ -1,6 +1,6 @@
 # RFC-0014: Appliance Update System
 
-**Status:** Implemented — signed manifests, staging, activation, rollback, persistent-data restore, backup/release/transaction retention (`sovereign-update prune`), and signed trust-key rotation (`sovereign-update rotate-trust`) are all built and hardware-qualified on Pi 5 (see [docs/roadmap/01-1-update-foundation.md](../roadmap/01-1-update-foundation.md), [Versioned Appliance Release Design](../design/versioned-appliance-release.md), and [BACKUP_AND_JOURNAL.md](../../update/BACKUP_AND_JOURNAL.md)); production key custody is decided (see [ADR-0006](../adrs/0006-production-signing-key-custody.md)), the key (`sovereign-production-1`) is generated and provisioned into the image-builder trust store, and `v0.1.0-preview.17` is a real signed release built, published, discovered, installed (`prepare`/`backup`/`stage`/`activate`), and restored from with it on Raspberry Pi 5 hardware; `prune` and `rotate-trust` have each since been exercised for real against the device's real signed release, `rotate-trust` with the real production key (see the [rotate-trust real signed-cycle qualification report](../research/rotate-trust-real-signed-cycle-qualification-report.md)); and fetching/applying updates or rotations without an operator's manual command remains open (Update Discovery and Console Controls milestone)
+**Status:** Accepted (2026-08-09, project creator). Implemented — signed manifests, staging, activation, rollback, persistent-data restore, backup/release/transaction retention (`sovereign-update prune`), and signed trust-key rotation (`sovereign-update rotate-trust`) are all built and hardware-qualified on Pi 5 (see [docs/roadmap/01-1-update-foundation.md](../roadmap/01-1-update-foundation.md), [Versioned Appliance Release Design](../design/versioned-appliance-release.md), and [BACKUP_AND_JOURNAL.md](../../update/BACKUP_AND_JOURNAL.md)); production key custody is decided (see [ADR-0006](../adrs/0006-production-signing-key-custody.md)), the key (`sovereign-production-1`) is generated and provisioned into the image-builder trust store, and `v0.1.0-preview.17` is a real signed release built, published, discovered, installed (`prepare`/`backup`/`stage`/`activate`), and restored from with it on Raspberry Pi 5 hardware; `prune` and `rotate-trust` have each since been exercised for real against the device's real signed release, `rotate-trust` with the real production key (see the [rotate-trust real signed-cycle qualification report](../research/rotate-trust-real-signed-cycle-qualification-report.md)); and fetching/applying updates or rotations without an operator's manual command remains open (Update Discovery and Console Controls milestone)
 **Author:** Project creator and Codex
 **Created:** 2026-07-19
 **Target:** Milestone 01.1
@@ -311,11 +311,31 @@ Preferred long-term direction for base-OS updates but deferred until the applica
 
 ## Acceptance Criteria
 
+**2026-08-09 update:** every criterion originally named here has since been
+exceeded by real, hardware-qualified work, not merely designed on paper.
 The v1 manifest schema, detached Ed25519 format, verifier trust ordering,
-backup contract, and transaction journal are now concrete. The RFC may become
-Proposed when the production key-custody workflow and rollback compatibility
-rules are concrete enough for independent security and failure-mode review.
+backup contract, and transaction journal were built as specified and have
+each been exercised against real signed releases on Raspberry Pi 5 (see
+the Status line above and the dozens of dated qualification reports it
+links to, directly and transitively). The production key-custody
+workflow this section originally gated on is resolved
+([ADR-0006](../adrs/0006-production-signing-key-custody.md)), the real
+production key (`sovereign-production-1`) is live, and rollback
+compatibility has been exercised repeatedly, including forced
+health-check failures and a genuine reflash-then-restore recovery round
+trip (see [ADR-0011](../adrs/0011-external-recovery-image-path.md)). No
+open acceptance criterion remains.
 
 ## Decision
 
-The high-level separation of images and updates is accepted in [ADR-0002](../adrs/0002-install-images-and-update-artifacts.md). This detailed RFC remains Draft.
+The high-level separation of images and updates is accepted in
+[ADR-0002](../adrs/0002-install-images-and-update-artifacts.md).
+
+**Accepted (2026-08-09, project creator).** This detailed RFC is accepted
+as written and as subsequently implemented: signed/staged/health-gated
+appliance updates with rollback, persistent-data backup and restore,
+bounded retention (`prune`), and signed trust-key rotation
+(`rotate-trust`), all hardware-qualified on Raspberry Pi 5 with the real
+production signing key. This RFC's design is also the machinery
+[RFC-0016](0016-full-base-os-updates.md) reused for base-OS updates
+rather than adopting a third-party OTA framework.
