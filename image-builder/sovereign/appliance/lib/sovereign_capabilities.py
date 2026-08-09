@@ -1,5 +1,3 @@
-#!/usr/bin/python3
-
 import concurrent.futures
 import datetime
 import hashlib
@@ -76,6 +74,21 @@ SCHEMA_LEAF_TYPES = {
 
 def validate_against_schema(value, schema, context, code):
     schema_type = schema.get("type")
+    if isinstance(schema_type, list):
+        # JSON Schema's union-type syntax, e.g. ["boolean", "null"] for a
+        # field that is genuinely absent-of-value rather than a guessed
+        # default (RFC-0006: pihole.status's blocking_enabled is null, not
+        # a guessed False, when Pi-hole's own state can't be determined).
+        for candidate in schema_type:
+            try:
+                validate_against_schema(value, {**schema, "type": candidate}, context, code)
+                return
+            except CapabilityError:
+                continue
+        fail(False, code, f"{context} does not match any of {schema_type}")
+    if schema_type == "null":
+        fail(value is None, code, f"{context} must be null")
+        return
     if schema_type == "object":
         fail(isinstance(value, dict), code, f"{context} must be an object")
         properties = schema.get("properties", {})

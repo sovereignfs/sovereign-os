@@ -1,5 +1,5 @@
 import json
-import runpy
+import sys
 import tempfile
 import time
 import unittest
@@ -7,12 +7,15 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MODULE_PATH = ROOT / "image-builder/sovereign/appliance/bin/sovereign-capabilities"
+LIB = ROOT / "image-builder/sovereign/appliance/lib"
+if str(LIB) not in sys.path:
+    sys.path.insert(0, str(LIB))
+
+import sovereign_capabilities as capabilities  # noqa: E402
 
 
 class CapabilitiesTestCase(unittest.TestCase):
     def setUp(self):
-        self.module = runpy.run_path(str(MODULE_PATH))
         self.tempdir = tempfile.TemporaryDirectory()
         self.addCleanup(self.tempdir.cleanup)
         self.audit_path = Path(self.tempdir.name) / "audit.jsonl"
@@ -28,7 +31,7 @@ class CapabilitiesTestCase(unittest.TestCase):
         result_schema=None,
         **kwargs,
     ):
-        Capability = self.module["Capability"]
+        Capability = capabilities.Capability
         if implementation is None:
             implementation = lambda arguments: {"ok": True}
         if argument_schema is None:
@@ -47,7 +50,7 @@ class CapabilitiesTestCase(unittest.TestCase):
         )
 
     def registry_with(self, capability):
-        Registry = self.module["Registry"]
+        Registry = capabilities.Registry
         registry = Registry()
         registry.register(capability)
         return registry
@@ -66,33 +69,33 @@ class SchemaValidationTests(CapabilitiesTestCase):
             "required": ["period"],
             "additionalProperties": False,
         }
-        self.module["validate_against_schema"]({"period": "today"}, schema, "arguments", "INVALID_ARGUMENTS")
+        capabilities.validate_against_schema({"period": "today"}, schema, "arguments", "INVALID_ARGUMENTS")
 
     def test_rejects_missing_required_field(self):
         schema = {"type": "object", "properties": {"period": {"type": "string"}}, "required": ["period"], "additionalProperties": False}
-        with self.assertRaises(self.module["CapabilityError"]) as caught:
-            self.module["validate_against_schema"]({}, schema, "arguments", "INVALID_ARGUMENTS")
+        with self.assertRaises(capabilities.CapabilityError) as caught:
+            capabilities.validate_against_schema({}, schema, "arguments", "INVALID_ARGUMENTS")
         self.assertEqual(caught.exception.code, "INVALID_ARGUMENTS")
 
     def test_rejects_unknown_field_when_additional_properties_false(self):
         schema = {"type": "object", "properties": {"period": {"type": "string"}}, "required": [], "additionalProperties": False}
-        with self.assertRaises(self.module["CapabilityError"]):
-            self.module["validate_against_schema"]({"period": "today", "client": "living-room"}, schema, "arguments", "INVALID_ARGUMENTS")
+        with self.assertRaises(capabilities.CapabilityError):
+            capabilities.validate_against_schema({"period": "today", "client": "living-room"}, schema, "arguments", "INVALID_ARGUMENTS")
 
     def test_rejects_value_outside_enum(self):
         schema = {"type": "object", "properties": {"period": {"type": "string", "enum": ["today", "last_24h"]}}, "required": ["period"], "additionalProperties": False}
-        with self.assertRaises(self.module["CapabilityError"]):
-            self.module["validate_against_schema"]({"period": "last_week"}, schema, "arguments", "INVALID_ARGUMENTS")
+        with self.assertRaises(capabilities.CapabilityError):
+            capabilities.validate_against_schema({"period": "last_week"}, schema, "arguments", "INVALID_ARGUMENTS")
 
     def test_rejects_wrong_type(self):
         schema = {"type": "object", "properties": {"count": {"type": "integer"}}, "required": ["count"], "additionalProperties": False}
-        with self.assertRaises(self.module["CapabilityError"]):
-            self.module["validate_against_schema"]({"count": "5"}, schema, "arguments", "INVALID_ARGUMENTS")
+        with self.assertRaises(capabilities.CapabilityError):
+            capabilities.validate_against_schema({"count": "5"}, schema, "arguments", "INVALID_ARGUMENTS")
 
     def test_bool_is_not_accepted_as_integer(self):
         schema = {"type": "object", "properties": {"count": {"type": "integer"}}, "required": ["count"], "additionalProperties": False}
-        with self.assertRaises(self.module["CapabilityError"]):
-            self.module["validate_against_schema"]({"count": True}, schema, "arguments", "INVALID_ARGUMENTS")
+        with self.assertRaises(capabilities.CapabilityError):
+            capabilities.validate_against_schema({"count": True}, schema, "arguments", "INVALID_ARGUMENTS")
 
     def test_validates_nested_object(self):
         schema = {
@@ -101,9 +104,24 @@ class SchemaValidationTests(CapabilitiesTestCase):
             "required": ["gravity"],
             "additionalProperties": False,
         }
-        self.module["validate_against_schema"]({"gravity": {"domains_being_blocked": 104756}}, schema, "result", "INVALID_RESULT")
-        with self.assertRaises(self.module["CapabilityError"]):
-            self.module["validate_against_schema"]({"gravity": {"domains_being_blocked": "many"}}, schema, "result", "INVALID_RESULT")
+        capabilities.validate_against_schema({"gravity": {"domains_being_blocked": 104756}}, schema, "result", "INVALID_RESULT")
+        with self.assertRaises(capabilities.CapabilityError):
+            capabilities.validate_against_schema({"gravity": {"domains_being_blocked": "many"}}, schema, "result", "INVALID_RESULT")
+
+    def test_union_type_accepts_either_member(self):
+        schema = {"type": "object", "properties": {"blocking_enabled": {"type": ["boolean", "null"]}}, "required": ["blocking_enabled"], "additionalProperties": False}
+        capabilities.validate_against_schema({"blocking_enabled": True}, schema, "result", "INVALID_RESULT")
+        capabilities.validate_against_schema({"blocking_enabled": None}, schema, "result", "INVALID_RESULT")
+
+    def test_union_type_rejects_value_matching_neither_member(self):
+        schema = {"type": "object", "properties": {"blocking_enabled": {"type": ["boolean", "null"]}}, "required": ["blocking_enabled"], "additionalProperties": False}
+        with self.assertRaises(capabilities.CapabilityError):
+            capabilities.validate_against_schema({"blocking_enabled": "enabled"}, schema, "result", "INVALID_RESULT")
+
+    def test_plain_null_type(self):
+        capabilities.validate_against_schema(None, {"type": "null"}, "value", "INVALID_RESULT")
+        with self.assertRaises(capabilities.CapabilityError):
+            capabilities.validate_against_schema("not null", {"type": "null"}, "value", "INVALID_RESULT")
 
 
 class ConfirmationClassificationTests(CapabilitiesTestCase):
@@ -128,7 +146,7 @@ class ConfirmationClassificationTests(CapabilitiesTestCase):
         # this is a structural guarantee, not just a default that could be
         # overridden by a capability author under-classifying their own risk.
         with self.assertRaises(TypeError):
-            self.module["Capability"](
+            capabilities.Capability(
                 name="x", version=1, argument_schema={}, result_schema={},
                 side_effect="read_only", network="local", implementation=lambda a: {},
                 confirmation="automatic",
@@ -142,22 +160,22 @@ class RegistryTests(CapabilitiesTestCase):
         self.assertIs(registry.resolve("system.health", 1), capability)
 
     def test_resolve_unknown_name_fails(self):
-        registry = self.module["Registry"]()
-        with self.assertRaises(self.module["CapabilityError"]) as caught:
+        registry = capabilities.Registry()
+        with self.assertRaises(capabilities.CapabilityError) as caught:
             registry.resolve("nonexistent", 1)
         self.assertEqual(caught.exception.code, "UNKNOWN_CAPABILITY")
 
     def test_resolve_unknown_version_fails(self):
         capability = self.make_capability(name="system.health", version=1)
         registry = self.registry_with(capability)
-        with self.assertRaises(self.module["CapabilityError"]) as caught:
+        with self.assertRaises(capabilities.CapabilityError) as caught:
             registry.resolve("system.health", 2)
         self.assertEqual(caught.exception.code, "UNKNOWN_CAPABILITY")
 
     def test_duplicate_registration_rejected(self):
-        registry = self.module["Registry"]()
+        registry = capabilities.Registry()
         registry.register(self.make_capability(name="dup", version=1))
-        with self.assertRaises(self.module["CapabilityError"]) as caught:
+        with self.assertRaises(capabilities.CapabilityError) as caught:
             registry.register(self.make_capability(name="dup", version=1))
         self.assertEqual(caught.exception.code, "DUPLICATE_CAPABILITY")
 
@@ -175,8 +193,8 @@ class InvokeAutomaticPathTests(CapabilitiesTestCase):
     def test_read_only_local_executes_without_confirmation(self):
         capability = self.make_capability(side_effect="read_only", network="local")
         registry = self.registry_with(capability)
-        result = self.module["invoke"](
-            registry, capability.name, capability.version, {}, {}, self.module["ConfirmationStore"](),
+        result = capabilities.invoke(
+            registry, capability.name, capability.version, {}, {}, capabilities.ConfirmationStore(),
             audit_log_path=self.audit_path,
         )
         self.assertEqual(result, {"ok": True})
@@ -184,8 +202,8 @@ class InvokeAutomaticPathTests(CapabilitiesTestCase):
     def test_audit_event_recorded_for_successful_execution(self):
         capability = self.make_capability(side_effect="read_only", network="local")
         registry = self.registry_with(capability)
-        self.module["invoke"](
-            registry, capability.name, capability.version, {}, {}, self.module["ConfirmationStore"](),
+        capabilities.invoke(
+            registry, capability.name, capability.version, {}, {}, capabilities.ConfirmationStore(),
             audit_log_path=self.audit_path,
         )
         [event] = self.read_audit_events()
@@ -199,10 +217,10 @@ class InvokeAutomaticPathTests(CapabilitiesTestCase):
 
 class InvokeRejectionPathTests(CapabilitiesTestCase):
     def test_unknown_capability_is_rejected_and_audited(self):
-        registry = self.module["Registry"]()
-        with self.assertRaises(self.module["CapabilityError"]) as caught:
-            self.module["invoke"](
-                registry, "nonexistent", 1, {}, {}, self.module["ConfirmationStore"](),
+        registry = capabilities.Registry()
+        with self.assertRaises(capabilities.CapabilityError) as caught:
+            capabilities.invoke(
+                registry, "nonexistent", 1, {}, {}, capabilities.ConfirmationStore(),
                 audit_log_path=self.audit_path,
             )
         self.assertEqual(caught.exception.code, "UNKNOWN_CAPABILITY")
@@ -220,9 +238,9 @@ class InvokeRejectionPathTests(CapabilitiesTestCase):
             argument_schema={"type": "object", "properties": {"count": {"type": "integer"}}, "required": ["count"], "additionalProperties": False},
         )
         registry = self.registry_with(capability)
-        with self.assertRaises(self.module["CapabilityError"]) as caught:
-            self.module["invoke"](
-                registry, capability.name, capability.version, {"count": "not-an-int"}, {}, self.module["ConfirmationStore"](),
+        with self.assertRaises(capabilities.CapabilityError) as caught:
+            capabilities.invoke(
+                registry, capability.name, capability.version, {"count": "not-an-int"}, {}, capabilities.ConfirmationStore(),
                 audit_log_path=self.audit_path,
             )
         self.assertEqual(caught.exception.code, "INVALID_ARGUMENTS")
@@ -231,9 +249,9 @@ class InvokeRejectionPathTests(CapabilitiesTestCase):
     def test_external_capability_rejected_when_policy_disabled(self):
         capability = self.make_capability(side_effect="read_only", network="external")
         registry = self.registry_with(capability)
-        with self.assertRaises(self.module["CapabilityError"]) as caught:
-            self.module["invoke"](
-                registry, capability.name, capability.version, {}, {"external_enabled": False}, self.module["ConfirmationStore"](),
+        with self.assertRaises(capabilities.CapabilityError) as caught:
+            capabilities.invoke(
+                registry, capability.name, capability.version, {}, {"external_enabled": False}, capabilities.ConfirmationStore(),
                 audit_log_path=self.audit_path,
             )
         self.assertEqual(caught.exception.code, "CAPABILITY_DISABLED")
@@ -241,9 +259,9 @@ class InvokeRejectionPathTests(CapabilitiesTestCase):
     def test_required_confirmation_rejected_without_token(self):
         capability = self.make_capability(side_effect="mutating", network="local")
         registry = self.registry_with(capability)
-        with self.assertRaises(self.module["CapabilityError"]) as caught:
-            self.module["invoke"](
-                registry, capability.name, capability.version, {}, {}, self.module["ConfirmationStore"](),
+        with self.assertRaises(capabilities.CapabilityError) as caught:
+            capabilities.invoke(
+                registry, capability.name, capability.version, {}, {}, capabilities.ConfirmationStore(),
                 audit_log_path=self.audit_path,
             )
         self.assertEqual(caught.exception.code, "CONFIRMATION_REQUIRED")
@@ -253,9 +271,9 @@ class ConfirmationTokenTests(CapabilitiesTestCase):
     def test_valid_token_permits_execution(self):
         capability = self.make_capability(side_effect="mutating", network="local")
         registry = self.registry_with(capability)
-        store = self.module["ConfirmationStore"]()
+        store = capabilities.ConfirmationStore()
         token = store.issue(capability.name, capability.version, {})
-        result = self.module["invoke"](
+        result = capabilities.invoke(
             registry, capability.name, capability.version, {}, {}, store,
             confirmation_token=token, audit_log_path=self.audit_path,
         )
@@ -264,14 +282,14 @@ class ConfirmationTokenTests(CapabilitiesTestCase):
     def test_token_is_single_use(self):
         capability = self.make_capability(side_effect="mutating", network="local")
         registry = self.registry_with(capability)
-        store = self.module["ConfirmationStore"]()
+        store = capabilities.ConfirmationStore()
         token = store.issue(capability.name, capability.version, {})
-        self.module["invoke"](
+        capabilities.invoke(
             registry, capability.name, capability.version, {}, {}, store,
             confirmation_token=token, audit_log_path=self.audit_path,
         )
-        with self.assertRaises(self.module["CapabilityError"]) as caught:
-            self.module["invoke"](
+        with self.assertRaises(capabilities.CapabilityError) as caught:
+            capabilities.invoke(
                 registry, capability.name, capability.version, {}, {}, store,
                 confirmation_token=token, audit_log_path=self.audit_path,
             )
@@ -283,10 +301,10 @@ class ConfirmationTokenTests(CapabilitiesTestCase):
             argument_schema={"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"], "additionalProperties": False},
         )
         registry = self.registry_with(capability)
-        store = self.module["ConfirmationStore"]()
+        store = capabilities.ConfirmationStore()
         token = store.issue(capability.name, capability.version, {"id": "a"})
-        with self.assertRaises(self.module["CapabilityError"]) as caught:
-            self.module["invoke"](
+        with self.assertRaises(capabilities.CapabilityError) as caught:
+            capabilities.invoke(
                 registry, capability.name, capability.version, {"id": "b"}, {}, store,
                 confirmation_token=token, audit_log_path=self.audit_path,
             )
@@ -295,11 +313,11 @@ class ConfirmationTokenTests(CapabilitiesTestCase):
     def test_token_expires(self):
         capability = self.make_capability(side_effect="mutating", network="local")
         registry = self.registry_with(capability)
-        store = self.module["ConfirmationStore"]()
+        store = capabilities.ConfirmationStore()
         token = store.issue(capability.name, capability.version, {}, ttl_seconds=0)
         time.sleep(0.01)
-        with self.assertRaises(self.module["CapabilityError"]) as caught:
-            self.module["invoke"](
+        with self.assertRaises(capabilities.CapabilityError) as caught:
+            capabilities.invoke(
                 registry, capability.name, capability.version, {}, {}, store,
                 confirmation_token=token, audit_log_path=self.audit_path,
             )
@@ -308,13 +326,13 @@ class ConfirmationTokenTests(CapabilitiesTestCase):
     def test_token_for_different_capability_does_not_apply(self):
         capability = self.make_capability(name="a", side_effect="mutating", network="local")
         other = self.make_capability(name="b", side_effect="mutating", network="local")
-        registry = self.module["Registry"]()
+        registry = capabilities.Registry()
         registry.register(capability)
         registry.register(other)
-        store = self.module["ConfirmationStore"]()
+        store = capabilities.ConfirmationStore()
         token = store.issue(other.name, other.version, {})
-        with self.assertRaises(self.module["CapabilityError"]) as caught:
-            self.module["invoke"](
+        with self.assertRaises(capabilities.CapabilityError) as caught:
+            capabilities.invoke(
                 registry, capability.name, capability.version, {}, {}, store,
                 confirmation_token=token, audit_log_path=self.audit_path,
             )
@@ -329,9 +347,9 @@ class BoundedExecutionTests(CapabilitiesTestCase):
             timeout_seconds=0.05,
         )
         registry = self.registry_with(capability)
-        with self.assertRaises(self.module["CapabilityError"]) as caught:
-            self.module["invoke"](
-                registry, capability.name, capability.version, {}, {}, self.module["ConfirmationStore"](),
+        with self.assertRaises(capabilities.CapabilityError) as caught:
+            capabilities.invoke(
+                registry, capability.name, capability.version, {}, {}, capabilities.ConfirmationStore(),
                 audit_log_path=self.audit_path,
             )
         self.assertEqual(caught.exception.code, "EXECUTION_TIMEOUT")
@@ -344,9 +362,9 @@ class BoundedExecutionTests(CapabilitiesTestCase):
             max_result_bytes=100,
         )
         registry = self.registry_with(capability)
-        with self.assertRaises(self.module["CapabilityError"]) as caught:
-            self.module["invoke"](
-                registry, capability.name, capability.version, {}, {}, self.module["ConfirmationStore"](),
+        with self.assertRaises(capabilities.CapabilityError) as caught:
+            capabilities.invoke(
+                registry, capability.name, capability.version, {}, {}, capabilities.ConfirmationStore(),
                 audit_log_path=self.audit_path,
             )
         self.assertEqual(caught.exception.code, "RESULT_TOO_LARGE")
@@ -362,9 +380,9 @@ class BoundedExecutionTests(CapabilitiesTestCase):
             result_schema={"type": "object", "properties": {"ok": {"type": "boolean"}}, "required": ["ok"], "additionalProperties": False},
         )
         registry = self.registry_with(capability)
-        with self.assertRaises(self.module["CapabilityError"]) as caught:
-            self.module["invoke"](
-                registry, capability.name, capability.version, {}, {}, self.module["ConfirmationStore"](),
+        with self.assertRaises(capabilities.CapabilityError) as caught:
+            capabilities.invoke(
+                registry, capability.name, capability.version, {}, {}, capabilities.ConfirmationStore(),
                 audit_log_path=self.audit_path,
             )
         self.assertEqual(caught.exception.code, "INVALID_RESULT")
@@ -375,9 +393,9 @@ class BoundedExecutionTests(CapabilitiesTestCase):
 
         capability = self.make_capability(side_effect="read_only", network="local", implementation=boom)
         registry = self.registry_with(capability)
-        with self.assertRaises(self.module["CapabilityError"]) as caught:
-            self.module["invoke"](
-                registry, capability.name, capability.version, {}, {}, self.module["ConfirmationStore"](),
+        with self.assertRaises(capabilities.CapabilityError) as caught:
+            capabilities.invoke(
+                registry, capability.name, capability.version, {}, {}, capabilities.ConfirmationStore(),
                 audit_log_path=self.audit_path,
             )
         self.assertEqual(caught.exception.code, "EXECUTION_FAILED")

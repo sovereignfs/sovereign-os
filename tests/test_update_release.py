@@ -101,6 +101,47 @@ class UpdateReleaseTests(unittest.TestCase):
             )
             self.assertEqual(0, verified.returncode)
 
+    def test_ignores_stray_pycache_in_appliance_source(self):
+        # appliance/lib/*.py are real importable modules (unlike the rest
+        # of appliance/, which is extension-less scripts) -- running tests
+        # locally generates __pycache__ there as a side effect. A release
+        # build must not choke on that bytecode cache.
+        appliance = ROOT / "image-builder/sovereign/appliance"
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary = Path(temporary_directory)
+            copied_appliance = temporary / "appliance"
+            shutil.copytree(appliance, copied_appliance)
+            pycache = copied_appliance / "lib" / "__pycache__"
+            pycache.mkdir(parents=True, exist_ok=True)
+            (pycache / "sovereign_capabilities.cpython-314.pyc").write_bytes(b"not real bytecode")
+
+            pihole = temporary / "pihole-image.env"
+            pihole.write_text(
+                "PIHOLE_IMAGE_REPOSITORY='docker.io/pihole/pihole'\n"
+                "PIHOLE_IMAGE_TAG='fixture'\n"
+                f"PIHOLE_IMAGE_DIGEST='sha256:{'a' * 64}'\n"
+                "PIHOLE_IMAGE_PLATFORM='linux/arm64'\n"
+            )
+            oci = temporary / "pihole.oci.tar"
+            oci.write_bytes(b"OCI fixture\n")
+            output = temporary / "release"
+            subprocess.run(
+                [
+                    str(CREATE), "--version", "0.1.0-preview.7",
+                    "--source-minimum", "0.1.0-preview.6",
+                    "--source-maximum-exclusive", "0.2.0",
+                    "--pihole-env", str(pihole), "--oci", str(oci),
+                    "--appliance-dir", str(copied_appliance),
+                    "--output-dir", str(output), "--key-id", "preview-test",
+                    "--artifact-base-url", "https://example.invalid/release",
+                    "--notes-url", "https://example.invalid/notes",
+                    "--source-date-epoch", "1700000000", "--zstd", ZSTD,
+                ],
+                check=True,
+                capture_output=True,
+            )
+            self.assertTrue((output / "release-manifest.json").is_file())
+
     def test_image_enables_recovery_before_pihole(self):
         overlay = ROOT / "image-builder/sovereign/layer/sovereign-proof.rootfs-overlay"
         recovery = (overlay / "etc/systemd/system/sovereign-update-recovery.service").read_text()

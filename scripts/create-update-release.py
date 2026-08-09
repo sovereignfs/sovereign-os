@@ -19,7 +19,6 @@ SAFE_KEY = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 APPLIANCE_FILES = {
     "bin/console-auth": 0o755,
     "bin/console-health": 0o755,
-    "bin/sovereign-capabilities": 0o755,
     "bin/start-pihole": 0o755,
     "bin/stop-pihole": 0o755,
     "bin/verify-local-access": 0o755,
@@ -27,6 +26,8 @@ APPLIANCE_FILES = {
     "console/assets/console.css": 0o644,
     "console/assets/console.js": 0o644,
     "console/index.html": 0o644,
+    "lib/sovereign_capabilities.py": 0o644,
+    "lib/sovereign_pihole.py": 0o644,
     "nginx/sovereign.conf": 0o644,
     "pihole/compose.yaml.in": 0o644,
 }
@@ -55,6 +56,12 @@ def copy_appliance(source, destination):
         raise ValueError("appliance source directory is missing")
     actual = set()
     for path in source.rglob("*"):
+        if "__pycache__" in path.relative_to(source).parts:
+            # Python bytecode cache, not appliance source -- generated as a
+            # side effect of importing lib/*.py locally (e.g. running
+            # tests), never something a release should ever contain or
+            # validate against.
+            continue
         if path.is_symlink():
             raise ValueError(f"appliance source contains a symlink: {path}")
         if not (path.is_dir() or path.is_file()):
