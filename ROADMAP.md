@@ -383,8 +383,19 @@ real device — see the
 [system.health smoke test report](docs/research/system-health-capability-smoke-test-report.md).
 All four capabilities the milestone's Initial Capabilities section names
 now have registries except `web.search`/`web.fetch` (blocked on a
-SearXNG deployment decision, not yet made). The benchmark harness and
-the Conversation Service itself remain.
+SearXNG deployment decision, not yet made).
+`scripts/benchmark-inference-runner.py` is the reproducible runner/model
+benchmark harness `docs/research/local-ai-options.md`'s Benchmark Method
+specifies — time-to-first-token, tokens/sec, capability-selection
+accuracy against a starter corpus, and real memory/thermal/DNS-latency
+sampling — backed by `sovereign_inference.py`, RFC-0002's Inference
+Provider Adapter contract implemented against `llama-server`'s
+OpenAI-compatible API (331 tests, full suite green). No runner or model
+is selected yet; running the harness against real llama.cpp/Ollama
+installs on the qualification device, then recording the result in an
+ADR, remains — real-hardware time and a model-download/bandwidth
+decision the maintainer should weigh in on before it happens. The
+Conversation Service itself also remains.
 
 **Depends on:** Stable appliance update boundary
 
