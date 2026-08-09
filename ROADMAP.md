@@ -409,7 +409,12 @@ boundary (liveness only, nothing household-specific). Nginx now proxies
 both routes onto the LAN-facing surface — `/message` with a 180s read
 timeout, since a turn can run multiple real inference calls across
 propose/execute/narrate rounds, well past the 5s every other API location
-here uses.
+here uses. Smoke-tested against real hardware: all three auth outcomes
+(no session, valid session with a missing/wrong CSRF token, valid
+session with the correct one) verified over real HTTP, plus one full
+authenticated turn reaching real inference and executing `system.health`
+— see the
+[report](docs/research/conversation-service-authentication-smoke-test-report.md).
 
 Not yet done: auto-enabling the systemd unit — deferred because no
 persistent llama-server deployment service exists yet, so auto-starting
