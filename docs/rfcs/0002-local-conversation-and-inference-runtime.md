@@ -1,9 +1,9 @@
 # RFC-0002: Local Conversation and Inference Runtime Architecture
 
-**Status:** Draft
+**Status:** Accepted (2026-08-09, project creator)
 **Author:** Project creator and Claude
 **Created:** 2026-08-09
-**Reviewers:**
+**Reviewers:** Project creator
 **Target phase:** [Milestone 01.2, Local Conversation and Capabilities](../roadmap/01-2-local-conversation-capabilities.md)
 **Supersedes:** None
 
@@ -345,6 +345,12 @@ per the milestone's Exit Criteria.
 
 ## Unresolved Questions
 
+None of the following block acceptance of the architecture below — each is
+either implementation-level detail this RFC deliberately doesn't fix
+against an unbuilt system, or explicitly deferred to a later, named
+document. They are tracked here so implementation doesn't silently forget
+them, the same pattern RFC-0016 used for its own non-blocking open items.
+
 - Conversation and capability-event retention policy (deferred to the
   data-inventory update named in the milestone plan).
 - Whether model artifacts under `/data/sovereign/models/` are included
@@ -383,9 +389,17 @@ per the milestone's Exit Criteria.
 
 ## Decision
 
-Pending review. This RFC establishes the runtime and conversation
-architecture; implementation and hardware qualification against the
-Acceptance Criteria above follow once accepted, per this project's
-standing practice of accepting an RFC's direction before implementation
-races ahead of it (a lesson [RFC-0014](0014-appliance-update-system.md)'s
-own history illustrates directly).
+**Accepted (2026-08-09, project creator).** The architecture above —
+Conversation Service ownership, the provider-neutral Inference Provider
+Adapter contract, Sovereign-owned model management, and the untrusted-
+model-output safety boundary — is accepted as the direction for
+Milestone 4. Acceptance is of the architecture, not of a completed
+system: the Acceptance Criteria above (contract-level tests, the real
+Raspberry Pi 5 benchmark, a runner/model selection ADR, real-hardware
+conversation qualification) remain the gate for calling any of it
+*implemented*, matching how RFC-0014 was itself accepted well before its
+own Acceptance Criteria were met. RFC-0003 (capability contract),
+RFC-0004 (AI capability invocation), and RFC-0006 (Pi-hole capability
+mapping) remain to be drafted before implementation can begin in
+earnest — this RFC defines the runtime they will sit inside, not
+permission to start building without them.
