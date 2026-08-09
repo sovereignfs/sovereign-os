@@ -374,7 +374,16 @@ six-stage executor pipeline, and `sovereign_pihole.py` implements
 device outside the unit-test mocks — see the
 [pihole capabilities smoke test report](docs/research/pihole-capabilities-smoke-test-report.md)
 — though full qualification awaits a real caller (the Conversation
-Service, not yet built). `system.health`, the benchmark harness, and
+Service, not yet built).
+`sovereign_system.py` now also implements `system.health`, delegating to
+`console-health`'s existing, already-privacy-reviewed endpoint rather
+than re-collecting uptime/memory/storage/temperature/network a second
+time (300 tests, full suite green), likewise smoke-tested against the
+real device — see the
+[system.health smoke test report](docs/research/system-health-capability-smoke-test-report.md).
+All four capabilities the milestone's Initial Capabilities section names
+now have registries except `web.search`/`web.fetch` (blocked on a
+SearXNG deployment decision, not yet made). The benchmark harness and
 the Conversation Service itself remain.
 
 **Depends on:** Stable appliance update boundary
