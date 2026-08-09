@@ -60,6 +60,55 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(result["healthy"], False)
 
 
+class OllamaProviderTests(unittest.TestCase):
+    @mock.patch("urllib.request.urlopen")
+    def test_healthy_reports_true_with_version(self, urlopen):
+        urlopen.return_value.__enter__.return_value = json_response({"version": "0.5.0"})
+        provider = inference.OllamaProvider(model="qwen2.5:3b")
+        result = provider.health()
+        self.assertEqual(result["healthy"], True)
+        self.assertEqual(result["runtime_version"], "0.5.0")
+        self.assertEqual(result["model_name"], "qwen2.5:3b")
+
+    @mock.patch("urllib.request.urlopen")
+    def test_unreachable_reports_false_not_raise(self, urlopen):
+        urlopen.side_effect = urllib.error.URLError("connection refused")
+        provider = inference.OllamaProvider(model="qwen2.5:3b")
+        self.assertEqual(provider.health()["healthy"], False)
+
+    @mock.patch("urllib.request.urlopen")
+    def test_model_is_included_in_request_body(self, urlopen):
+        urlopen.return_value = json_response({"choices": [{"message": {"content": "hi"}}]})
+        provider = inference.OllamaProvider(model="qwen2.5:3b")
+        list(provider.generate([{"role": "user", "content": "hi"}], stream=False))
+        request = urlopen.call_args[0][0]
+        body = json.loads(request.data)
+        self.assertEqual(body["model"], "qwen2.5:3b")
+
+    def test_shares_the_streaming_with_tools_guard(self):
+        # Proves OllamaProvider actually goes through the same shared
+        # base class as LlamaCppProvider, not a hand-copied duplicate
+        # that could independently regress the same bug.
+        provider = inference.OllamaProvider(model="qwen2.5:3b")
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            with self.assertRaises(inference.ProviderError) as caught:
+                list(provider.generate([{"role": "user", "content": "hi"}], capability_catalog=[{"name": "x"}], stream=True))
+            self.assertEqual(caught.exception.code, "STREAMING_WITH_TOOLS_UNSUPPORTED")
+            urlopen.assert_not_called()
+
+    @mock.patch("urllib.request.urlopen")
+    def test_llama_cpp_provider_omits_model_field(self, urlopen):
+        # LlamaCppProvider serves one model per process -- confirms the
+        # shared base class doesn't leak Ollama's "model" requirement
+        # onto a provider that has no use for it.
+        urlopen.return_value = json_response({"choices": [{"message": {"content": "hi"}}]})
+        provider = inference.LlamaCppProvider()
+        list(provider.generate([{"role": "user", "content": "hi"}], stream=False))
+        request = urlopen.call_args[0][0]
+        body = json.loads(request.data)
+        self.assertNotIn("model", body)
+
+
 class StreamingGenerationTests(unittest.TestCase):
     @mock.patch("urllib.request.urlopen")
     def test_yields_tokens_in_order_then_done(self, urlopen):

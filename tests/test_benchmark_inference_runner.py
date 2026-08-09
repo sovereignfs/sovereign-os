@@ -1,3 +1,4 @@
+import argparse
 import json
 import runpy
 import sys
@@ -194,6 +195,28 @@ class RealCapabilityCatalogTests(BenchmarkRunnerTestCase):
         for entry in catalog:
             self.assertIn("argument_schema", entry)
             self.assertNotIn("side_effect", entry)  # RFC-0004: not exposed to the model
+
+
+class BuildProviderTests(BenchmarkRunnerTestCase):
+    def args(self, **overrides):
+        base = {"provider": "llama-cpp", "model": None, "base_url": "http://127.0.0.1:8081"}
+        base.update(overrides)
+        return argparse.Namespace(**base)
+
+    def test_llama_cpp_provider(self):
+        provider = self.module["build_provider"](self.args())
+        self.assertIsInstance(provider, inference.LlamaCppProvider)
+
+    def test_ollama_provider_with_model(self):
+        provider = self.module["build_provider"](
+            self.args(provider="ollama", model="qwen2.5:3b", base_url="http://127.0.0.1:11434")
+        )
+        self.assertIsInstance(provider, inference.OllamaProvider)
+        self.assertEqual(provider.model, "qwen2.5:3b")
+
+    def test_ollama_without_model_is_a_usage_error(self):
+        with self.assertRaises(SystemExit):
+            self.module["build_provider"](self.args(provider="ollama", model=None))
 
 
 class StarterCorpusTests(unittest.TestCase):

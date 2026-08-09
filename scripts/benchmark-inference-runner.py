@@ -180,22 +180,36 @@ def run_benchmark(provider, corpus, stream=True, dns_target="example.com", dig_p
     return report
 
 
+def build_provider(args):
+    if args.provider == "llama-cpp":
+        return inference.LlamaCppProvider(base_url=args.base_url)
+    if args.model is None:
+        raise SystemExit("--model is required for --provider ollama")
+    return inference.OllamaProvider(model=args.model, base_url=args.base_url)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--corpus", required=True, type=pathlib.Path)
-    parser.add_argument("--base-url", default="http://127.0.0.1:8081")
+    parser.add_argument("--provider", choices=["llama-cpp", "ollama"], default="llama-cpp")
+    parser.add_argument("--model", help="Required for --provider ollama; ignored for llama-cpp (one model per process)")
+    parser.add_argument("--base-url", default=None)
     parser.add_argument("--output", required=True, type=pathlib.Path)
     parser.add_argument("--no-stream", action="store_true")
     parser.add_argument("--dig", default="/usr/bin/dig")
     parser.add_argument("--dns-target", default="example.com")
     args = parser.parse_args()
+    if args.base_url is None:
+        args.base_url = "http://127.0.0.1:8081" if args.provider == "llama-cpp" else "http://127.0.0.1:11434"
 
     corpus = json.loads(args.corpus.read_text())
-    provider = inference.LlamaCppProvider(base_url=args.base_url)
+    provider = build_provider(args)
     report = run_benchmark(
         provider, corpus, stream=not args.no_stream,
         dns_target=args.dns_target, dig_path=args.dig,
     )
+    report["provider"] = args.provider
+    report["model"] = args.model
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     print(json.dumps(report, indent=2, sort_keys=True))
 

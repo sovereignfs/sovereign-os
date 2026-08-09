@@ -1,5 +1,4 @@
 import json
-import time
 import urllib.error
 import urllib.request
 
@@ -45,31 +44,30 @@ class ProviderError(Exception):
         self.code = code
 
 
-class LlamaCppProvider:
-    # llama-server's OpenAI-compatible HTTP API
-    # (docs/research/local-ai-options.md's cited server documentation).
+class _OpenAICompatibleProvider:
+    # Shared request/response handling for any runner speaking the OpenAI
+    # chat-completions wire format -- llama-server and Ollama's own
+    # compatibility endpoint both do (docs/research/local-ai-options.md's
+    # cited sources for both). Deliberately shared rather than duplicated:
+    # a second hand-copied implementation is exactly how the streaming/
+    # tool-call bug this module already found and fixed once would have
+    # been free to recur silently in a second runner's adapter.
+    #
     # Streaming uses the standard OpenAI chat-completions SSE shape
     # ("data: {...}\n\n" lines, terminated by "data: [DONE]\n\n"); tool
     # calls are requested and read non-streamed, since incremental
     # streamed tool-call argument reassembly is real production-adapter
     # work this benchmark harness does not need to measure structured-
-    # output accuracy.
-    def __init__(self, base_url="http://127.0.0.1:8081", request_timeout_seconds=60):
+    # output accuracy. generate() refuses stream=True combined with a
+    # capability_catalog outright, before any request is made, rather
+    # than silently dropping a real proposal.
+    def __init__(self, base_url, model=None, request_timeout_seconds=60):
         self.base_url = base_url.rstrip("/")
+        self.model = model
         self.request_timeout_seconds = request_timeout_seconds
 
     def health(self):
-        request = urllib.request.Request(f"{self.base_url}/health", method="GET")
-        try:
-            with urllib.request.urlopen(request, timeout=self.request_timeout_seconds) as response:  # noqa: S310
-                payload = json.loads(response.read(8192))
-        except (urllib.error.URLError, OSError, ValueError):
-            return {"healthy": False, "model_name": None, "runtime_version": None}
-        return {
-            "healthy": payload.get("status") == "ok",
-            "model_name": None,
-            "runtime_version": None,
-        }
+        raise NotImplementedError
 
     def _post(self, body, stream):
         request = urllib.request.Request(
@@ -85,20 +83,13 @@ class LlamaCppProvider:
 
     def generate(self, messages, capability_catalog=None, max_tokens=None, timeout_seconds=30, stream=True):
         if stream and capability_catalog:
-            # _generate_streaming only parses token/usage deltas -- it has
-            # no incremental tool-call reassembly (a deliberate scoping
-            # decision, see the module docstring). Silently dropping a
-            # real capability proposal because it arrived as a streamed
-            # delta instead of a single-shot response is exactly the kind
-            # of silent, surprising failure this project avoids everywhere
-            # else (RFC-0003's "audit always", RFC-0004's strict parsing) --
-            # fail loudly here instead, at the one call that would
-            # otherwise lose it.
             raise ProviderError(
                 "STREAMING_WITH_TOOLS_UNSUPPORTED",
                 "This adapter cannot parse tool calls from a streamed response; call with stream=False when capability_catalog is set",
             )
         body = {"messages": messages, "stream": stream}
+        if self.model is not None:
+            body["model"] = self.model
         if max_tokens is not None:
             body["max_tokens"] = max_tokens
         if capability_catalog:
@@ -173,3 +164,45 @@ class LlamaCppProvider:
                 "completion_tokens": usage.get("completion_tokens"),
             }
         yield {"kind": "done"}
+
+
+class LlamaCppProvider(_OpenAICompatibleProvider):
+    def __init__(self, base_url="http://127.0.0.1:8081", request_timeout_seconds=60):
+        # llama-server serves exactly one loaded model per process, so
+        # unlike Ollama it needs no "model" field in the request body.
+        super().__init__(base_url, model=None, request_timeout_seconds=request_timeout_seconds)
+
+    def health(self):
+        request = urllib.request.Request(f"{self.base_url}/health", method="GET")
+        try:
+            with urllib.request.urlopen(request, timeout=self.request_timeout_seconds) as response:  # noqa: S310
+                payload = json.loads(response.read(8192))
+        except (urllib.error.URLError, OSError, ValueError):
+            return {"healthy": False, "model_name": None, "runtime_version": None}
+        return {
+            "healthy": payload.get("status") == "ok",
+            "model_name": None,
+            "runtime_version": None,
+        }
+
+
+class OllamaProvider(_OpenAICompatibleProvider):
+    # Ollama's own OpenAI-compatible endpoint
+    # (docs/research/local-ai-options.md's cited installation docs) --
+    # unlike llama-server, Ollama can hold multiple models at once, so
+    # `model` selects which one a request targets and is required.
+    def __init__(self, model, base_url="http://127.0.0.1:11434", request_timeout_seconds=60):
+        super().__init__(base_url, model=model, request_timeout_seconds=request_timeout_seconds)
+
+    def health(self):
+        request = urllib.request.Request(f"{self.base_url}/api/version", method="GET")
+        try:
+            with urllib.request.urlopen(request, timeout=self.request_timeout_seconds) as response:  # noqa: S310
+                payload = json.loads(response.read(8192))
+        except (urllib.error.URLError, OSError, ValueError):
+            return {"healthy": False, "model_name": None, "runtime_version": None}
+        return {
+            "healthy": "version" in payload,
+            "model_name": self.model,
+            "runtime_version": payload.get("version"),
+        }
