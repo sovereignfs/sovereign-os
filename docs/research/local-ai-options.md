@@ -1,10 +1,14 @@
 # Local AI Options for Sovereign OS
 
-**Status:** Direction selected; hardware benchmarking underway (five
-real passes across two corpora — see Follow-up Decisions below);
-resource/DNS-latency budgets accepted ([ADR-0012](../adrs/0012-local-inference-resource-and-dns-latency-budgets.md));
-runner/model selection ADR still pending the deferred 7B v1-corpus run
-and validating ADR-0012's revisit conditions
+**Status:** Concluded — runner and initial model selected. Six real
+hardware passes across two corpora (see Follow-up Decisions below);
+resource/DNS-latency budgets accepted
+([ADR-0012](../adrs/0012-local-inference-resource-and-dns-latency-budgets.md));
+runner and model selected
+([ADR-0013](../adrs/0013-initial-inference-runner-and-model-selection.md)):
+llama.cpp + Qwen2.5-3B-Instruct. Two non-blocking validation gaps remain
+open (see ADR-0013's Required Follow-up) but do not block moving on to
+the Conversation Service itself.
 
 **Target:** Raspberry Pi 5 with 16 GB RAM
 
@@ -168,16 +172,18 @@ through a separately constrained `web.fetch` capability.
    deliberately skipped (project owner's explicit choice, given
    confirmed throttling and 7B's already-worse thermal profile) — that
    data point remains open.
-5. ⚪ Not yet done: no runner/model selection ADR exists. Real data now
-   spans both corpora: accuracy ties on the trivial starter corpus but
-   diverges meaningfully on the richer v1 one (llama.cpp ahead, each
-   runtime with a distinct and reproducible failure pattern); Ollama's
-   lazy model loading vs. llama.cpp's eager loading is now confirmed
-   reproducible (seen identically across two separate runs); 7B's cost
-   with no measured accuracy benefit over 3B holds on every corpus
-   tried so far. Item 2 above is now closed (ADR-0012 Accepted). Still
-   missing before a runner/model selection ADR: the llama.cpp-7B
-   v1-corpus data point, and validating ADR-0012's two revisit
-   conditions (realistic-use thermal behavior, during-generation DNS
-   latency) so the selection isn't made against numbers already known
-   to be provisional.
+5. ✅
+   [ADR-0013](../adrs/0013-initial-inference-runner-and-model-selection.md)
+   (Accepted, 2026-08-09): **llama.cpp + Qwen2.5-3B-Instruct
+   (Q4_K_M)**. llama.cpp scored higher on the v1 corpus (85% vs. 75%)
+   and has no cold-start penalty (Ollama's lazy loading, confirmed
+   reproducible, cost 6.96s TTFT on a question llama.cpp answered in
+   0.18s); Qwen2.5-7B showed no accuracy benefit over 3B on any corpus
+   tried and fails ADR-0012's memory budget outright (~58% vs. a 40%
+   ceiling), which made the deferred llama.cpp-7B v1-corpus run moot —
+   no further 7B benchmarking was needed to exclude it. Decided with
+   two disclosed, non-blocking gaps: the realistic intermittent-use
+   thermal pass (ADR-0012's other revisit condition) still hasn't been
+   run for any configuration, and DNS-latency-during-generation is only
+   confirmed for the selected configuration specifically, not
+   exhaustively.

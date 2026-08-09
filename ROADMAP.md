@@ -339,127 +339,59 @@ and automatic rollback.
 ### 4. Local Conversation and Capabilities
 
 **Status:** 🟡 In progress — started 2026-08-09. The dependency below is
-now satisfied (Milestone 2 is Complete). Direction research
-([docs/research/local-ai-options.md](docs/research/local-ai-options.md))
-and the milestone plan
-([docs/roadmap/01-2-local-conversation-capabilities.md](docs/roadmap/01-2-local-conversation-capabilities.md))
-already existed; [RFC-0002](docs/rfcs/0002-local-conversation-and-inference-runtime.md)
-(runtime and conversation architecture — the first of the milestone's
-required documents) is now Accepted (2026-08-09).
-[RFC-0003](docs/rfcs/0003-capability-contract.md) (capability contract —
-the typed registry and deterministic executor's validation pipeline,
-classifying `system.health`, Pi-hole read-only capabilities,
-`web.search`, and `web.fetch`) and
+now satisfied (Milestone 2 is Complete).
+
+**RFCs:** All four of the milestone's required RFCs are Accepted —
+[RFC-0002](docs/rfcs/0002-local-conversation-and-inference-runtime.md)
+(runtime and conversation architecture),
+[RFC-0003](docs/rfcs/0003-capability-contract.md) (the typed registry
+and six-stage deterministic executor),
 [RFC-0004](docs/rfcs/0004-ai-capability-invocation.md) (AI capability
-invocation — catalog exposure, strict proposal parsing, the multi-step
-invocation loop, per-invocation confirmation tokens, and the
-untrusted-forever boundary on capability results), and
+invocation, including the untrusted-forever boundary on capability
+results), and
 [RFC-0006](docs/rfcs/0006-pihole-capability-mapping.md) (Pi-hole
-capability mapping — `pihole.status`/`pihole.summary`, aggregate-only,
-no per-domain/per-client detail, carrying forward Console health's own
-privacy boundary) are all Accepted (2026-08-09, project creator). All
-four of the milestone's required RFCs now exist and are accepted;
-implementation is starting.
-[docs/research/pihole-api-assessment.md](docs/research/pihole-api-assessment.md),
-RFC-0006's remaining prerequisite, is Concluded (2026-08-09) — a real
-authenticated round trip against the live Pi-hole API on the
-qualification device confirmed both capabilities' data sources, found
-that no least-privilege credential exists on this Pi-hole version, and
-corrected RFC-0006's original assumption that `pihole.summary` needs
-only one upstream call (it needs two). Code implementation has begun:
-`sovereign_capabilities.py` implements RFC-0003's typed registry and
-six-stage executor pipeline, and `sovereign_pihole.py` implements
-`pihole.status`/`pihole.summary` against the real, verified endpoints
-(289 tests, full suite green). Both were also run against the real
-device outside the unit-test mocks — see the
-[pihole capabilities smoke test report](docs/research/pihole-capabilities-smoke-test-report.md)
-— though full qualification awaits a real caller (the Conversation
-Service, not yet built).
-`sovereign_system.py` now also implements `system.health`, delegating to
-`console-health`'s existing, already-privacy-reviewed endpoint rather
-than re-collecting uptime/memory/storage/temperature/network a second
-time (300 tests, full suite green), likewise smoke-tested against the
-real device — see the
-[system.health smoke test report](docs/research/system-health-capability-smoke-test-report.md).
-All four capabilities the milestone's Initial Capabilities section names
-now have registries except `web.search`/`web.fetch` (blocked on a
-SearXNG deployment decision, not yet made).
-`scripts/benchmark-inference-runner.py` is the reproducible runner/model
-benchmark harness `docs/research/local-ai-options.md`'s Benchmark Method
-specifies — time-to-first-token, tokens/sec, capability-selection
-accuracy against a starter corpus, and real memory/thermal/DNS-latency
-sampling — backed by `sovereign_inference.py`, RFC-0002's Inference
-Provider Adapter contract implemented against `llama-server`'s
-OpenAI-compatible API (334 tests after a real bug the first hardware run
-found — see below). The harness has now run for real: llama.cpp
-(Docker, `data-root` already on the large `/data` partition, not the
-~2GB root A/B slot) serving Qwen2.5-3B-Instruct on the qualification
-device, 5/5 correct on the starter corpus including real structured-
-argument extraction, ~4.7–5.3 tokens/sec. The first run silently
-dropped every capability proposal — a real bug (streaming can't read
-tool calls, nothing enforced single-shot mode when it needed to),
-fixed and re-verified on the same device. The most significant finding
-is thermal, not throughput: even the official Active Cooler only holds
-this device to 58°C before a ~25-second burst pushes it to 83°C, close
-to the Pi 5's throttle point — see the
-[llama.cpp + Qwen2.5-3B benchmark report](docs/research/llamacpp-qwen2.5-3b-benchmark-report.md).
-A same-day, same-device comparison against Qwen2.5-7B on the identical
-corpus followed: equally accurate (5/5 both), but 7B is 2–10x slower,
-roughly double the memory footprint, and peaked at 84.8°C — within
-~0.2°C of the Pi 5's throttle point — for no measured accuracy gain on
-this small corpus, a real but not final data point toward 3B being the
-more practical choice for this appliance. See the
-[llama.cpp + Qwen2.5-7B benchmark report](docs/research/llamacpp-qwen2.5-7b-benchmark-report.md).
-Ollama was then benchmarked too (`OllamaProvider`, refactored to share
-its request handling with `LlamaCppProvider` so the streaming/tool-call
-bug couldn't silently recur in a second adapter — it didn't), running
-the same-quantization-level `qwen2.5:3b` from Ollama's own library:
-identical 5/5 accuracy and comparable steady-state speed, but a real
-multi-second first-request penalty from lazy model loading that
-llama-server's eager loading doesn't have — 6.96s time-to-first-token
-vs. llama.cpp's 0.18s on the same question, tracked to a mid-run memory
-jump (14.2%→28.6%) as the model loaded on first use. See the
-[Ollama benchmark report](docs/research/ollama-qwen2.5-3b-benchmark-report.md).
-A larger evaluation corpus is now built —
-[`scripts/benchmark-inference-corpus-v1.json`](scripts/benchmark-inference-corpus-v1.json),
-28 items across per-capability phrasing variation, deliberately-
-ambiguous items left unscored, unsupported/mutating and adversarial
-prompts asserting *no* proposal (a new `expected_capability: false`
-harness sentinel, distinct from unscored), and multi-turn items
-including a prompt-injection-in-a-prior-tool-result case exercising
-RFC-0004's untrusted-forever boundary directly. Now run for real
-against llama.cpp and Ollama (both Qwen2.5-3B) — finally broke the
-starter corpus's ceiling effect: 85% vs. 75% on the identical 28-item
-prompt set, each runtime with a distinct, reproducible failure pattern
-rather than a vague "sometimes wrong." Confirmed genuine thermal
-throttling via `vcgencmd get_throttled` for the first time in this
-series (previously only "close to the documented threshold" could be
-said), and real "during generation" temperature sampling (not just
-before/after) shows both runtimes plateau at 82–85°C rather than
-climbing unbounded. The llama.cpp-7B pass on this corpus was
-deliberately skipped, at the project owner's explicit choice, given the
-confirmed throttling and 7B's already-worse thermal profile on the
-smaller corpus — see the
-[v1 corpus benchmark report](docs/research/v1-corpus-benchmark-report.md).
-The resource/DNS-latency budget policy is now Accepted —
-[ADR-0012](docs/adrs/0012-local-inference-resource-and-dns-latency-budgets.md):
-80°C sustained-temperature budget (deliberately below the ~85°C
-real-throttling point), a 40%-of-RAM memory ceiling (3B fits, 7B
-doesn't), and a provisional 50ms/3x-baseline DNS-latency budget,
-explicit about the two measurement gaps (realistic intermittent-use
-thermal behavior; DNS latency *during* generation) named as revisit
-conditions. The second is now closed for llama.cpp-3B on the starter
-corpus: real background `dig` sampling during 5 real generations (136
-samples total) never exceeded the 50ms budget, worst case 41.25ms — see
-the
-[DNS-latency-during-generation report](docs/research/dns-latency-during-generation-qualification-report.md).
-Not yet closed universally (Ollama, the v1 corpus, and 7B remain
-unmeasured with this mechanism), and the realistic-use thermal pass is
-still fully open. No runner or model selection is made yet — the
-deferred 7B v1-corpus data point and fully validating ADR-0012's revisit
-conditions come before the runner-selection ADR itself. The
-Conversation Service itself also
-remains.
+capability mapping, aggregate-only per Console health's own privacy
+precedent).
+
+**Capabilities:** `system.health`, `pihole.status`, and
+`pihole.summary` are all implemented
+(`sovereign_capabilities.py`, `sovereign_pihole.py`,
+`sovereign_system.py`) and smoke-tested against the real device — see
+the [pihole](docs/research/pihole-capabilities-smoke-test-report.md)
+and [system.health](docs/research/system-health-capability-smoke-test-report.md)
+reports. Full qualification awaits a real caller (the Conversation
+Service, not yet built). `web.search`/`web.fetch` remain blocked on a
+SearXNG deployment decision, not yet made.
+
+**Runner and model benchmarking is concluded.**
+`scripts/benchmark-inference-runner.py` (backed by
+`sovereign_inference.py`, RFC-0002's Inference Provider Adapter
+contract against both llama.cpp and Ollama) ran six real hardware
+passes across two runners, two model sizes, and two corpora — including
+finding and fixing a real bug (streaming silently dropped capability
+proposals), confirming genuine thermal throttling via
+`vcgencmd get_throttled` for the first time in this project's history,
+and building a 28-item evaluation corpus after the initial 5-item one
+hit a ceiling effect. Full narrative and data in the
+[llama.cpp 3B](docs/research/llamacpp-qwen2.5-3b-benchmark-report.md),
+[llama.cpp 7B](docs/research/llamacpp-qwen2.5-7b-benchmark-report.md),
+[Ollama 3B](docs/research/ollama-qwen2.5-3b-benchmark-report.md),
+[v1 corpus](docs/research/v1-corpus-benchmark-report.md), and
+[DNS-latency-during-generation](docs/research/dns-latency-during-generation-qualification-report.md)
+reports. That evidence became two accepted decisions:
+[ADR-0012](docs/adrs/0012-local-inference-resource-and-dns-latency-budgets.md)
+(80°C thermal budget, 40%-of-RAM memory ceiling, 50ms DNS-latency
+budget) and
+[ADR-0013](docs/adrs/0013-initial-inference-runner-and-model-selection.md)
+(**llama.cpp + Qwen2.5-3B-Instruct** selected — better v1-corpus
+accuracy than Ollama, no cold-start penalty, and Qwen2.5-7B excluded
+outright on the memory budget). Two non-blocking validation gaps remain
+open per ADR-0013's Required Follow-up (a realistic intermittent-use
+thermal pass; broader DNS-latency-during-generation coverage) but do
+not block moving on.
+
+**Remaining:** the Conversation Service itself (not started), and
+`web.search`/`web.fetch` (blocked on the SearXNG decision above).
 
 **Depends on:** Stable appliance update boundary
 

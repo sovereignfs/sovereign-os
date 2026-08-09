@@ -64,14 +64,26 @@ configured upstream engines and result pages remain external content.
 
 ## Required Follow-up
 
-- Define the inference and model-manifest contracts in an RFC.
-- Benchmark llama.cpp and Ollama on the Raspberry Pi 5.
-- Define capability schemas, authorization, confirmation, and auditing.
-- Document SearXNG deployment, upstream configuration, retention, and failure
-  behavior.
-- Update the data inventory and threat model before processing real
-  conversations or external content.
-- Record the selected runner and initial model in a later ADR.
+- ✅ Define the inference and model-manifest contracts in an RFC —
+  [RFC-0002](../rfcs/0002-local-conversation-and-inference-runtime.md)
+  (Accepted). The model-*manifest* half (Sovereign Model Management)
+  remains its own open piece within that RFC.
+- ✅ Benchmark llama.cpp and Ollama on the Raspberry Pi 5 — six real
+  hardware passes; see [ADR-0013](0013-initial-inference-runner-and-model-selection.md)
+  for the summary and every linked qualification report.
+- ✅ Define capability schemas, authorization, confirmation, and
+  auditing — [RFC-0003](../rfcs/0003-capability-contract.md) and
+  [RFC-0004](../rfcs/0004-ai-capability-invocation.md) (both Accepted),
+  implemented and hardware-qualified
+  (`sovereign_capabilities.py`, `sovereign_pihole.py`,
+  `sovereign_system.py`).
+- ⚪ Document SearXNG deployment, upstream configuration, retention, and
+  failure behavior — not started.
+- ⚪ Update the data inventory and threat model before processing real
+  conversations or external content — not started.
+- ✅ Record the selected runner and initial model in a later ADR —
+  [ADR-0013](0013-initial-inference-runner-and-model-selection.md):
+  llama.cpp + Qwen2.5-3B-Instruct.
 
 ## Rejected Alternatives
 
