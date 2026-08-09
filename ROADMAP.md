@@ -403,10 +403,16 @@ is thermal, not throughput: even the official Active Cooler only holds
 this device to 58°C before a ~25-second burst pushes it to 83°C, close
 to the Pi 5's throttle point — see the
 [llama.cpp + Qwen2.5-3B benchmark report](docs/research/llamacpp-qwen2.5-3b-benchmark-report.md).
-No runner or model selection is made yet — this is one data point, not
-a comparison; Ollama and a larger model remain, per the project owner's
-direction to start with llama.cpp alone. The Conversation Service
-itself also remains.
+A same-day, same-device comparison against Qwen2.5-7B on the identical
+corpus followed: equally accurate (5/5 both), but 7B is 2–10x slower,
+roughly double the memory footprint, and peaked at 84.8°C — within
+~0.2°C of the Pi 5's throttle point — for no measured accuracy gain on
+this small corpus, a real but not final data point toward 3B being the
+more practical choice for this appliance. See the
+[llama.cpp + Qwen2.5-7B benchmark report](docs/research/llamacpp-qwen2.5-7b-benchmark-report.md).
+No runner or model selection is made yet — Ollama and a larger
+evaluation corpus remain, per the project owner's direction to start
+with llama.cpp alone. The Conversation Service itself also remains.
 
 **Depends on:** Stable appliance update boundary
 

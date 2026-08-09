@@ -158,3 +158,9 @@ cooling available, which matters more for an always-on household DNS
 appliance than raw token throughput does. No runner or model selection
 is made here — this is one real data point toward that decision, not
 the decision itself.
+
+**Update, same day:** a direct comparison against Qwen2.5-7B on the same
+device and corpus followed — see the
+[Qwen2.5-7B benchmark report](llamacpp-qwen2.5-7b-benchmark-report.md).
+7B matched this model's accuracy exactly but was substantially slower,
+used roughly double the memory, and ran hotter still.
