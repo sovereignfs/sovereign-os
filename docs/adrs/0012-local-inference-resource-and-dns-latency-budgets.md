@@ -202,10 +202,14 @@ then:
    gaps between requests, not back-to-back generation, measuring whether
    80°C genuinely holds under real conditions rather than only being
    inferred from stress-test data.
-2. **A during-generation DNS-latency measurement** — extending the
-   benchmark harness to sample DNS latency concurrently with an
-   in-flight request, not just before and after the whole run, closing
-   the gap every qualification report in this series has named.
+2. **A during-generation DNS-latency measurement** — the harness
+   mechanism now exists (`DnsDuringSampler`,
+   `--sample-dns-during-generation`, background `dig` sampling for the
+   duration of each item's generation, checked against this ADR's 50ms
+   budget), but no real hardware run has used it yet. This condition
+   isn't closed until a real qualification pass reports real
+   during-generation numbers, not just that the capability to measure
+   them exists.
 
 Until then, this ADR's numbers are the accepted policy, but explicitly a
 starting point grounded in real evidence rather than a final, precisely

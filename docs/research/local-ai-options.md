@@ -138,7 +138,11 @@ through a separately constrained `web.fetch` capability.
    7B does not), and a provisional 50ms/3x-baseline DNS-latency budget.
    Explicitly names two open measurement gaps (realistic intermittent-
    use thermal behavior, and DNS latency *during* generation rather than
-   only before/after) as revisit conditions, not treated as final.
+   only before/after) as revisit conditions, not treated as final. The
+   harness now has the mechanism to close the second one
+   (`DnsDuringSampler`, `--sample-dns-during-generation`) but no real
+   hardware run has used it yet — the revisit condition isn't closed
+   until one has.
 3. ✅ The tool-call corpus half is done —
    [`scripts/benchmark-inference-corpus-v1.json`](../../scripts/benchmark-inference-corpus-v1.json),
    28 items across plain chat, per-capability phrasing variation,

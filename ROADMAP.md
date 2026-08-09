@@ -448,10 +448,15 @@ real-throttling point), a 40%-of-RAM memory ceiling (3B fits, 7B
 doesn't), and a provisional 50ms/3x-baseline DNS-latency budget,
 explicit about the two measurement gaps (realistic intermittent-use
 thermal behavior; DNS latency *during* generation) still open as
-revisit conditions rather than treated as settled. No runner or model
-selection is made yet — the deferred 7B v1-corpus data point and
-validating ADR-0012's two revisit conditions come before the
-runner-selection ADR itself. The Conversation Service itself also
+revisit conditions rather than treated as settled. The harness can now
+sample DNS latency during generation itself
+(`scripts/benchmark-inference-runner.py --sample-dns-during-generation`,
+362 tests, full suite green) — the mechanism exists, but no real
+hardware run has used it yet, so that revisit condition remains open
+until one has. No runner or model selection is made yet — the deferred
+7B v1-corpus data point and validating ADR-0012's two revisit
+conditions come before the runner-selection ADR itself. The
+Conversation Service itself also
 remains.
 
 **Depends on:** Stable appliance update boundary
