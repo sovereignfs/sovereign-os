@@ -19,7 +19,15 @@ image_environment=${release_root}/pihole-image.env
 image_reference="${PIHOLE_IMAGE_REPOSITORY#docker.io/}@${PIHOLE_IMAGE_DIGEST}"
 
 install -d -m 0755 "$state_dir" "$app_dir" "${app_dir}/etc-pihole"
-install -d -m 0700 "$secret_dir"
+# 0710: group can traverse to reach a filename it already knows
+# (pihole-admin-password, made group-readable below for
+# sovereign-conversation.service's DynamicUser, via the
+# sovereign-pihole-secrets group) but cannot list the directory's
+# contents -- any other file placed here later stays root-only unless
+# its own mode is separately loosened, the same least-privilege scoping
+# sovereign-console-secrets already established for the console
+# credential.
+install -d -m 0710 -g sovereign-pihole-secrets "$secret_dir"
 
 if [ ! -s "$password_file" ]; then
   umask 077
@@ -27,7 +35,8 @@ if [ ! -s "$password_file" ]; then
   printf '\n' >> "${password_file}.tmp"
   mv "${password_file}.tmp" "$password_file"
 fi
-chmod 0600 "$password_file"
+chown root:sovereign-pihole-secrets "$password_file"
+chmod 0640 "$password_file"
 
 sed "s|@PIHOLE_IMAGE_REFERENCE@|${image_reference}|g" \
   "$template" > "${compose_file}.tmp"

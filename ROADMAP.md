@@ -359,9 +359,43 @@ precedent).
 `sovereign_system.py`) and smoke-tested against the real device — see
 the [pihole](docs/research/pihole-capabilities-smoke-test-report.md)
 and [system.health](docs/research/system-health-capability-smoke-test-report.md)
-reports. Full qualification awaits a real caller (the Conversation
-Service, not yet built). `web.search`/`web.fetch` remain blocked on a
-SearXNG deployment decision, not yet made.
+reports. `web.search`/`web.fetch` remain blocked on a SearXNG
+deployment decision, not yet made.
+
+**Conversation Service:** implemented — `sovereign_conversation.py`
+(RFC-0003/0004's bounded propose→execute→narrate loop: max 3 rounds per
+turn, max 3 capability proposals per round, per-capability
+invocation budgets enforced, capability results re-enter context as
+plain untrusted `tool`-role messages) sits behind a thin loopback-only
+HTTP wrapper, `bin/sovereign-conversation`
+(`GET /api/v1/conversation/health`,
+`POST /api/v1/conversation/message`), running as
+`sovereign-conversation.service`
+(`DynamicUser=yes`, hardened, not yet auto-enabled — see below).
+Deliberately out of scope for this pass: streaming (the selected
+llama.cpp adapter can't parse tool calls from a streamed response, so
+every round is single-shot), a working confirmation pause/resume flow
+(capabilities requiring confirmation are detected and refused with a
+clear error — nothing registered needs one yet), and conversation
+storage (stateless; the caller supplies full history per call). 26
+unit/HTTP-layer tests cover the turn loop and the live service; no
+real-hardware smoke test yet (the established next step for every
+capability in this milestone).
+
+Wiring in the Pi-hole capabilities surfaced a real production gap:
+`pihole-admin-password` was root-only (`0600`), which an unprivileged
+`DynamicUser` service could never read. Fixed by mirroring
+console-auth's own established pattern — a new
+`sovereign-pihole-secrets` sysusers.d group,
+`start-pihole`/`sovereign-pihole-password` now set the secrets
+directory to `0710` and the password file to `0640` group-readable
+(`chown root:sovereign-pihole-secrets`).
+
+Not yet done: authentication (RFC-0002 calls for the same
+console-auth-established boundary, ADR-0007), and auto-enabling the
+systemd unit — deferred because auth isn't wired and no persistent
+llama-server deployment service exists yet, so auto-starting it on a
+fresh image would just be a service that always fails to connect.
 
 **Runner and model benchmarking is concluded.**
 `scripts/benchmark-inference-runner.py` (backed by
@@ -390,7 +424,8 @@ open per ADR-0013's Required Follow-up (a realistic intermittent-use
 thermal pass; broader DNS-latency-during-generation coverage) but do
 not block moving on.
 
-**Remaining:** the Conversation Service itself (not started), and
+**Remaining:** a real-hardware smoke test of the Conversation Service,
+authentication integration, auto-enabling its systemd unit, and
 `web.search`/`web.fetch` (blocked on the SearXNG decision above).
 
 **Depends on:** Stable appliance update boundary

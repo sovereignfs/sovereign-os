@@ -63,7 +63,10 @@ class BootstrapAccessTests(unittest.TestCase):
         command = PIHOLE_PASSWORD_COMMAND.read_text()
         self.assertIn('docker exec pihole pihole setpassword "$password"', command)
         self.assertIn('mv "$temporary_file" "$password_file"', command)
-        self.assertIn('chmod 0600 "$password_file"', command)
+        # 0640/sovereign-pihole-secrets, not 0600/root-only: the
+        # conversation service's DynamicUser needs group read access.
+        self.assertIn('chown root:sovereign-pihole-secrets "$password_file"', command)
+        self.assertIn('chmod 0640 "$password_file"', command)
         self.assertIn('if [ "${#password}" -lt 12 ]', command)
 
 

@@ -1,0 +1,38 @@
+[Unit]
+Description=Serve the Sovereign local conversation API
+After=local-fs.target network.target systemd-sysusers.service sovereign-proof.service
+Wants=sovereign-proof.service
+RequiresMountsFor=/data
+ConditionPathIsMountPoint=/data
+
+[Service]
+Type=simple
+DynamicUser=yes
+SupplementaryGroups=sovereign-pihole-secrets
+ReadWritePaths=/data/sovereign/capabilities
+ExecStart=/opt/sovereign/current/appliance/bin/sovereign-conversation
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+RestrictAddressFamilies=AF_INET AF_INET6 AF_NETLINK
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+UMask=0077
+TasksMax=32
+MemoryMax=128M
+
+[Install]
+WantedBy=multi-user.target

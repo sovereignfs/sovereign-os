@@ -19,6 +19,7 @@ SAFE_KEY = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 APPLIANCE_FILES = {
     "bin/console-auth": 0o755,
     "bin/console-health": 0o755,
+    "bin/sovereign-conversation": 0o755,
     "bin/start-pihole": 0o755,
     "bin/stop-pihole": 0o755,
     "bin/verify-local-access": 0o755,
@@ -27,6 +28,7 @@ APPLIANCE_FILES = {
     "console/assets/console.js": 0o644,
     "console/index.html": 0o644,
     "lib/sovereign_capabilities.py": 0o644,
+    "lib/sovereign_conversation.py": 0o644,
     "lib/sovereign_inference.py": 0o644,
     "lib/sovereign_pihole.py": 0o644,
     "lib/sovereign_system.py": 0o644,
