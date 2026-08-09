@@ -1,6 +1,6 @@
 # ADR-0012: Local-Inference Resource and DNS-Latency Budgets
 
-**Status:** Proposed
+**Status:** Accepted
 
 **Date:** 2026-08-09
 

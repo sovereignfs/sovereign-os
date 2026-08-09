@@ -441,17 +441,18 @@ deliberately skipped, at the project owner's explicit choice, given the
 confirmed throttling and 7B's already-worse thermal profile on the
 smaller corpus — see the
 [v1 corpus benchmark report](docs/research/v1-corpus-benchmark-report.md).
-The resource/DNS-latency budget policy is now drafted —
-[ADR-0012](docs/adrs/0012-local-inference-resource-and-dns-latency-budgets.md)
-(Proposed): 80°C sustained-temperature budget (deliberately below the
-~85°C real-throttling point), a 40%-of-RAM memory ceiling (3B fits, 7B
+The resource/DNS-latency budget policy is now Accepted —
+[ADR-0012](docs/adrs/0012-local-inference-resource-and-dns-latency-budgets.md):
+80°C sustained-temperature budget (deliberately below the ~85°C
+real-throttling point), a 40%-of-RAM memory ceiling (3B fits, 7B
 doesn't), and a provisional 50ms/3x-baseline DNS-latency budget,
 explicit about the two measurement gaps (realistic intermittent-use
 thermal behavior; DNS latency *during* generation) still open as
 revisit conditions rather than treated as settled. No runner or model
-selection is made yet — that 7B data point, ADR-0012's acceptance, and
-the runner-selection ADR itself all remain. The Conversation Service
-itself also remains.
+selection is made yet — the deferred 7B v1-corpus data point and
+validating ADR-0012's two revisit conditions come before the
+runner-selection ADR itself. The Conversation Service itself also
+remains.
 
 **Depends on:** Stable appliance update boundary
 

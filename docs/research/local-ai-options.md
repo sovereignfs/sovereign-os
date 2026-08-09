@@ -1,8 +1,10 @@
 # Local AI Options for Sovereign OS
 
-**Status:** Direction selected; hardware benchmarking underway (three
-real passes against the starter corpus — see Follow-up Decisions below);
-runner/model selection ADR still pending a larger-corpus run
+**Status:** Direction selected; hardware benchmarking underway (five
+real passes across two corpora — see Follow-up Decisions below);
+resource/DNS-latency budgets accepted ([ADR-0012](../adrs/0012-local-inference-resource-and-dns-latency-budgets.md));
+runner/model selection ADR still pending the deferred 7B v1-corpus run
+and validating ADR-0012's revisit conditions
 
 **Target:** Raspberry Pi 5 with 16 GB RAM
 
@@ -127,17 +129,16 @@ through a separately constrained `web.fetch` capability.
    model-manifest format (Sovereign Model Management's own ownership of
    digest/license/lifecycle) remains undecided — a separate, still-open
    piece of RFC-0002.
-2. 🟡 Drafted, pending acceptance —
+2. ✅
    [ADR-0012](../adrs/0012-local-inference-resource-and-dns-latency-budgets.md)
-   proposes numeric thresholds grounded in the four real benchmark
-   passes' data: 80°C sustained-temperature budget (deliberately below
-   the ~85°C point where real throttling was confirmed), a 40%-of-RAM
-   memory ceiling (Qwen2.5-3B fits with margin, 7B does not), and a
-   provisional 50ms/3x-baseline DNS-latency budget. Explicitly flags
-   two open measurement gaps (realistic intermittent-use thermal
-   behavior, and DNS latency *during* generation rather than only
-   before/after) as revisit conditions rather than treating the numbers
-   as final.
+   (Accepted, 2026-08-09) sets numeric thresholds grounded in the four
+   real benchmark passes' data: 80°C sustained-temperature budget
+   (deliberately below the ~85°C point where real throttling was
+   confirmed), a 40%-of-RAM memory ceiling (Qwen2.5-3B fits with margin,
+   7B does not), and a provisional 50ms/3x-baseline DNS-latency budget.
+   Explicitly names two open measurement gaps (realistic intermittent-
+   use thermal behavior, and DNS latency *during* generation rather than
+   only before/after) as revisit conditions, not treated as final.
 3. ✅ The tool-call corpus half is done —
    [`scripts/benchmark-inference-corpus-v1.json`](../../scripts/benchmark-inference-corpus-v1.json),
    28 items across plain chat, per-capability phrasing variation,
@@ -168,7 +169,9 @@ through a separately constrained `web.fetch` capability.
    lazy model loading vs. llama.cpp's eager loading is now confirmed
    reproducible (seen identically across two separate runs); 7B's cost
    with no measured accuracy benefit over 3B holds on every corpus
-   tried so far. Still missing before an ADR: the llama.cpp-7B v1-corpus
-   data point, and item 2 above (ADR-0012 drafted but not yet accepted
-   by the project owner — a runner/model selection ADR built on top of
-   an unaccepted budget policy would rest on a still-moving target).
+   tried so far. Item 2 above is now closed (ADR-0012 Accepted). Still
+   missing before a runner/model selection ADR: the llama.cpp-7B
+   v1-corpus data point, and validating ADR-0012's two revisit
+   conditions (realistic-use thermal behavior, during-generation DNS
+   latency) so the selection isn't made against numbers already known
+   to be provisional.
