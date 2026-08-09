@@ -202,14 +202,15 @@ then:
    gaps between requests, not back-to-back generation, measuring whether
    80°C genuinely holds under real conditions rather than only being
    inferred from stress-test data.
-2. **A during-generation DNS-latency measurement** — the harness
-   mechanism now exists (`DnsDuringSampler`,
-   `--sample-dns-during-generation`, background `dig` sampling for the
-   duration of each item's generation, checked against this ADR's 50ms
-   budget), but no real hardware run has used it yet. This condition
-   isn't closed until a real qualification pass reports real
-   during-generation numbers, not just that the capability to measure
-   them exists.
+2. **A during-generation DNS-latency measurement** — done for
+   llama.cpp-3B on the starter corpus: the 50ms budget held across every
+   sample (136 total, max 41.25ms), and the 3x-baseline sub-condition
+   held too (worst case ≈2.8x). See the
+   [DNS-latency-during-generation report](../research/dns-latency-during-generation-qualification-report.md).
+   **Not yet closed universally** — Ollama, the larger v1 corpus, and
+   Qwen2.5-7B (already known to run longer and hotter, a real reason its
+   DNS-latency behavior could differ) have not been measured with this
+   mechanism yet.
 
 Until then, this ADR's numbers are the accepted policy, but explicitly a
 starting point grounded in real evidence rather than a final, precisely

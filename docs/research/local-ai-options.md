@@ -139,10 +139,12 @@ through a separately constrained `web.fetch` capability.
    Explicitly names two open measurement gaps (realistic intermittent-
    use thermal behavior, and DNS latency *during* generation rather than
    only before/after) as revisit conditions, not treated as final. The
-   harness now has the mechanism to close the second one
-   (`DnsDuringSampler`, `--sample-dns-during-generation`) but no real
-   hardware run has used it yet — the revisit condition isn't closed
-   until one has.
+   second is now closed for llama.cpp-3B on the starter corpus — the
+   50ms budget held across all 136 real during-generation samples taken
+   (max 41.25ms) — see the
+   [DNS-latency-during-generation report](dns-latency-during-generation-qualification-report.md).
+   Not yet closed universally: Ollama, the v1 corpus, and 7B remain
+   unmeasured with this mechanism.
 3. ✅ The tool-call corpus half is done —
    [`scripts/benchmark-inference-corpus-v1.json`](../../scripts/benchmark-inference-corpus-v1.json),
    28 items across plain chat, per-capability phrasing variation,

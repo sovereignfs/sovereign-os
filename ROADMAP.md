@@ -447,14 +447,16 @@ The resource/DNS-latency budget policy is now Accepted —
 real-throttling point), a 40%-of-RAM memory ceiling (3B fits, 7B
 doesn't), and a provisional 50ms/3x-baseline DNS-latency budget,
 explicit about the two measurement gaps (realistic intermittent-use
-thermal behavior; DNS latency *during* generation) still open as
-revisit conditions rather than treated as settled. The harness can now
-sample DNS latency during generation itself
-(`scripts/benchmark-inference-runner.py --sample-dns-during-generation`,
-362 tests, full suite green) — the mechanism exists, but no real
-hardware run has used it yet, so that revisit condition remains open
-until one has. No runner or model selection is made yet — the deferred
-7B v1-corpus data point and validating ADR-0012's two revisit
+thermal behavior; DNS latency *during* generation) named as revisit
+conditions. The second is now closed for llama.cpp-3B on the starter
+corpus: real background `dig` sampling during 5 real generations (136
+samples total) never exceeded the 50ms budget, worst case 41.25ms — see
+the
+[DNS-latency-during-generation report](docs/research/dns-latency-during-generation-qualification-report.md).
+Not yet closed universally (Ollama, the v1 corpus, and 7B remain
+unmeasured with this mechanism), and the realistic-use thermal pass is
+still fully open. No runner or model selection is made yet — the
+deferred 7B v1-corpus data point and fully validating ADR-0012's revisit
 conditions come before the runner-selection ADR itself. The
 Conversation Service itself also
 remains.
