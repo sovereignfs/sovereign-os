@@ -390,12 +390,23 @@ specifies — time-to-first-token, tokens/sec, capability-selection
 accuracy against a starter corpus, and real memory/thermal/DNS-latency
 sampling — backed by `sovereign_inference.py`, RFC-0002's Inference
 Provider Adapter contract implemented against `llama-server`'s
-OpenAI-compatible API (331 tests, full suite green). No runner or model
-is selected yet; running the harness against real llama.cpp/Ollama
-installs on the qualification device, then recording the result in an
-ADR, remains — real-hardware time and a model-download/bandwidth
-decision the maintainer should weigh in on before it happens. The
-Conversation Service itself also remains.
+OpenAI-compatible API (334 tests after a real bug the first hardware run
+found — see below). The harness has now run for real: llama.cpp
+(Docker, `data-root` already on the large `/data` partition, not the
+~2GB root A/B slot) serving Qwen2.5-3B-Instruct on the qualification
+device, 5/5 correct on the starter corpus including real structured-
+argument extraction, ~4.7–5.3 tokens/sec. The first run silently
+dropped every capability proposal — a real bug (streaming can't read
+tool calls, nothing enforced single-shot mode when it needed to),
+fixed and re-verified on the same device. The most significant finding
+is thermal, not throughput: even the official Active Cooler only holds
+this device to 58°C before a ~25-second burst pushes it to 83°C, close
+to the Pi 5's throttle point — see the
+[llama.cpp + Qwen2.5-3B benchmark report](docs/research/llamacpp-qwen2.5-3b-benchmark-report.md).
+No runner or model selection is made yet — this is one data point, not
+a comparison; Ollama and a larger model remain, per the project owner's
+direction to start with llama.cpp alone. The Conversation Service
+itself also remains.
 
 **Depends on:** Stable appliance update boundary
 
