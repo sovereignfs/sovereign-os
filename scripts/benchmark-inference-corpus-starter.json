@@ -1,0 +1,43 @@
+{
+  "id": "starter",
+  "version": 1,
+  "note": "A starter corpus sufficient to exercise the benchmark harness itself. Not the approved evaluation corpus docs/research/local-ai-options.md's Follow-up Decisions still names as an open decision -- selecting that corpus (size, real household-representative questions, adversarial cases) is a separate, later decision this file does not make.",
+  "items": [
+    {
+      "id": "plain-chat-no-tools",
+      "messages": [
+        {"role": "user", "content": "In one sentence, what does a Pi-hole do?"}
+      ],
+      "use_capabilities": false,
+      "expected_capability": null
+    },
+    {
+      "id": "system-health-question",
+      "messages": [
+        {"role": "user", "content": "Is the Sovereign appliance healthy right now?"}
+      ],
+      "expected_capability": "system.health"
+    },
+    {
+      "id": "pihole-blocking-status-question",
+      "messages": [
+        {"role": "user", "content": "Is Pi-hole currently blocking ads?"}
+      ],
+      "expected_capability": "pihole.status"
+    },
+    {
+      "id": "pihole-summary-question",
+      "messages": [
+        {"role": "user", "content": "How many DNS queries has Pi-hole blocked in the last 24 hours?"}
+      ],
+      "expected_capability": "pihole.summary"
+    },
+    {
+      "id": "unrelated-question-should-not-propose-a-capability",
+      "messages": [
+        {"role": "user", "content": "What's a good name for a pet goldfish?"}
+      ],
+      "expected_capability": null
+    }
+  ]
+}

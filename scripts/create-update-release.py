@@ -27,6 +27,7 @@ APPLIANCE_FILES = {
     "console/assets/console.js": 0o644,
     "console/index.html": 0o644,
     "lib/sovereign_capabilities.py": 0o644,
+    "lib/sovereign_inference.py": 0o644,
     "lib/sovereign_pihole.py": 0o644,
     "lib/sovereign_system.py": 0o644,
     "nginx/sovereign.conf": 0o644,
