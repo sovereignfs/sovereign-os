@@ -1,6 +1,8 @@
 # Local AI Options for Sovereign OS
 
-**Status:** Direction selected; hardware benchmark pending
+**Status:** Direction selected; hardware benchmarking underway (three
+real passes against the starter corpus — see Follow-up Decisions below);
+runner/model selection ADR still pending a larger-corpus run
 
 **Target:** Raspberry Pi 5 with 16 GB RAM
 
@@ -118,8 +120,35 @@ through a separately constrained `web.fetch` capability.
 
 ## Follow-up Decisions
 
-1. Approve the normalized inference API and model-manifest format.
-2. Define measurable Raspberry Pi resource and DNS latency budgets.
-3. Select the benchmark model set and tool-call corpus.
-4. Run llama.cpp and Ollama on the target device.
-5. Record the runner/model selection in an ADR.
+1. ✅ The normalized inference API is implemented as `sovereign_inference.py`
+   against [RFC-0002](../rfcs/0002-local-conversation-and-inference-runtime.md)
+   (Accepted) — a shared `_OpenAICompatibleProvider` base class, with
+   `LlamaCppProvider` and `OllamaProvider` subclasses. The
+   model-manifest format (Sovereign Model Management's own ownership of
+   digest/license/lifecycle) remains undecided — a separate, still-open
+   piece of RFC-0002.
+2. ⚪ Not yet done: measurable resource/DNS-latency budgets have not
+   been written down as accepted numeric thresholds. Real numbers have
+   been *recorded* across three benchmark passes (below) but nothing
+   has turned them into a policy a runner must pass or fail against.
+3. ✅ The tool-call corpus half is done —
+   [`scripts/benchmark-inference-corpus-v1.json`](../../scripts/benchmark-inference-corpus-v1.json),
+   28 items across plain chat, per-capability phrasing variation,
+   deliberately-ambiguous, unsupported/mutating, adversarial (including
+   a prompt-injection-in-a-prior-tool-result case exercising RFC-0004's
+   untrusted-forever boundary), and multi-turn categories. The
+   *model set* half remains open — only Qwen2.5-3B/7B have been tried;
+   a real "set" selection (how many candidates, which families) hasn't
+   been decided as its own question.
+4. 🟡 Partially done: llama.cpp (Qwen2.5-3B and Qwen2.5-7B) and Ollama
+   (Qwen2.5-3B) have all run for real on the qualification device — see
+   the [3B](llamacpp-qwen2.5-3b-benchmark-report.md),
+   [7B](llamacpp-qwen2.5-7b-benchmark-report.md), and
+   [Ollama](ollama-qwen2.5-3b-benchmark-report.md) reports — but only
+   against the small starter corpus, not yet the v1 corpus above.
+5. ⚪ Not yet done: no runner/model selection ADR exists. Three real
+   data points exist (ties on accuracy so far, llama.cpp's eager model
+   loading vs. Ollama's lazy loading as a real operational difference,
+   7B's cost with no measured benefit over 3B on the corpora tried),
+   but per this project's own stated sequencing, the ADR waits on
+   running the larger v1 corpus first.

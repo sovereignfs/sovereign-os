@@ -108,6 +108,27 @@ class RunCorpusItemTests(BenchmarkRunnerTestCase):
         result = self.module["run_corpus_item"](provider, self.item(), stream=True, catalog=[])
         self.assertNotIn("capability_selection_correct", result)
 
+    def test_expected_capability_false_correct_when_nothing_proposed(self):
+        provider = FakeProvider(chunks=[{"kind": "done"}])
+        result = self.module["run_corpus_item"](
+            provider, self.item(expected_capability=False), stream=False, catalog=[]
+        )
+        self.assertTrue(result["capability_selection_correct"])
+
+    def test_expected_capability_false_incorrect_when_something_proposed(self):
+        # The important adversarial case: expected_capability=false means
+        # "no registered capability applies here" -- a model proposing
+        # anything at all, including something unregistered/hallucinated,
+        # must score as wrong, not merely unscored.
+        provider = FakeProvider(chunks=[
+            {"kind": "capability_proposal", "name": "pihole.disable", "arguments": {}},
+            {"kind": "done"},
+        ])
+        result = self.module["run_corpus_item"](
+            provider, self.item(expected_capability=False), stream=False, catalog=[]
+        )
+        self.assertFalse(result["capability_selection_correct"])
+
     def test_provider_error_is_captured_not_raised(self):
         provider = FakeProvider(raise_error=inference.ProviderError("PROVIDER_UNREACHABLE", "down"))
         result = self.module["run_corpus_item"](provider, self.item(), stream=True, catalog=[])
@@ -235,6 +256,75 @@ class StarterCorpusTests(unittest.TestCase):
         provider = FakeProvider(chunks=[{"kind": "token", "text": "sure, here's an answer"}, {"kind": "done"}])
         report = module["run_benchmark"](provider, corpus, catalog=[])
         self.assertEqual(len(report["items"]), len(corpus["items"]))
+
+
+V1_CORPUS_PATH = ROOT / "scripts/benchmark-inference-corpus-v1.json"
+
+
+class V1CorpusTests(unittest.TestCase):
+    def corpus(self):
+        return json.loads(V1_CORPUS_PATH.read_text())
+
+    def test_is_well_formed_json_with_expected_shape(self):
+        corpus = self.corpus()
+        self.assertEqual(corpus["id"], "v1")
+        self.assertTrue(corpus["items"])
+        seen_ids = set()
+        for item in corpus["items"]:
+            self.assertIn("id", item)
+            self.assertIn("messages", item)
+            self.assertNotIn(item["id"], seen_ids, f"duplicate item id: {item['id']}")
+            seen_ids.add(item["id"])
+
+    def test_is_larger_than_the_starter_corpus(self):
+        starter = json.loads(CORPUS_PATH.read_text())
+        self.assertGreater(len(self.corpus()["items"]), len(starter["items"]))
+
+    def test_covers_every_registered_capability_plus_negative_and_ambiguous_cases(self):
+        corpus = self.corpus()
+        expectations = [item.get("expected_capability") for item in corpus["items"]]
+        # At least one item positively expects each real, registered
+        # capability -- the corpus can't claim to evaluate a capability
+        # it never actually exercises.
+        self.assertIn("system.health", expectations)
+        self.assertIn("pihole.status", expectations)
+        self.assertIn("pihole.summary", expectations)
+        # At least one item explicitly expects *no* proposal (distinct
+        # from unscored/ambiguous items) -- the false sentinel this
+        # corpus depends on to test unsupported/adversarial prompts.
+        self.assertIn(False, expectations)
+        # At least one item is deliberately left unscored (ambiguous).
+        self.assertIn(None, expectations)
+
+    def test_includes_multi_turn_items(self):
+        corpus = self.corpus()
+        multi_turn = [item for item in corpus["items"] if len(item["messages"]) > 1]
+        self.assertTrue(multi_turn, "expected at least one multi-turn item")
+
+    @mock.patch("subprocess.run")
+    def test_runs_end_to_end_against_a_fake_provider(self, subprocess_run):
+        module = runpy.run_path(str(SCRIPT_PATH), run_name="not_main")
+        corpus = self.corpus()
+        provider = FakeProvider(chunks=[{"kind": "token", "text": "a plausible answer"}, {"kind": "done"}])
+        report = module["run_benchmark"](provider, corpus, catalog=[])
+        self.assertEqual(len(report["items"]), len(corpus["items"]))
+
+    @mock.patch("subprocess.run")
+    def test_expected_capability_false_items_score_correct_against_a_silent_fake(self, subprocess_run):
+        # A provider that never proposes anything should score "correct"
+        # on every expected_capability: false item -- confirms the
+        # sentinel is wired all the way from the corpus file through to
+        # scoring, not just present in the JSON.
+        module = runpy.run_path(str(SCRIPT_PATH), run_name="not_main")
+        corpus = self.corpus()
+        provider = FakeProvider(chunks=[{"kind": "token", "text": "a plausible answer"}, {"kind": "done"}])
+        report = module["run_benchmark"](provider, corpus, catalog=[])
+        false_expectation_ids = {
+            item["id"] for item in corpus["items"] if item.get("expected_capability") is False
+        }
+        for result in report["items"]:
+            if result["id"] in false_expectation_ids:
+                self.assertTrue(result["capability_selection_correct"], result["id"])
 
 
 if __name__ == "__main__":

@@ -150,8 +150,16 @@ def run_corpus_item(provider, item, stream, catalog):
             for proposal in proposals
         ],
     }
+    # expected_capability has three meaningful states: a capability name
+    # (correct iff that name was proposed), `false` (correct iff nothing
+    # was proposed -- for prompts where no registered capability applies,
+    # including adversarial ones), or absent/null (not scored -- for
+    # genuinely ambiguous items where either answer, or none, is
+    # reasonable and forcing a verdict would just be noise).
     expected = item.get("expected_capability")
-    if expected is not None:
+    if expected is False:
+        result["capability_selection_correct"] = len(proposals) == 0
+    elif expected is not None:
         result["capability_selection_correct"] = any(
             proposal.get("name") == expected for proposal in proposals
         )

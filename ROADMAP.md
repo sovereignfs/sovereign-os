@@ -420,9 +420,19 @@ llama-server's eager loading doesn't have — 6.96s time-to-first-token
 vs. llama.cpp's 0.18s on the same question, tracked to a mid-run memory
 jump (14.2%→28.6%) as the model loaded on first use. See the
 [Ollama benchmark report](docs/research/ollama-qwen2.5-3b-benchmark-report.md).
-No runner or model selection is made yet — a larger evaluation corpus
-remains before that decision, per `local-ai-options.md`'s own Follow-up
-Decisions. The Conversation Service itself also remains.
+A larger evaluation corpus is now built —
+[`scripts/benchmark-inference-corpus-v1.json`](scripts/benchmark-inference-corpus-v1.json),
+28 items across per-capability phrasing variation, deliberately-
+ambiguous items left unscored, unsupported/mutating and adversarial
+prompts asserting *no* proposal (a new `expected_capability: false`
+harness sentinel, distinct from unscored), and multi-turn items
+including a prompt-injection-in-a-prior-tool-result case exercising
+RFC-0004's untrusted-forever boundary directly. Not yet run against
+real hardware — only structurally verified against a fake provider so
+far. No runner or model selection is made yet; that still waits on a
+real run of this corpus, per `local-ai-options.md`'s own Follow-up
+Decisions (updated to track exactly what's done vs. open). The
+Conversation Service itself also remains.
 
 **Depends on:** Stable appliance update boundary
 
