@@ -439,13 +439,20 @@ milestone was blocked on.
 Known, disclosed tradeoff: a fresh install's first boot needs real
 internet access and a multi-minute ~2GB download before conversation
 works at all — a real regression from Pi-hole's fully-offline-after-imaging
-posture, not hidden in the ADR. Not yet done: a real-hardware
-qualification pass of this actual deployment path (skopeo embedding,
-first-boot download, digest-mismatch recovery) — everything so far is
-unit-tested (content/ordering assertions across
-[`tests/test_llama_server_deployment.py`](tests/test_llama_server_deployment.py)
-and the release-bundling scripts) but not yet run against real hardware
-the way every other capability in this milestone has been.
+posture, not hidden in the ADR.
+
+**Deployment path qualified on real hardware.** `verify-llama-artifact`,
+`import-llama-image`, and `start-llama-server` all ran for real against
+a genuine `skopeo`-fetched artifact of the exact pinned digest (not a
+full `rpi-image-gen` build, which stays out of scope for a smoke pass —
+see the report's Limitations) — real checksum/tar-content verification,
+real `docker load`+tag+platform check, real ~2GB model download, and a
+real completion request whose `system_fingerprint` matched the exact
+pinned upstream revision. Idempotency (a second run skips the download)
+and the core trust-boundary claim — a corrupted model file is detected
+and transparently re-downloaded, not silently trusted — were both
+confirmed live, not just read from the script. Full writeup:
+[llama-server-deployment-qualification-report.md](docs/research/llama-server-deployment-qualification-report.md).
 
 **Runner and model benchmarking is concluded.**
 `scripts/benchmark-inference-runner.py` (backed by
@@ -474,12 +481,13 @@ open per ADR-0013's Required Follow-up (a realistic intermittent-use
 thermal pass; broader DNS-latency-during-generation coverage) but do
 not block moving on.
 
-**Remaining:** a real-hardware qualification pass of the llama-server
-deployment path (ADR-0014), a Console frontend for the Conversation
-Service (nothing in `console/index.html`/`console.js` references it
-yet — today it's reachable only by hand-crafted, authenticated HTTP
-calls), and `web.search`/`web.fetch` (blocked on the SearXNG decision
-above).
+**Remaining:** a real `rpi-image-gen` base-OS build exercising this
+deployment path end to end (this session's qualification reproduced the
+embedding step by hand with real tooling, not through the actual build
+pipeline), a Console frontend for the Conversation Service (nothing in
+`console/index.html`/`console.js` references it yet — today it's
+reachable only by hand-crafted, authenticated HTTP calls), and
+`web.search`/`web.fetch` (blocked on the SearXNG decision above).
 
 **Depends on:** Stable appliance update boundary
 
