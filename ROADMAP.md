@@ -353,10 +353,16 @@ classifying `system.health`, Pi-hole read-only capabilities,
 [RFC-0004](docs/rfcs/0004-ai-capability-invocation.md) (AI capability
 invocation — catalog exposure, strict proposal parsing, the multi-step
 invocation loop, per-invocation confirmation tokens, and the
-untrusted-forever boundary on capability results) are both drafted and
-pending review. RFC-0006 (Pi-hole capability mapping) remains to be
-written before implementation begins in earnest; no hardware or code
-work has started yet.
+untrusted-forever boundary on capability results), and
+[RFC-0006](docs/rfcs/0006-pihole-capability-mapping.md) (Pi-hole
+capability mapping — `pihole.status`/`pihole.summary`, aggregate-only,
+no per-domain/per-client detail, carrying forward Console health's own
+privacy boundary) are all drafted and pending review. All four of the
+milestone's required RFCs now exist; none is implemented yet, and
+RFC-0006 itself still depends on completing
+[docs/research/pihole-api-assessment.md](docs/research/pihole-api-assessment.md)'s
+empirical investigation against the real pinned Pi-hole version. No
+hardware or code work has started yet.
 
 **Depends on:** Stable appliance update boundary
 
