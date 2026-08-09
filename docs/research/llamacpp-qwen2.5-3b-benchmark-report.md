@@ -169,3 +169,11 @@ see the [Ollama benchmark report](ollama-qwen2.5-3b-benchmark-report.md):
 matching accuracy and comparable steady-state speed, but a real
 multi-second first-request penalty from Ollama's lazy model loading
 that llama-server's eager loading doesn't have.
+
+**Update, same day:** both llama.cpp and Ollama were re-run against the
+larger, 28-item v1 corpus — see the
+[v1 corpus benchmark report](v1-corpus-benchmark-report.md). That run
+finally broke this starter corpus's ceiling effect (llama.cpp scored
+85%, Ollama 75%, on the identical prompt set) and confirmed real thermal
+throttling via `vcgencmd get_throttled`, not just proximity to the
+documented threshold.

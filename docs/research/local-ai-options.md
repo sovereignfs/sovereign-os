@@ -141,14 +141,27 @@ through a separately constrained `web.fetch` capability.
    a real "set" selection (how many candidates, which families) hasn't
    been decided as its own question.
 4. 🟡 Partially done: llama.cpp (Qwen2.5-3B and Qwen2.5-7B) and Ollama
-   (Qwen2.5-3B) have all run for real on the qualification device — see
-   the [3B](llamacpp-qwen2.5-3b-benchmark-report.md),
+   (Qwen2.5-3B) have all run for real on the qualification device
+   against the starter corpus — see the
+   [3B](llamacpp-qwen2.5-3b-benchmark-report.md),
    [7B](llamacpp-qwen2.5-7b-benchmark-report.md), and
-   [Ollama](ollama-qwen2.5-3b-benchmark-report.md) reports — but only
-   against the small starter corpus, not yet the v1 corpus above.
-5. ⚪ Not yet done: no runner/model selection ADR exists. Three real
-   data points exist (ties on accuracy so far, llama.cpp's eager model
-   loading vs. Ollama's lazy loading as a real operational difference,
-   7B's cost with no measured benefit over 3B on the corpora tried),
-   but per this project's own stated sequencing, the ADR waits on
-   running the larger v1 corpus first.
+   [Ollama](ollama-qwen2.5-3b-benchmark-report.md) reports. llama.cpp
+   3B and Ollama 3B have now also run against the larger v1 corpus —
+   see the [v1 corpus report](v1-corpus-benchmark-report.md), which
+   finally broke the starter corpus's ceiling effect (85% vs. 75% on
+   the identical 28-item set) and confirmed real thermal throttling via
+   `vcgencmd get_throttled`. llama.cpp-7B on the v1 corpus was
+   deliberately skipped (project owner's explicit choice, given
+   confirmed throttling and 7B's already-worse thermal profile) — that
+   data point remains open.
+5. ⚪ Not yet done: no runner/model selection ADR exists. Real data now
+   spans both corpora: accuracy ties on the trivial starter corpus but
+   diverges meaningfully on the richer v1 one (llama.cpp ahead, each
+   runtime with a distinct and reproducible failure pattern); Ollama's
+   lazy model loading vs. llama.cpp's eager loading is now confirmed
+   reproducible (seen identically across two separate runs); 7B's cost
+   with no measured accuracy benefit over 3B holds on every corpus
+   tried so far. Still missing before an ADR: the llama.cpp-7B v1-corpus
+   data point, and item 2 above (accepted numeric resource/DNS-latency
+   budgets — real numbers exist, nothing has turned them into a pass/
+   fail policy yet).

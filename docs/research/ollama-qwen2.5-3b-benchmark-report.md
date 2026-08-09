@@ -103,3 +103,11 @@ alone, and a larger evaluation corpus remains undecided), but llama.cpp
 now has a real, measured operational edge specifically around
 cold-start responsiveness that any Ollama-based design would need to
 account for.
+
+**Update, same day:** re-run against the larger 28-item v1 corpus — see
+the [v1 corpus benchmark report](v1-corpus-benchmark-report.md). The
+lazy-loading finding above reproduced exactly (same 14.2%→28.6% memory
+jump); accuracy dropped to 75% on the richer corpus (vs. llama.cpp's
+85% on the identical prompts), with a specific, reproducible pattern of
+over-proposing `pihole.status` where a different capability or no
+capability was correct.

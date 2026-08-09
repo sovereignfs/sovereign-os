@@ -427,12 +427,24 @@ ambiguous items left unscored, unsupported/mutating and adversarial
 prompts asserting *no* proposal (a new `expected_capability: false`
 harness sentinel, distinct from unscored), and multi-turn items
 including a prompt-injection-in-a-prior-tool-result case exercising
-RFC-0004's untrusted-forever boundary directly. Not yet run against
-real hardware — only structurally verified against a fake provider so
-far. No runner or model selection is made yet; that still waits on a
-real run of this corpus, per `local-ai-options.md`'s own Follow-up
-Decisions (updated to track exactly what's done vs. open). The
-Conversation Service itself also remains.
+RFC-0004's untrusted-forever boundary directly. Now run for real
+against llama.cpp and Ollama (both Qwen2.5-3B) — finally broke the
+starter corpus's ceiling effect: 85% vs. 75% on the identical 28-item
+prompt set, each runtime with a distinct, reproducible failure pattern
+rather than a vague "sometimes wrong." Confirmed genuine thermal
+throttling via `vcgencmd get_throttled` for the first time in this
+series (previously only "close to the documented threshold" could be
+said), and real "during generation" temperature sampling (not just
+before/after) shows both runtimes plateau at 82–85°C rather than
+climbing unbounded. The llama.cpp-7B pass on this corpus was
+deliberately skipped, at the project owner's explicit choice, given the
+confirmed throttling and 7B's already-worse thermal profile on the
+smaller corpus — see the
+[v1 corpus benchmark report](docs/research/v1-corpus-benchmark-report.md).
+No runner or model selection is made yet — that 7B data point, plus
+`local-ai-options.md`'s still-open resource/DNS-latency budget and
+runner-selection-ADR items, remain. The Conversation Service itself
+also remains.
 
 **Depends on:** Stable appliance update boundary
 
