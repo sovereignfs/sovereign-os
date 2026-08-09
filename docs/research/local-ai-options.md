@@ -127,10 +127,17 @@ through a separately constrained `web.fetch` capability.
    model-manifest format (Sovereign Model Management's own ownership of
    digest/license/lifecycle) remains undecided — a separate, still-open
    piece of RFC-0002.
-2. ⚪ Not yet done: measurable resource/DNS-latency budgets have not
-   been written down as accepted numeric thresholds. Real numbers have
-   been *recorded* across three benchmark passes (below) but nothing
-   has turned them into a policy a runner must pass or fail against.
+2. 🟡 Drafted, pending acceptance —
+   [ADR-0012](../adrs/0012-local-inference-resource-and-dns-latency-budgets.md)
+   proposes numeric thresholds grounded in the four real benchmark
+   passes' data: 80°C sustained-temperature budget (deliberately below
+   the ~85°C point where real throttling was confirmed), a 40%-of-RAM
+   memory ceiling (Qwen2.5-3B fits with margin, 7B does not), and a
+   provisional 50ms/3x-baseline DNS-latency budget. Explicitly flags
+   two open measurement gaps (realistic intermittent-use thermal
+   behavior, and DNS latency *during* generation rather than only
+   before/after) as revisit conditions rather than treating the numbers
+   as final.
 3. ✅ The tool-call corpus half is done —
    [`scripts/benchmark-inference-corpus-v1.json`](../../scripts/benchmark-inference-corpus-v1.json),
    28 items across plain chat, per-capability phrasing variation,
@@ -162,6 +169,6 @@ through a separately constrained `web.fetch` capability.
    reproducible (seen identically across two separate runs); 7B's cost
    with no measured accuracy benefit over 3B holds on every corpus
    tried so far. Still missing before an ADR: the llama.cpp-7B v1-corpus
-   data point, and item 2 above (accepted numeric resource/DNS-latency
-   budgets — real numbers exist, nothing has turned them into a pass/
-   fail policy yet).
+   data point, and item 2 above (ADR-0012 drafted but not yet accepted
+   by the project owner — a runner/model selection ADR built on top of
+   an unaccepted budget policy would rest on a still-moving target).
