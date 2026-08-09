@@ -28,6 +28,7 @@ APPLIANCE_FILES = {
     "console/index.html": 0o644,
     "lib/sovereign_capabilities.py": 0o644,
     "lib/sovereign_pihole.py": 0o644,
+    "lib/sovereign_system.py": 0o644,
     "nginx/sovereign.conf": 0o644,
     "pihole/compose.yaml.in": 0o644,
 }
