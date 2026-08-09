@@ -107,8 +107,14 @@ Planned work:
   [restore](docs/research/restore-hardware-qualification-report.md) and
   [preview.14](docs/research/preview-14-appliance-update-qualification-report.md)
   qualification reports); it still has not shipped through a release used
-  by anyone beyond qualification, and is not yet wired into automatic
-  update rollback for future data migrations;
+  by anyone beyond qualification. Wiring it into automatic update
+  rollback is deliberately deferred, not open work: `activate_release`'s
+  rollback path doesn't touch persistent data today because nothing in
+  `prepare`/`stage`/`activate` does, so there is nothing yet for an
+  automatic restore to undo. See the
+  [restore-rollback wiring deferral](docs/research/restore-rollback-wiring-deferral.md)
+  decision note — this becomes straightforward once an actual
+  persistent-data migration step exists to protect against;
 - define bounded retention and cleanup for old releases, backups, journals, and
   failed transactions — `sovereign-update prune [--dry-run]` is implemented
   and hardware-qualified on Raspberry Pi 5 against real backups, releases,
@@ -119,8 +125,10 @@ Planned work:
   Now wired into a daily `sovereign-update-prune.timer` (jittered, catches
   up on boot if a run was missed), hardware-verified running under its own
   hardened sandbox on Raspberry Pi 5; not yet shipped through a release
-  beyond qualification, and an actual unattended timer-elapsed run has not
-  been separately observed;
+  beyond qualification. A genuine unattended timer-elapsed run — via the
+  boot catch-up path, after the device missed its overnight window — was
+  observed on 2026-08-09, closing the one remaining gap here: see the
+  [prune timer unattended-fire qualification report](docs/research/prune-timer-unattended-fire-qualification-report.md);
 - establish production signing-key custody, rotation, and revocation —
   decided in [ADR-0006](docs/adrs/0006-production-signing-key-custody.md)
   (password-manager-held key, hardware key as a future upgrade). Routine

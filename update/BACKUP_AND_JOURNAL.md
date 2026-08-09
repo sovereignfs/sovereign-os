@@ -110,8 +110,10 @@ time). Hardware-verified on Raspberry Pi 5: `systemd-analyze verify` passed,
 `systemctl list-timers` scheduled it correctly, and a manual `systemctl
 start` of the service ran successfully end to end under its own hardening
 (`ProtectSystem=full`, `ReadWritePaths`, `NoNewPrivileges`) rather than an
-unrestricted shell. An actual unattended timer-elapsed run has not been
-separately observed.
+unrestricted shell. A genuine unattended timer-elapsed run (via the
+`Persistent=true` boot catch-up path, after the device missed its normal
+overnight window) was separately observed on 2026-08-09 — see the
+[prune timer unattended-fire qualification report](../docs/research/prune-timer-unattended-fire-qualification-report.md).
 
 **Status:** Implemented (`sovereign-update restore <backup-id> [--force]` and
 `sovereign-update discard-restore <restore-id>`) and hardware-qualified
