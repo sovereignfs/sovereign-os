@@ -338,17 +338,13 @@ network access.
 
 ### 6. Full Base-OS Updates
 
-**Status:** 🟡 Every RFC-0016 Acceptance Criteria item is now
-hardware-verified, including a second base-OS update with no reflash
-and the Console panel's own live-hardware pass; the four real defects
-the qualification surfaced are now fixed. The external recovery-image
-path's design is now decided
-([ADR-0011](docs/adrs/0011-external-recovery-image-path.md) — the
-existing distributable image is the recovery vehicle; closing the
-untested "reflash, then restore my data" gap needs no new code, only
-hardware qualification of the existing `backup`/`restore` commands
-used off-device) but not yet hardware-qualified — the one item left
-before this milestone is fully production-ready —
+**Status:** ✅ Complete — every RFC-0016 Acceptance Criteria item is
+now hardware-qualified, including the two hardest ones: a second
+base-OS update with no reflash, and a genuine reflash-then-restore
+recovery round trip. A few small implementation-detail questions
+remain open in RFC-0016's own Unresolved Questions (CLI/API shape
+polish, whether a base-OS and appliance update could ever share one
+transaction), none of them blocking —
 [RFC-0016](docs/rfcs/0016-full-base-os-updates.md) (accepted
 2026-08-01): A/B root on Raspberry Pi's native `tryboot` mechanism,
 reusing RFC-0014's signed/staged/health-gated/rollback machinery rather
@@ -383,6 +379,21 @@ placeholder both got real code fixes (`compare_versions`'s new
 `$SOVEREIGN_VERSION`), each with new test coverage; the other two
 needed no separate fix, since `main` already contained their fixes —
 the qualification device just hadn't received them yet.
+
+The external recovery-image path — the last named-but-undesigned
+requirement — is decided and hardware-qualified via
+[ADR-0011](docs/adrs/0011-external-recovery-image-path.md): the
+existing distributable image, reflashed via Raspberry Pi Imager, is
+the recovery vehicle (no dedicated recovery-only OS), and the
+previously-untested "reflash, then restore my data" gap is closed. The
+qualification device was genuinely reflashed (wiping it entirely, via
+a new CI artifact for the actual flashable A/B disk image, since none
+existed before) and a pre-reflash backup restored onto it through the
+existing, unmodified `backup`/`restore` commands — every persisted
+file (Pi-hole state, admin-password secret) independently verified
+byte-for-byte, the restored device's DNS service confirmed genuinely
+working, and zero code changes needed. See the
+[external recovery backup/restore qualification report](docs/research/external-recovery-backup-restore-qualification-report.md).
 
 **Depends on:** Stable appliance updater and persistent partition contract
 
@@ -421,11 +432,11 @@ This milestone closes the remaining “flash once” gap.
 - ⏳ Local inference benchmark and conversation/capability RFCs
 - ⚪ SearXNG-backed web-search capability
 - ⚪ Home Assistant capability integration
-- 🟡 A/B full base-OS updates (RFC-0016): every Acceptance Criteria item
-  hardware-verified, including a second base-OS update with no reflash
-  and the Console panel against a live transaction; four real
-  already-flashed-device defects found and now fixed; external
-  recovery-image path still undesigned
+- ✅ A/B full base-OS updates (RFC-0016): every Acceptance Criteria item
+  hardware-qualified, including a second base-OS update with no
+  reflash, the Console panel against a live transaction, and a genuine
+  reflash-then-restore recovery round trip (ADR-0011); four real
+  already-flashed-device defects found and fixed
 
 ---
 

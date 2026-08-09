@@ -26,7 +26,16 @@ gap both got real code fixes (`compare_versions`'s
 `$SOVEREIGN_VERSION`), each with new test coverage; the other two
 needed no separate fix, since current `main` already contained their
 fixes — the qualification device just hadn't received them yet, which
-is precisely how the pass diagnosed both.
+is precisely how the pass diagnosed both. **The external
+recovery-image path, RFC-0016's last named-but-undesigned requirement,
+is decided and hardware-qualified (2026-08-07/09)** — see
+[ADR-0011](../adrs/0011-external-recovery-image-path.md) and the
+[external recovery backup/restore qualification report](../research/external-recovery-backup-restore-qualification-report.md):
+a genuine device reflash followed by a genuine restore of a
+pre-reflash backup, every file independently verified byte-for-byte,
+zero code changes needed. This milestone's implementation is now
+complete; only small implementation-detail questions remain in
+Unresolved Questions, none of them blocking.
 **Author:** Project creator and Claude
 **Created:** 2026-08-01
 **Reviewers:**
@@ -557,14 +566,16 @@ state,** the last item this RFC needed:
   never cleaned up before a second one started): needs a documented,
   qualified worst case, analogous to today's `recovery_required` state
   for appliance transactions, but with real physical-recovery
-  implications. **Design decided (2026-08-07):** see
+  implications. **Resolved and hardware-qualified (2026-08-07/09):** see
   [ADR-0011](../adrs/0011-external-recovery-image-path.md) — the
   existing distributable image, reflashed via Raspberry Pi Imager, is
   the external recovery vehicle (no new recovery-only OS), and the
-  currently-untested "reflash, then restore my data" gap closes by
-  qualifying an off-device backup/restore round trip through the
-  existing, unmodified `backup`/`restore` commands. Hardware
-  qualification of that round trip is still pending.
+  previously-untested "reflash, then restore my data" gap is now closed:
+  the qualification device was genuinely reflashed and a pre-reflash
+  backup restored onto it through the existing, unmodified
+  `backup`/`restore` commands, every file independently verified
+  byte-for-byte, with zero code changes needed. See the
+  [external recovery backup/restore qualification report](../research/external-recovery-backup-restore-qualification-report.md).
 
 ## Compatibility and Migration
 
@@ -969,6 +980,33 @@ other two findings from the qualification report needed no code
 change: both were fixed in `main` already, the qualification device
 simply hadn't received the fix yet. Full test suite (230 tests) passes.
 
+**Progress (2026-08-08/09, external recovery-image path hardware
+qualification):** [ADR-0011](../adrs/0011-external-recovery-image-path.md)'s
+decision, hardware-qualified for real, closing the last item this RFC's
+Failure and Recovery and Unresolved Questions sections had left open.
+Produced a real "verified" appliance transaction (the device's
+`0.1.0-dev` installed version fell outside every real release's
+compatible bounds, so a custom signed candidate was built with
+`update_source_minimum=0.1.0-dev`), took a real backup, copied it
+off-device, then genuinely reflashed the qualification device —
+requiring a new CI artifact for the actual flashable A/B disk image,
+since the workflow previously only ever extracted partition images for
+base-OS candidates and never uploaded the assembled image itself
+(`Upload flashable A/B image artifact`, gated the same way as the rest
+of the base-OS-candidate path). Copied the backup back onto the fresh
+device and ran `restore --force` (the version mismatch a genuine
+reflash produces). Every persisted file — Pi-hole's full state
+(`gravity.db`, `pihole.toml`, TLS certs, custom DNS entries, etc.) and
+the admin-password secret — was independently verified byte-for-byte
+against the original off-device backup, not just trusted from the
+tool's own reported status, and the restored device's actual DNS
+service was confirmed genuinely working, not just files matching.
+**Zero code changes to `backup`/`restore` were needed** — ADR-0011's
+central claim, that their validation is purely content-based with no
+device-identity binding, held up under real destructive conditions
+exactly as designed. Full account in the
+[external recovery backup/restore qualification report](../research/external-recovery-backup-restore-qualification-report.md).
+
 ## Alternatives Considered
 
 ### RAUC or Mender (adopt a third-party A/B OTA framework)
@@ -1077,11 +1115,10 @@ every future rootfs-level change this project ships.
 - Sizing for root A/root B: fixed at build time from today's package
   list, or does the image-build layout need a configurable margin for
   future growth?
-- **Resolved (2026-08-07):** what "external recovery-image path" (named
-  as a goal in ROADMAP item 6) actually looks like — see
-  [ADR-0011](../adrs/0011-external-recovery-image-path.md) and Failure
-  and Recovery above. Hardware qualification of the decided procedure
-  is the remaining work, not the design itself.
+- **Resolved and hardware-qualified (2026-08-07/09):** what "external
+  recovery-image path" (named as a goal in ROADMAP item 6) actually
+  looks like — see [ADR-0011](../adrs/0011-external-recovery-image-path.md)
+  and Failure and Recovery above.
 
 ## Acceptance Criteria
 

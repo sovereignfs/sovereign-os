@@ -188,12 +188,11 @@ Script the copy-off/copy-back steps instead of leaving them as plain
 
 ### Risks
 
-- Entirely unverified until the follow-up hardware qualification pass:
-  every claim in this ADR about `restore`'s validation being
-  device-identity-agnostic is based on reading the current source, not
-  on having actually reflashed the qualification device and restored a
-  pre-reflash backup onto it. Treat this ADR's Decision as the design
-  direction, not as a completed capability, until that pass exists.
+- **Resolved:** this ADR's claim about `restore`'s validation being
+  device-identity-agnostic was based on reading source at the time of
+  writing; the 2026-08-08/09 qualification pass (see Validation and
+  Revisit Conditions) confirmed it directly against a real reflash and
+  a real restored device, not just analysis.
 - If a future change to `backup`/`restore` ever *does* introduce
   device-identity binding (for a reason unrelated to this ADR), it would
   silently break this recovery path without necessarily being flagged as
@@ -203,12 +202,21 @@ Script the copy-off/copy-back steps instead of leaving them as plain
 ## Validation and Revisit Conditions
 
 **Accepted (2026-08-07, project creator).** Direction approved as
-written. **Not yet qualified.** This ADR resolves the design question; hardware
-verification of the actual backup-off/reflash/backup-back/restore round
-trip on the real qualification device is the next step, not part of this
-decision. Update this ADR's Status and add a qualification-report link
-once that pass exists, matching this project's established pattern for
-every other RFC-0016 milestone.
+written. **Hardware-qualified (2026-08-08/09).** The full
+backup-off/reflash/backup-back/restore round trip was exercised for real
+on the qualification device — a real backup, copied off-device, a real
+destructive reflash (via a newly-added CI artifact for the actual
+flashable A/B image, since none existed before), and a real `restore
+--force` against the version mismatch a genuine reflash produces.
+Every persisted file (Pi-hole state, secrets) was independently
+verified byte-for-byte against the original backup, not just trusted
+from the tool's own reported status, and the restored device's actual
+DNS service was confirmed working. Zero code changes to
+`backup`/`restore` were needed — this ADR's claim about their
+device-identity-agnostic validation held up under real conditions. See
+the
+[external recovery backup/restore qualification report](../research/external-recovery-backup-restore-qualification-report.md)
+for the full account.
 
 Revisit this ADR if: the manual copy-off/copy-back friction proves
 unacceptable in practice (promote the deferred convenience-wrapper
