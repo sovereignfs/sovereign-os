@@ -429,3 +429,11 @@ implementation-level:
 credential-handling requirements, are accepted, incorporating the
 real, live-verified findings from
 [docs/research/pihole-api-assessment.md](../research/pihole-api-assessment.md).
+
+**Implementation update (2026-08-09):** both capabilities are implemented
+(`sovereign_capabilities.py`, `sovereign_pihole.py`), unit-tested against
+mocked HTTP responses, and additionally smoke-tested against the real
+device outside those mocks with no discrepancy found — see the
+[pihole capabilities smoke test report](../research/pihole-capabilities-smoke-test-report.md).
+Full hardware qualification remains pending a real caller (the
+Conversation Service, RFC-0002, not yet built).

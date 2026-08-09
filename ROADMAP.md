@@ -366,8 +366,16 @@ authenticated round trip against the live Pi-hole API on the
 qualification device confirmed both capabilities' data sources, found
 that no least-privilege credential exists on this Pi-hole version, and
 corrected RFC-0006's original assumption that `pihole.summary` needs
-only one upstream call (it needs two). No hardware or code
-implementation has started yet.
+only one upstream call (it needs two). Code implementation has begun:
+`sovereign_capabilities.py` implements RFC-0003's typed registry and
+six-stage executor pipeline, and `sovereign_pihole.py` implements
+`pihole.status`/`pihole.summary` against the real, verified endpoints
+(289 tests, full suite green). Both were also run against the real
+device outside the unit-test mocks — see the
+[pihole capabilities smoke test report](docs/research/pihole-capabilities-smoke-test-report.md)
+— though full qualification awaits a real caller (the Conversation
+Service, not yet built). `system.health`, the benchmark harness, and
+the Conversation Service itself remain.
 
 **Depends on:** Stable appliance update boundary
 
