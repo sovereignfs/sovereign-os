@@ -2,6 +2,7 @@ import argparse
 import json
 import runpy
 import sys
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -18,10 +19,11 @@ import sovereign_inference as inference  # noqa: E402
 
 
 class FakeProvider:
-    def __init__(self, chunks=None, health=None, raise_error=None):
+    def __init__(self, chunks=None, health=None, raise_error=None, delay_seconds=0):
         self._chunks = chunks if chunks is not None else [{"kind": "done"}]
         self._health = health if health is not None else {"healthy": True, "model_name": "fake", "runtime_version": "0"}
         self._raise_error = raise_error
+        self._delay_seconds = delay_seconds
         self.last_capability_catalog = None
         self.last_stream = None
 
@@ -31,6 +33,8 @@ class FakeProvider:
     def generate(self, messages, capability_catalog=None, max_tokens=None, timeout_seconds=30, stream=True):
         self.last_capability_catalog = capability_catalog
         self.last_stream = stream
+        if self._delay_seconds:
+            time.sleep(self._delay_seconds)
         if self._raise_error is not None:
             raise self._raise_error
         yield from self._chunks
@@ -172,6 +176,84 @@ class RunCorpusItemTests(BenchmarkRunnerTestCase):
         )
         self.assertTrue(provider.last_stream)
 
+    @mock.patch("subprocess.run")
+    def test_dns_during_generation_absent_by_default(self, subprocess_run):
+        provider = FakeProvider()
+        result = self.module["run_corpus_item"](provider, self.item(), stream=True, catalog=[])
+        self.assertIsNone(result["dns_latency_during_generation"])
+
+    @mock.patch("subprocess.run")
+    def test_dns_during_generation_populated_when_configured(self, subprocess_run):
+        provider = FakeProvider(delay_seconds=0.15)
+        config = {"dig_path": "/usr/bin/dig", "target": "example.com", "interval_seconds": 0.03}
+        result = self.module["run_corpus_item"](
+            provider, self.item(), stream=True, catalog=[], dns_during_config=config
+        )
+        summary = result["dns_latency_during_generation"]
+        self.assertIsNotNone(summary)
+        self.assertGreaterEqual(summary["count"], 1)
+
+
+class DnsDuringSamplerTests(BenchmarkRunnerTestCase):
+    @mock.patch("subprocess.run")
+    def test_collects_samples_while_running(self, subprocess_run):
+        sampler = self.module["DnsDuringSampler"]("/usr/bin/dig", "example.com", 0.03)
+        sampler.start()
+        time.sleep(0.15)
+        samples = sampler.stop()
+        self.assertGreaterEqual(len(samples), 1)
+
+    @mock.patch("subprocess.run")
+    def test_stop_returns_promptly_even_with_a_slow_interval(self, subprocess_run):
+        # Event.wait(timeout) wakes immediately on set() -- stop() must
+        # not block for anywhere near the full interval.
+        sampler = self.module["DnsDuringSampler"]("/usr/bin/dig", "example.com", 10)
+        sampler.start()
+        time.sleep(0.02)
+        start = time.perf_counter()
+        sampler.stop()
+        self.assertLess(time.perf_counter() - start, 1)
+
+    def test_no_samples_when_dig_is_unavailable(self):
+        # measure_dns_latency_ms() itself is what's mocked away here (via
+        # a nonexistent dig path with no subprocess mock), confirming the
+        # sampler thread survives failed samples rather than crashing.
+        sampler = self.module["DnsDuringSampler"]("/nonexistent/dig", "example.com", 0.02)
+        sampler.start()
+        time.sleep(0.1)
+        samples = sampler.stop()
+        self.assertEqual(samples, [])
+
+
+class SummarizeDnsSamplesTests(BenchmarkRunnerTestCase):
+    def test_empty_samples(self):
+        summary = self.module["summarize_dns_samples"]([])
+        self.assertEqual(summary, {"count": 0, "min_ms": None, "max_ms": None, "mean_ms": None, "exceeded_budget": None})
+
+    def test_computes_min_max_mean(self):
+        summary = self.module["summarize_dns_samples"]([10, 20, 30])
+        self.assertEqual(summary["count"], 3)
+        self.assertEqual(summary["min_ms"], 10)
+        self.assertEqual(summary["max_ms"], 30)
+        self.assertEqual(summary["mean_ms"], 20.0)
+
+    def test_exceeded_budget_true_when_max_over_threshold(self):
+        summary = self.module["summarize_dns_samples"]([10, 60], budget_ms=50)
+        self.assertTrue(summary["exceeded_budget"])
+
+    def test_exceeded_budget_false_when_within_threshold(self):
+        summary = self.module["summarize_dns_samples"]([10, 40], budget_ms=50)
+        self.assertFalse(summary["exceeded_budget"])
+
+    def test_default_budget_matches_adr_0012(self):
+        # ADR-0012's accepted DNS-latency budget is 50ms -- pinning this
+        # here means a future edit to the default can't silently drift
+        # from the accepted policy without a test noticing.
+        summary_at_budget = self.module["summarize_dns_samples"]([50])
+        summary_over_budget = self.module["summarize_dns_samples"]([50.1])
+        self.assertFalse(summary_at_budget["exceeded_budget"])
+        self.assertTrue(summary_over_budget["exceeded_budget"])
+
 
 class RunBenchmarkTests(BenchmarkRunnerTestCase):
     # measure_dns_latency_ms() shells out to a real `dig`; on a machine
@@ -203,6 +285,24 @@ class RunBenchmarkTests(BenchmarkRunnerTestCase):
         self.assertIn("system.health", report["capability_catalog_names"])
         self.assertIn("pihole.status", report["capability_catalog_names"])
         self.assertIn("pihole.summary", report["capability_catalog_names"])
+
+    @mock.patch("subprocess.run")
+    def test_dns_during_generation_off_by_default(self, subprocess_run):
+        provider = FakeProvider()
+        corpus = {"id": "x", "version": 1, "items": [{"id": "a", "messages": [{"role": "user", "content": "hi"}]}]}
+        report = self.module["run_benchmark"](provider, corpus, catalog=[])
+        self.assertIsNone(report["items"][0]["dns_latency_during_generation"])
+        self.assertNotIn("dns_latency_during_generation_any_item_exceeded_budget", report)
+
+    @mock.patch("subprocess.run")
+    def test_dns_during_generation_aggregates_across_items(self, subprocess_run):
+        provider = FakeProvider(delay_seconds=0.1)
+        corpus = {"id": "x", "version": 1, "items": [{"id": "a", "messages": [{"role": "user", "content": "hi"}]}]}
+        report = self.module["run_benchmark"](
+            provider, corpus, catalog=[], sample_dns_during_generation=True, dns_sample_interval_seconds=0.03,
+        )
+        self.assertIsNotNone(report["items"][0]["dns_latency_during_generation"])
+        self.assertIn("dns_latency_during_generation_any_item_exceeded_budget", report)
 
 
 class RealCapabilityCatalogTests(BenchmarkRunnerTestCase):

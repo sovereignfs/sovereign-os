@@ -20,6 +20,7 @@ import json
 import pathlib
 import subprocess
 import sys
+import threading
 import time
 
 
@@ -92,7 +93,60 @@ def measure_dns_latency_ms(dig_path, target):
     return round((time.perf_counter() - start) * 1000, 2)
 
 
-def run_corpus_item(provider, item, stream, catalog):
+class DnsDuringSampler:
+    # Every prior report in this benchmark series named the same gap:
+    # DNS latency was only ever sampled before and after a whole run,
+    # never while a request was actually in flight -- the one window
+    # ADR-0012's DNS-latency budget is actually meant to bound. Runs a
+    # background thread issuing real dig queries at a fixed interval for
+    # exactly the duration of one corpus item's provider.generate() call.
+    #
+    # threading.Event.wait(timeout) returns as soon as set() is called,
+    # not after the full timeout -- stop() therefore returns promptly
+    # even with a slow sample interval, and the thread is never left
+    # running past the item it was measuring (the leaked-thread-pool
+    # lesson from sovereign_capabilities.py's own history applies here
+    # too: nothing about this sampler should outlive its caller).
+    def __init__(self, dig_path, target, interval_seconds):
+        self._dig_path = dig_path
+        self._target = target
+        self._interval_seconds = interval_seconds
+        self._samples = []
+        self._stop_event = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def _run(self):
+        while not self._stop_event.is_set():
+            latency = measure_dns_latency_ms(self._dig_path, self._target)
+            if latency is not None:
+                self._samples.append(latency)
+            self._stop_event.wait(self._interval_seconds)
+
+    def start(self):
+        self._thread.start()
+        return self
+
+    def stop(self):
+        self._stop_event.set()
+        self._thread.join(timeout=5)
+        return list(self._samples)
+
+
+def summarize_dns_samples(samples_ms, budget_ms=50):
+    if not samples_ms:
+        return {"count": 0, "min_ms": None, "max_ms": None, "mean_ms": None, "exceeded_budget": None}
+    return {
+        "count": len(samples_ms),
+        "min_ms": min(samples_ms),
+        "max_ms": max(samples_ms),
+        "mean_ms": round(sum(samples_ms) / len(samples_ms), 2),
+        # ADR-0012: DNS resolution latency must not exceed 50ms during
+        # any window where inference is active.
+        "exceeded_budget": max(samples_ms) > budget_ms,
+    }
+
+
+def run_corpus_item(provider, item, stream, catalog, dns_during_config=None):
     start = time.perf_counter()
     first_token_at = None
     text_parts = []
@@ -107,6 +161,10 @@ def run_corpus_item(provider, item, stream, catalog):
     # and lose it. Pure-chat items still measure token-rate/TTFT via
     # streaming, per the harness's --no-stream flag.
     item_stream = stream and not uses_capabilities
+
+    # A fresh sampler per item, not a shared one -- it must only run for
+    # exactly the duration of *this* item's generate() call.
+    sampler = DnsDuringSampler(**dns_during_config).start() if dns_during_config else None
     try:
         for chunk in provider.generate(
             item["messages"],
@@ -129,6 +187,8 @@ def run_corpus_item(provider, item, stream, catalog):
                 raise inference.ProviderError(chunk["code"], chunk["message"])
     except inference.ProviderError as caught:
         error = {"code": caught.code, "message": str(caught)}
+    finally:
+        dns_during_samples = sampler.stop() if sampler else None
     end = time.perf_counter()
 
     completion_text = "".join(text_parts)
@@ -149,6 +209,9 @@ def run_corpus_item(provider, item, stream, catalog):
             {"name": proposal.get("name"), "arguments": proposal.get("arguments")}
             for proposal in proposals
         ],
+        "dns_latency_during_generation": (
+            summarize_dns_samples(dns_during_samples) if dns_during_samples is not None else None
+        ),
     }
     # expected_capability has three meaningful states: a capability name
     # (correct iff that name was proposed), `false` (correct iff nothing
@@ -166,8 +229,15 @@ def run_corpus_item(provider, item, stream, catalog):
     return result
 
 
-def run_benchmark(provider, corpus, stream=True, dns_target="example.com", dig_path="/usr/bin/dig", catalog=None):
+def run_benchmark(
+    provider, corpus, stream=True, dns_target="example.com", dig_path="/usr/bin/dig", catalog=None,
+    sample_dns_during_generation=False, dns_sample_interval_seconds=0.5,
+):
     catalog = real_capability_catalog() if catalog is None else catalog
+    dns_during_config = (
+        {"dig_path": dig_path, "target": dns_target, "interval_seconds": dns_sample_interval_seconds}
+        if sample_dns_during_generation else None
+    )
     report = {
         "schema_version": 1,
         "started_at": timestamp(),
@@ -178,13 +248,21 @@ def run_benchmark(provider, corpus, stream=True, dns_target="example.com", dig_p
         "memory_used_percent_before": read_memory_used_percent(),
         "temperature_celsius_before": read_temperature_celsius(),
         "dns_latency_ms_before": measure_dns_latency_ms(dig_path, dns_target),
-        "items": [run_corpus_item(provider, item, stream, catalog) for item in corpus["items"]],
+        "items": [
+            run_corpus_item(provider, item, stream, catalog, dns_during_config)
+            for item in corpus["items"]
+        ],
     }
     report["memory_used_percent_after"] = read_memory_used_percent()
     report["temperature_celsius_after"] = read_temperature_celsius()
     report["dns_latency_ms_after"] = measure_dns_latency_ms(dig_path, dns_target)
     report["provider_health_after"] = provider.health()
     report["finished_at"] = timestamp()
+    if sample_dns_during_generation:
+        summaries = [item["dns_latency_during_generation"] for item in report["items"]]
+        report["dns_latency_during_generation_any_item_exceeded_budget"] = any(
+            summary["exceeded_budget"] for summary in summaries if summary and summary["exceeded_budget"] is not None
+        )
     return report
 
 
@@ -206,6 +284,13 @@ def main():
     parser.add_argument("--no-stream", action="store_true")
     parser.add_argument("--dig", default="/usr/bin/dig")
     parser.add_argument("--dns-target", default="example.com")
+    parser.add_argument(
+        "--sample-dns-during-generation", action="store_true",
+        help="ADR-0012 revisit condition: sample DNS latency with a background thread for the "
+             "duration of each item's generation, not just before/after the whole run. Off by "
+             "default -- adds a real background dig query load for the run's duration.",
+    )
+    parser.add_argument("--dns-sample-interval-seconds", type=float, default=0.5)
     args = parser.parse_args()
     if args.base_url is None:
         args.base_url = "http://127.0.0.1:8081" if args.provider == "llama-cpp" else "http://127.0.0.1:11434"
@@ -215,6 +300,8 @@ def main():
     report = run_benchmark(
         provider, corpus, stream=not args.no_stream,
         dns_target=args.dns_target, dig_path=args.dig,
+        sample_dns_during_generation=args.sample_dns_during_generation,
+        dns_sample_interval_seconds=args.dns_sample_interval_seconds,
     )
     report["provider"] = args.provider
     report["model"] = args.model
