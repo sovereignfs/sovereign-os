@@ -25,7 +25,8 @@ all four are now written. RFC-0002 (runtime and conversation
 architecture) is Accepted; RFC-0003 (capability contract), RFC-0004 (AI
 capability invocation), and RFC-0006 (Pi-hole capability mapping) are
 drafted and pending review. Implementation must preserve the accepted
-appliance and update boundaries, and per RFC-0006, still depends on
-completing [docs/research/pihole-api-assessment.md](../research/pihole-api-assessment.md)'s
-empirical investigation against the real pinned Pi-hole version before
-the Pi-hole capabilities can be implemented.
+appliance and update boundaries.
+[docs/research/pihole-api-assessment.md](../research/pihole-api-assessment.md)'s
+empirical investigation against the real pinned Pi-hole version,
+RFC-0006's remaining prerequisite, concluded 2026-08-09 with a real,
+live-verified authenticated round trip on the qualification device.

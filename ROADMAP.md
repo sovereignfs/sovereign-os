@@ -358,11 +358,15 @@ untrusted-forever boundary on capability results), and
 capability mapping — `pihole.status`/`pihole.summary`, aggregate-only,
 no per-domain/per-client detail, carrying forward Console health's own
 privacy boundary) are all drafted and pending review. All four of the
-milestone's required RFCs now exist; none is implemented yet, and
-RFC-0006 itself still depends on completing
-[docs/research/pihole-api-assessment.md](docs/research/pihole-api-assessment.md)'s
-empirical investigation against the real pinned Pi-hole version. No
-hardware or code work has started yet.
+milestone's required RFCs now exist; none is implemented yet.
+[docs/research/pihole-api-assessment.md](docs/research/pihole-api-assessment.md),
+RFC-0006's remaining prerequisite, is Concluded (2026-08-09) — a real
+authenticated round trip against the live Pi-hole API on the
+qualification device confirmed both capabilities' data sources, found
+that no least-privilege credential exists on this Pi-hole version, and
+corrected RFC-0006's original assumption that `pihole.summary` needs
+only one upstream call (it needs two). No hardware or code
+implementation has started yet.
 
 **Depends on:** Stable appliance update boundary
 

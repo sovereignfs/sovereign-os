@@ -169,51 +169,85 @@ judgment call.
 ### Authentication and Credential Handling
 
 Pi-hole's real API (as opposed to `console-health`'s bare TCP check)
-requires authenticating a session before reading stats. The credential
-this uses:
+requires authenticating a session before reading stats — confirmed live
+against the real device in
+[docs/research/pihole-api-assessment.md](../research/pihole-api-assessment.md)
+(Concluded 2026-08-09): `POST /api/auth` with the admin password returns
+a session ID valid 30 minutes, extended by activity, presented on
+subsequent requests via an `sid` header. **No least-privilege or
+read-only credential exists on this Pi-hole version** — its only
+alternative to the full admin password is an "application password"
+that carries the same full authority and invalidates every other active
+session when generated. This is now a confirmed fact, not an open
+question: the credential this capability uses:
 
+- **is the existing Pi-hole administrator password, reused** — the only
+  option, not a fallback among alternatives, per the research above;
 - is provisioned and stored under `/data/sovereign/secrets`, inside the
   same persistent-data boundary and backup role the appliance's other
-  secrets already use — not a new, separately-tracked credential store;
+  secrets already use — the same secret `sudo sovereign-pihole-password`
+  already manages, not a new, separately-tracked credential store;
 - is readable only by the `pihole.status`/`pihole.summary` capability
   implementation process, never by the Conversation Service generally,
   the Inference Provider Adapter, or the model — matching RFC-0003's
   "no ambient access beyond what implementation needs" execution
-  requirement;
+  requirement; this is the boundary that actually bounds the risk of
+  reusing a full-authority credential, since nothing in the conversation
+  path can reach it even though the credential itself is not scope-
+  limited;
+- should authenticate once and reuse/refresh a single long-lived session
+  across invocations rather than authenticating fresh per call, per the
+  research above's session/seat-limit findings — authenticating per
+  invocation would needlessly compete with a household member's own
+  concurrent Pi-hole web-UI login for Pi-hole's real, confirmed
+  concurrent-session cap; and
 - is never logged, audited, or included in any capability result —
   RFC-0003's audit events already exclude result content, and this RFC
-  adds no separate path that could leak it; and
-- whether this is Pi-hole's existing admin password (reused) or a
-  separately scoped, lower-privilege credential (preferred, if the
-  pinned Pi-hole version supports one) is exactly the kind of question
-  `pihole-api-assessment.md`'s "least-privilege or read-only credential
-  support" investigation item must answer empirically against the real
-  pinned version before implementation — this RFC requires a
-  least-privilege credential if one exists, and requires the reused-
-  admin-password fallback be treated as a known, accepted risk (broader
-  than necessary) rather than a silent default if no scoped alternative
-  exists.
+  adds no separate path that could leak it.
 
-### What `pihole-api-assessment.md` Must Still Confirm
+### Endpoints, Confirmed Live
 
-This RFC is written against Pi-hole's general v6-generation REST API
-shape (session-based auth, a stats/summary-class endpoint), consistent
-with the pinned `pihole/pihole:2026.04.1` image, but the exact endpoint
-paths, field names, error responses, and rate-limit behavior have not
-been verified against that specific pinned version and digest. Before
-implementation, the still-open `pihole-api-assessment.md` research must
-confirm, against the real device:
+[docs/research/pihole-api-assessment.md](../research/pihole-api-assessment.md)
+verified both sources against the real pinned `pihole/pihole:2026.04.1`
+image with a real authenticated round trip, not just the self-served
+OpenAPI spec:
 
-- the exact authenticated endpoint(s) `pihole.status`/`pihole.summary`
-  call, and their real response shape;
-- least-privilege/read-only credential support, per above;
-- rate-limit and error behavior, so the capability implementation's
-  timeout/retry behavior is grounded in measurement, not assumption; and
-- that no field this RFC excludes (per-domain, per-client, query-log
-  detail) is reachable through the endpoints actually used, even
-  incidentally (e.g. an endpoint that returns aggregate counts but also
-  embeds a client list the implementation must explicitly discard, not
-  merely decline to forward).
+- `pihole.status` sources from `GET /api/dns/blocking`
+  (`{"blocking": "enabled"|"disabled"|"failed"|"unknown", "timer":
+  number|null}`) — mapped to this RFC's `reachable`/`blocking_enabled`
+  result as: `"enabled"` → `true`, `"disabled"` → `false`,
+  `"failed"`/`"unknown"` → `null` (never guessed). **Confirmed
+  security-relevant detail:** `GET` and `POST /api/dns/blocking` are the
+  *same URL* — POST is what changes blocking state. The implementation
+  must be hard-restricted to GET only at the code level, not merely by
+  intent.
+- `pihole.summary` requires **two** real API calls, not one — a
+  correction to this RFC's original assumption: the period-scoped
+  `GET /api/stats/database/summary?from=<unix>&until=<unix>` (returns
+  `sum_queries`/`sum_blocked`/`percent_blocked`/`total_clients` for the
+  requested window) supplies `queries_total`/`queries_blocked`/
+  `blocked_percentage`, while the live, unscoped
+  `GET /api/stats/summary` supplies `blocklist_size`
+  (`gravity.domains_being_blocked`) and `unique_clients`
+  (`clients.active`, itself already a rolling 24-hour figure) — neither
+  of which has a period-scoped equivalent in Pi-hole's own API. The
+  `period` argument this RFC's schema declares is translated by the
+  implementation into `from`/`until` Unix timestamps server-side; the
+  model never sees or supplies raw timestamps.
+- Both confirmed-live responses contain only counts and percentages —
+  empirically validating this RFC's aggregate-only, no-client-identity,
+  no-domain-detail design, not merely asserting it. The research
+  document also names the real, readily-available endpoints
+  (`recent_blocked`, `top_clients`, `top_domains`) that would leak
+  exactly what this RFC excludes, as evidence the exclusion is
+  deliberate.
+- The observed error taxonomy (`unauthorized`, `rate_limiting`,
+  `api_seats_exceeded`, `bad_request`, uniformly shaped as
+  `{"error": {"key", "message", "hint"}, "took"}`) maps directly onto
+  RFC-0003's bounded-execution failure classification.
+
+All of this RFC's previously-open "must still confirm" items are now
+resolved by that research document; none remain blocking.
 
 ## Interfaces and Data Flow
 
@@ -343,18 +377,20 @@ different scopes.
 
 ## Unresolved Questions
 
-None of the following block acceptance of the capability definitions
-above; each is exactly what the still-open `pihole-api-assessment.md`
-research must resolve before implementation, or is otherwise
-implementation-level.
+Endpoint shapes, credential availability, and error/rate-limit behavior
+— this RFC's original open questions — are now resolved by
+[docs/research/pihole-api-assessment.md](../research/pihole-api-assessment.md)
+(Concluded 2026-08-09) and incorporated above. What remains is purely
+implementation-level:
 
-- Exact authenticated endpoint paths and response shapes for the pinned
-  `pihole/pihole:2026.04.1` image.
-- Whether a least-privilege, read-only credential is available for this
-  Pi-hole version, versus falling back to the existing admin password.
-- Real rate-limit and error behavior, to ground timeout/retry values.
-- Exact `checked_at` timestamp precision/timezone handling —
-  implementation detail.
+- Exact `checked_at` timestamp precision/timezone handling.
+- Exact `webserver.api.max_sessions` default and whether it needs
+  raising for Sovereign's own long-lived session to coexist with normal
+  household web-UI use (named as an operational tuning question in the
+  research document, not measured there).
+- Precise rate-limit thresholds (attempts per window) — documented as
+  existing, not independently measured, to avoid locking out the real
+  device's admin access during research.
 
 ## Acceptance Criteria
 
@@ -372,8 +408,12 @@ implementation-level.
   audit event.
 - `pihole-api-assessment.md`'s empirical questions (endpoint shape,
   credential scoping, rate-limit behavior) are answered against the real
-  pinned Pi-hole version before implementation is considered complete,
-  not merely assumed from general Pi-hole documentation.
+  pinned Pi-hole version — done, see that document, Concluded
+  2026-08-09 — not merely assumed from general Pi-hole documentation.
+- `pihole.summary`'s implementation genuinely composes both confirmed
+  endpoints (`database/summary` for period-scoped counts,
+  `summary` for blocklist size and active-client count), not a single
+  call this RFC originally assumed.
 - `pihole.status` correctly reports `blocking_enabled: null` (not a
   guessed default) when Pi-hole is unreachable, verified against a real
   stopped/unreachable Pi-hole on real hardware.
