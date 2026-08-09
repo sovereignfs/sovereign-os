@@ -416,10 +416,36 @@ authenticated turn reaching real inference and executing `system.health`
 — see the
 [report](docs/research/conversation-service-authentication-smoke-test-report.md).
 
-Not yet done: auto-enabling the systemd unit — deferred because no
-persistent llama-server deployment service exists yet, so auto-starting
-it on a fresh image would just be a service that always fails to
-connect.
+**llama-server deployment and auto-enabling:** done, per
+[ADR-0014](docs/adrs/0014-llama-server-deployment-and-model-provisioning.md).
+The llama.cpp runner image is embedded in the base image and every
+release exactly the way Pi-hole's is (`llama-image.env`, a real
+`skopeo`-fetched digest, the same three-stage
+artifact/import/server systemd shape). ADR-0013's selected model
+(Qwen2.5-3B-Instruct-Q4_K_M) is deliberately **not** embedded — it does
+not fit the real device's A/B system partition's size budget (confirmed
+this session: ~2.0GB free, the model alone is ~2GB) — `start-llama-server`
+downloads it into `/data/sovereign/models/` on first start instead, and
+re-verifies its SHA-256 digest on every start after that, not just once.
+`sovereign-conversation.service` gets a soft `After=` (not `Requires=`)
+on the new `sovereign-llama-server.service`, so a still-downloading or
+failed model load falls into the Conversation Service's existing,
+already-tested `PROVIDER_UNAVAILABLE` degraded response. All four units
+(`sovereign-llama-artifact`, `sovereign-llama-import`,
+`sovereign-llama-server`, `sovereign-conversation`) are now in
+`customize90-sovereign`'s enable-units list — the actual gap this
+milestone was blocked on.
+
+Known, disclosed tradeoff: a fresh install's first boot needs real
+internet access and a multi-minute ~2GB download before conversation
+works at all — a real regression from Pi-hole's fully-offline-after-imaging
+posture, not hidden in the ADR. Not yet done: a real-hardware
+qualification pass of this actual deployment path (skopeo embedding,
+first-boot download, digest-mismatch recovery) — everything so far is
+unit-tested (content/ordering assertions across
+[`tests/test_llama_server_deployment.py`](tests/test_llama_server_deployment.py)
+and the release-bundling scripts) but not yet run against real hardware
+the way every other capability in this milestone has been.
 
 **Runner and model benchmarking is concluded.**
 `scripts/benchmark-inference-runner.py` (backed by
@@ -448,8 +474,12 @@ open per ADR-0013's Required Follow-up (a realistic intermittent-use
 thermal pass; broader DNS-latency-during-generation coverage) but do
 not block moving on.
 
-**Remaining:** auto-enabling the Conversation Service's systemd unit, and
-`web.search`/`web.fetch` (blocked on the SearXNG decision above).
+**Remaining:** a real-hardware qualification pass of the llama-server
+deployment path (ADR-0014), a Console frontend for the Conversation
+Service (nothing in `console/index.html`/`console.js` references it
+yet — today it's reachable only by hand-crafted, authenticated HTTP
+calls), and `web.search`/`web.fetch` (blocked on the SearXNG decision
+above).
 
 **Depends on:** Stable appliance update boundary
 

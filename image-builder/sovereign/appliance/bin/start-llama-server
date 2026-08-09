@@ -1,0 +1,82 @@
+#!/bin/sh
+
+set -eu
+
+state_dir=/data/sovereign
+model_dir=${state_dir}/models
+app_dir=${state_dir}/apps/llama-server
+compose_file=${app_dir}/compose.yaml
+appliance_root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+release_root=$(CDPATH= cd -- "${appliance_root}/.." && pwd)
+template=${appliance_root}/llama/compose.yaml.in
+marker=${state_dir}/llama-server-ready
+image_environment=${release_root}/llama-image.env
+model_environment=${appliance_root}/llama/model.env
+. "$image_environment"
+. "$model_environment"
+image_reference="${LLAMA_IMAGE_REPOSITORY#docker.io/}@${LLAMA_IMAGE_DIGEST}"
+model_file=${model_dir}/${LLAMA_MODEL_FILENAME}
+
+verify_model() {
+  printf '%s  %s\n' "$LLAMA_MODEL_SHA256" "$model_file" | sha256sum -c - >/dev/null 2>&1
+}
+
+install -d -m 0755 "$state_dir" "$model_dir" "$app_dir"
+
+# ADR-0014: the model is deliberately not embedded in the release (it
+# does not fit the A/B system partition's size budget) -- fetched here
+# into /data instead, and re-verified by digest on every start, not just
+# when first downloaded. An existing file that fails the check is
+# treated exactly like a missing one: this digest check is the actual
+# trust boundary, not the download URL, which is HuggingFace's mutable
+# "current file on this branch" path rather than an immutable,
+# commit-pinned one.
+if [ ! -s "$model_file" ] || ! verify_model; then
+  curl --fail --silent --show-error --location --max-time 1800 \
+    --output "${model_file}.tmp" \
+    "$LLAMA_MODEL_URL"
+  mv "${model_file}.tmp" "$model_file"
+  if ! verify_model; then
+    rm -f "$model_file"
+    printf 'downloaded model failed digest verification\n' >&2
+    exit 1
+  fi
+fi
+
+sed \
+  -e "s|@LLAMA_IMAGE_REFERENCE@|${image_reference}|g" \
+  -e "s|@LLAMA_MODEL_FILENAME@|${LLAMA_MODEL_FILENAME}|g" \
+  "$template" > "${compose_file}.tmp"
+chmod 0644 "${compose_file}.tmp"
+mv "${compose_file}.tmp" "$compose_file"
+
+docker compose \
+  --project-name sovereign-llama-server \
+  --file "$compose_file" \
+  up --detach --no-build --pull never
+
+# Poll the real health endpoint directly rather than docker inspect's
+# .State.Health: unlike Pi-hole's upstream image, llama.cpp's server
+# image is not known to ship its own HEALTHCHECK, and this is the exact
+# check this project's own real-hardware smoke tests already proved
+# reliable, three times this session.
+attempt=0
+healthy=false
+while [ "$attempt" -lt 90 ]; do
+  if curl --fail --silent --output /dev/null --max-time 3 http://127.0.0.1:8081/health; then
+    healthy=true
+    break
+  fi
+  attempt=$((attempt + 1))
+  sleep 2
+done
+
+test "$healthy" = true
+
+{
+  printf 'image=%s\n' "$(docker inspect --format '{{.Image}}' sovereign-llama-server)"
+  printf 'model=%s\n' "$LLAMA_MODEL_FILENAME"
+  printf 'model_sha256=%s\n' "$LLAMA_MODEL_SHA256"
+  printf 'health=pass\n'
+} > "${marker}.tmp"
+mv "${marker}.tmp" "$marker"

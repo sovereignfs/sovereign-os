@@ -20,7 +20,9 @@ APPLIANCE_FILES = {
     "bin/console-auth": 0o755,
     "bin/console-health": 0o755,
     "bin/sovereign-conversation": 0o755,
+    "bin/start-llama-server": 0o755,
     "bin/start-pihole": 0o755,
+    "bin/stop-llama-server": 0o755,
     "bin/stop-pihole": 0o755,
     "bin/verify-local-access": 0o755,
     "bin/verify-update-health": 0o755,
@@ -32,6 +34,8 @@ APPLIANCE_FILES = {
     "lib/sovereign_inference.py": 0o644,
     "lib/sovereign_pihole.py": 0o644,
     "lib/sovereign_system.py": 0o644,
+    "llama/compose.yaml.in": 0o644,
+    "llama/model.env": 0o644,
     "nginx/sovereign.conf": 0o644,
     "pihole/compose.yaml.in": 0o644,
 }
@@ -104,6 +108,14 @@ def create(args):
     oci = pathlib.Path(args.oci).resolve()
     if not oci.is_file():
         raise ValueError("Pi-hole OCI archive is missing")
+    llama_env = pathlib.Path(args.llama_env).resolve()
+    llama = parse_env(llama_env)
+    llama_digest = llama.get("LLAMA_IMAGE_DIGEST", "")
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", llama_digest):
+        raise ValueError("invalid llama.cpp digest")
+    llama_oci = pathlib.Path(args.llama_oci).resolve()
+    if not llama_oci.is_file():
+        raise ValueError("llama.cpp OCI archive is missing")
     with tempfile.TemporaryDirectory() as temporary_directory:
         release = pathlib.Path(temporary_directory) / "release"
         release.mkdir()
@@ -119,6 +131,8 @@ def create(args):
         console_index.chmod(0o644)
         shutil.copyfile(pihole_env, release / "pihole-image.env")
         shutil.copyfile(oci, release / "pihole-arm64.oci.tar")
+        shutil.copyfile(llama_env, release / "llama-image.env")
+        shutil.copyfile(llama_oci, release / "llama-arm64.oci.tar")
         (release / "sovereign-release").write_text(
             'NAME="Sovereign OS"\n'
             'VARIANT="Raspberry Pi 5"\n'
@@ -180,6 +194,11 @@ def create(args):
                 "repository": pihole["PIHOLE_IMAGE_REPOSITORY"],
                 "digest": digest,
             },
+            "llama": {
+                "version": llama["LLAMA_IMAGE_TAG"],
+                "repository": llama["LLAMA_IMAGE_REPOSITORY"],
+                "digest": llama_digest,
+            },
         },
         "requirements": {"free_bytes": args.free_bytes, "reboot": False},
         "migrations": [],
@@ -204,6 +223,8 @@ def main():
     parser.add_argument("--source-maximum-exclusive", required=True)
     parser.add_argument("--pihole-env", type=pathlib.Path, required=True)
     parser.add_argument("--oci", type=pathlib.Path, required=True)
+    parser.add_argument("--llama-env", type=pathlib.Path, required=True)
+    parser.add_argument("--llama-oci", type=pathlib.Path, required=True)
     parser.add_argument(
         "--appliance-dir",
         type=pathlib.Path,

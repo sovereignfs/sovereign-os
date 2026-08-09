@@ -1,0 +1,13 @@
+[Unit]
+Description=Verify the embedded llama.cpp ARM64 artifact
+RequiresMountsFor=/data
+After=local-fs.target sovereign-proof.service
+ConditionPathIsMountPoint=/data
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/sovereign/verify-llama-artifact
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

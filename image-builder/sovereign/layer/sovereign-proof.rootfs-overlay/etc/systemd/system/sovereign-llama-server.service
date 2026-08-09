@@ -1,0 +1,23 @@
+[Unit]
+Description=Configure and start the Sovereign llama.cpp inference server
+Requires=sovereign-llama-import.service docker.service
+After=sovereign-imager-provision.service sovereign-llama-import.service sovereign-update-recovery.service docker.service network-online.target
+Wants=sovereign-imager-provision.service network-online.target
+RequiresMountsFor=/data
+ConditionPathIsMountPoint=/data
+
+[Service]
+Type=oneshot
+# ADR-0014: the first-start model download can take well past systemd's
+# default 90s start timeout on a slow household connection -- the same
+# real reasoning sovereign-console-install-trigger.service already
+# established for its own multi-minute operation.
+TimeoutStartSec=0
+ExecStart=/opt/sovereign/current/appliance/bin/start-llama-server
+ExecStop=/opt/sovereign/current/appliance/bin/stop-llama-server
+RemainAfterExit=yes
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target

@@ -31,6 +31,11 @@ class ReleaseBundleTests(unittest.TestCase):
             "PIHOLE_IMAGE_TAG=2026.04.1\n"
             f"PIHOLE_IMAGE_DIGEST=sha256:{'0' * 64}\n"
         )
+        (self.repo / "image-builder/sovereign/llama-image.env").write_text(
+            "LLAMA_IMAGE_REPOSITORY=ghcr.io/ggml-org/llama.cpp\n"
+            "LLAMA_IMAGE_TAG=server\n"
+            f"LLAMA_IMAGE_DIGEST=sha256:{'1' * 64}\n"
+        )
         (self.repo / "scripts").mkdir()
         (self.repo / "scripts/create-imager-manifest.py").write_text("# helper\n")
         (self.repo / "build/sovereign-image/evidence").mkdir(parents=True)
@@ -79,6 +84,10 @@ class ReleaseBundleTests(unittest.TestCase):
         self.assertEqual(manifest["release"]["version"], "0.1.0")
         self.assertEqual(manifest["release"]["created"], "2023-11-14T22:13:20Z")
         self.assertEqual(manifest["components"]["packages"]["nginx"], "1.0")
+        self.assertEqual(
+            manifest["components"]["llama"]["repository"], "ghcr.io/ggml-org/llama.cpp"
+        )
+        self.assertEqual(manifest["components"]["llama"]["digest"], f"sha256:{'1' * 64}")
         self.assertEqual(manifest["qualification"]["status"], "engineering-candidate")
         self.assertTrue((self.output / "sovereign-os-0.1.0-rpi5-arm64.img.zst").is_file())
         self.assertTrue((self.output / "create-imager-manifest.py").is_file())
@@ -99,4 +108,13 @@ class ReleaseBundleTests(unittest.TestCase):
             'VERSION="0.1.0-preview.1"\nCHANNEL="preview"\n'
         )
         with self.assertRaisesRegex(ValueError, "embedded version"):
+            MODULE.create_bundle(self.arguments())
+
+    def test_rejects_incomplete_llama_digest(self):
+        (self.repo / "image-builder/sovereign/llama-image.env").write_text(
+            "LLAMA_IMAGE_REPOSITORY=ghcr.io/ggml-org/llama.cpp\n"
+            "LLAMA_IMAGE_TAG=server\n"
+            "LLAMA_IMAGE_DIGEST=sha256:not-a-real-digest\n"
+        )
+        with self.assertRaisesRegex(ValueError, "llama.cpp image digest"):
             MODULE.create_bundle(self.arguments())

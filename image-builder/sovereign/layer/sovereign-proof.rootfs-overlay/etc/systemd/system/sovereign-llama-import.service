@@ -1,0 +1,14 @@
+[Unit]
+Description=Import the embedded llama.cpp ARM64 image
+Requires=docker.service sovereign-llama-artifact.service
+After=docker.service sovereign-llama-artifact.service
+RequiresMountsFor=/data
+ConditionPathIsMountPoint=/data
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/sovereign/import-llama-image
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

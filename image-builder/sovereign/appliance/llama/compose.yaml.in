@@ -1,0 +1,20 @@
+services:
+  llama-server:
+    image: @LLAMA_IMAGE_REFERENCE@
+    container_name: sovereign-llama-server
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8081:8080"
+    volumes:
+      - /data/sovereign/models:/models:ro
+    command:
+      - "-m"
+      - "/models/@LLAMA_MODEL_FILENAME@"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8080"
+      - "-c"
+      - "4096"
+      - "-t"
+      - "4"

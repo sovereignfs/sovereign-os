@@ -121,6 +121,8 @@ jobs:
             --source-maximum-exclusive "$UPDATE_SOURCE_MAXIMUM_EXCLUSIVE" \
             --pihole-env image-builder/sovereign/pihole-image.env \
             --oci build/sovereign-image/evidence/oci/pihole-arm64.oci.tar \
+            --llama-env image-builder/sovereign/llama-image.env \
+            --llama-oci build/sovereign-image/evidence/oci/llama-arm64.oci.tar \
             --output-dir build/update-release \
             --key-id "$UPDATE_KEY_ID" \
             --artifact-base-url "https://github.com/sovereignfs/sovereign-os/releases/download/v${RELEASE_VERSION}" \

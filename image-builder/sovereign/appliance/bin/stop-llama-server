@@ -1,0 +1,12 @@
+#!/bin/sh
+
+set -eu
+
+compose_file=/data/sovereign/apps/llama-server/compose.yaml
+
+if [ -f "$compose_file" ]; then
+  docker compose \
+    --project-name sovereign-llama-server \
+    --file "$compose_file" \
+    stop --timeout 30
+fi

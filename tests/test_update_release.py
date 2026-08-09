@@ -31,6 +31,15 @@ class UpdateReleaseTests(unittest.TestCase):
             )
             oci = temporary / "pihole.oci.tar"
             oci.write_bytes(b"OCI fixture\n")
+            llama_env = temporary / "llama-image.env"
+            llama_env.write_text(
+                "LLAMA_IMAGE_REPOSITORY='ghcr.io/ggml-org/llama.cpp'\n"
+                "LLAMA_IMAGE_TAG='server'\n"
+                f"LLAMA_IMAGE_DIGEST='sha256:{'b' * 64}'\n"
+                "LLAMA_IMAGE_PLATFORM='linux/arm64'\n"
+            )
+            llama_oci = temporary / "llama.oci.tar"
+            llama_oci.write_bytes(b"llama OCI fixture\n")
             output = temporary / "release"
             subprocess.run(
                 [
@@ -38,6 +47,7 @@ class UpdateReleaseTests(unittest.TestCase):
                     "--source-minimum", "0.1.0-preview.6",
                     "--source-maximum-exclusive", "0.2.0",
                     "--pihole-env", str(pihole), "--oci", str(oci),
+                    "--llama-env", str(llama_env), "--llama-oci", str(llama_oci),
                     "--output-dir", str(output), "--key-id", "preview-test",
                     "--artifact-base-url", "https://example.invalid/release",
                     "--notes-url", "https://example.invalid/notes",
@@ -48,6 +58,9 @@ class UpdateReleaseTests(unittest.TestCase):
             )
             manifest = json.loads((output / "release-manifest.json").read_text())
             self.assertEqual("0.1.0-preview.7", manifest["release"]["version"])
+            self.assertEqual(
+                f"sha256:{'b' * 64}", manifest["components"]["llama"]["digest"]
+            )
             bundle = output / "sovereign-update-0.1.0-preview.7-rpi5-arm64.tar.zst"
             self.assertEqual(bundle.stat().st_size, manifest["artifacts"][0]["size"])
             tar_path = temporary / "update.tar"
@@ -62,6 +75,18 @@ class UpdateReleaseTests(unittest.TestCase):
                     "sovereign-update-v1/release/appliance/bin/start-pihole",
                     names,
                 )
+                self.assertIn(
+                    "sovereign-update-v1/release/appliance/bin/start-llama-server",
+                    names,
+                )
+                self.assertIn(
+                    "sovereign-update-v1/release/llama-image.env",
+                    names,
+                )
+                self.assertIn(
+                    "sovereign-update-v1/release/llama-arm64.oci.tar",
+                    names,
+                )
                 bundle_manifest = json.load(
                     archive.extractfile(
                         "sovereign-update-v1/bundle-manifest.json"
@@ -74,6 +99,10 @@ class UpdateReleaseTests(unittest.TestCase):
                 self.assertEqual(
                     0o755,
                     modes["release/appliance/bin/start-pihole"],
+                )
+                self.assertEqual(
+                    0o755,
+                    modes["release/appliance/bin/start-llama-server"],
                 )
                 self.assertEqual(
                     0o644,
@@ -124,6 +153,15 @@ class UpdateReleaseTests(unittest.TestCase):
             )
             oci = temporary / "pihole.oci.tar"
             oci.write_bytes(b"OCI fixture\n")
+            llama_env = temporary / "llama-image.env"
+            llama_env.write_text(
+                "LLAMA_IMAGE_REPOSITORY='ghcr.io/ggml-org/llama.cpp'\n"
+                "LLAMA_IMAGE_TAG='server'\n"
+                f"LLAMA_IMAGE_DIGEST='sha256:{'b' * 64}'\n"
+                "LLAMA_IMAGE_PLATFORM='linux/arm64'\n"
+            )
+            llama_oci = temporary / "llama.oci.tar"
+            llama_oci.write_bytes(b"llama OCI fixture\n")
             output = temporary / "release"
             subprocess.run(
                 [
@@ -131,6 +169,7 @@ class UpdateReleaseTests(unittest.TestCase):
                     "--source-minimum", "0.1.0-preview.6",
                     "--source-maximum-exclusive", "0.2.0",
                     "--pihole-env", str(pihole), "--oci", str(oci),
+                    "--llama-env", str(llama_env), "--llama-oci", str(llama_oci),
                     "--appliance-dir", str(copied_appliance),
                     "--output-dir", str(output), "--key-id", "preview-test",
                     "--artifact-base-url", "https://example.invalid/release",

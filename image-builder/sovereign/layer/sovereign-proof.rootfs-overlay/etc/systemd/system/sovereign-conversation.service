@@ -1,7 +1,11 @@
 [Unit]
 Description=Serve the Sovereign local conversation API
-After=local-fs.target network.target systemd-sysusers.service sovereign-proof.service
+After=local-fs.target network.target systemd-sysusers.service sovereign-proof.service sovereign-llama-server.service
 Wants=sovereign-proof.service
+# ADR-0014: deliberately After=, not Requires= -- a llama-server that's
+# still downloading its model or has failed to start should produce the
+# Conversation Service's own existing PROVIDER_UNAVAILABLE degraded
+# response, not block this unit from starting at all.
 RequiresMountsFor=/data
 ConditionPathIsMountPoint=/data
 
