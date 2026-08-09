@@ -174,13 +174,20 @@ Planned work:
   90`) records it as a rollback anchor — a genuinely useful, real-cycle
   confirmation that release and transaction retention interlock
   correctly rather than pruning something a still-live rollback path
-  depends on. `rotate-trust` still hasn't been exercised this way —
-  deliberately deferred as its own separate, deliberate event rather
-  than bundled into this cycle. Getting a rotation manifest onto
-  already-flashed devices without an operator manually running the
-  command still depends on the
-  Update Discovery work in item 3 below (now complete, so this is
-  unblocked whenever a rotation is actually needed);
+  depends on. `rotate-trust` has now also been exercised with the real
+  production key against the real device trust store, while the device
+  ran a real signed, already-committed release (`0.1.0-proof.3`): a
+  real, maintainer-signed add-only manifest brought the trust store to
+  genuine dual trust, the newly added key proved itself functional by
+  signing its own revocation, and a negative test confirmed revocation
+  is enforced immediately against the real production key's rotation
+  channel — see the
+  [rotate-trust real signed-cycle qualification report](docs/research/rotate-trust-real-signed-cycle-qualification-report.md).
+  This closes the last named gap in this milestone. Getting a rotation
+  manifest onto already-flashed devices without an operator manually
+  running the command still depends on the Update Discovery work in
+  item 3 below (now complete, so this is unblocked whenever a rotation
+  is actually needed);
 - approve the update RFC and production manifest policy;
 - publish release compatibility, rollback limitations, and recovery
   guidance — published as
