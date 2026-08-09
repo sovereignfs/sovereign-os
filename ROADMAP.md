@@ -410,9 +410,19 @@ roughly double the memory footprint, and peaked at 84.8°C — within
 this small corpus, a real but not final data point toward 3B being the
 more practical choice for this appliance. See the
 [llama.cpp + Qwen2.5-7B benchmark report](docs/research/llamacpp-qwen2.5-7b-benchmark-report.md).
-No runner or model selection is made yet — Ollama and a larger
-evaluation corpus remain, per the project owner's direction to start
-with llama.cpp alone. The Conversation Service itself also remains.
+Ollama was then benchmarked too (`OllamaProvider`, refactored to share
+its request handling with `LlamaCppProvider` so the streaming/tool-call
+bug couldn't silently recur in a second adapter — it didn't), running
+the same-quantization-level `qwen2.5:3b` from Ollama's own library:
+identical 5/5 accuracy and comparable steady-state speed, but a real
+multi-second first-request penalty from lazy model loading that
+llama-server's eager loading doesn't have — 6.96s time-to-first-token
+vs. llama.cpp's 0.18s on the same question, tracked to a mid-run memory
+jump (14.2%→28.6%) as the model loaded on first use. See the
+[Ollama benchmark report](docs/research/ollama-qwen2.5-3b-benchmark-report.md).
+No runner or model selection is made yet — a larger evaluation corpus
+remains before that decision, per `local-ai-options.md`'s own Follow-up
+Decisions. The Conversation Service itself also remains.
 
 **Depends on:** Stable appliance update boundary
 

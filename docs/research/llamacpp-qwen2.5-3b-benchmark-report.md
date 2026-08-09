@@ -163,4 +163,9 @@ the decision itself.
 device and corpus followed — see the
 [Qwen2.5-7B benchmark report](llamacpp-qwen2.5-7b-benchmark-report.md).
 7B matched this model's accuracy exactly but was substantially slower,
-used roughly double the memory, and ran hotter still.
+used roughly double the memory, and ran hotter still. Ollama running
+the same-quantization-level model was then benchmarked for comparison —
+see the [Ollama benchmark report](ollama-qwen2.5-3b-benchmark-report.md):
+matching accuracy and comparable steady-state speed, but a real
+multi-second first-request penalty from Ollama's lazy model loading
+that llama-server's eager loading doesn't have.
