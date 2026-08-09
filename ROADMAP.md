@@ -338,7 +338,17 @@ and automatic rollback.
 
 ### 4. Local Conversation and Capabilities
 
-**Status:** ⚪ Planned; research and RFC work may proceed in parallel
+**Status:** 🟡 In progress — started 2026-08-09. The dependency below is
+now satisfied (Milestone 2 is Complete). Direction research
+([docs/research/local-ai-options.md](docs/research/local-ai-options.md))
+and the milestone plan
+([docs/roadmap/01-2-local-conversation-capabilities.md](docs/roadmap/01-2-local-conversation-capabilities.md))
+already existed; [RFC-0002](docs/rfcs/0002-local-conversation-and-inference-runtime.md)
+(runtime and conversation architecture — the first of the milestone's
+required documents) is now drafted and pending review. RFC-0003
+(capability contract), RFC-0004 (AI capability invocation), and RFC-0006
+(Pi-hole capability mapping) remain to be written before implementation
+can begin; no hardware or code work has started yet.
 
 **Depends on:** Stable appliance update boundary
 
