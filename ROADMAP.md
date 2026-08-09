@@ -395,11 +395,26 @@ console-auth's own established pattern — a new
 directory to `0710` and the password file to `0640` group-readable
 (`chown root:sovereign-pihole-secrets`).
 
-Not yet done: authentication (RFC-0002 calls for the same
-console-auth-established boundary, ADR-0007), and auto-enabling the
-systemd unit — deferred because auth isn't wired and no persistent
-llama-server deployment service exists yet, so auto-starting it on a
-fresh image would just be a service that always fails to connect.
+**Authentication:** wired, reusing console-auth's own session boundary
+rather than a second one (RFC-0002/ADR-0007). console-auth gained
+`GET /api/v1/auth/verify-mutating` — like the existing
+`/api/v1/auth/verify` used to gate `/dns/` via Nginx `auth_request`, but
+also checking the CSRF token, since a conversation turn does real work
+directly (inference, capability execution) rather than navigating to a
+panel with its own separate login. `bin/sovereign-conversation` delegates
+to it on every `POST /message`, forwarding the caller's `Cookie` and
+`X-CSRF-Token` headers and translating 401/403/unreachable into its own
+JSON errors; `GET /health` stays open, matching `/api/v1/health`'s own
+boundary (liveness only, nothing household-specific). Nginx now proxies
+both routes onto the LAN-facing surface — `/message` with a 180s read
+timeout, since a turn can run multiple real inference calls across
+propose/execute/narrate rounds, well past the 5s every other API location
+here uses.
+
+Not yet done: auto-enabling the systemd unit — deferred because no
+persistent llama-server deployment service exists yet, so auto-starting
+it on a fresh image would just be a service that always fails to
+connect.
 
 **Runner and model benchmarking is concluded.**
 `scripts/benchmark-inference-runner.py` (backed by
@@ -428,9 +443,8 @@ open per ADR-0013's Required Follow-up (a realistic intermittent-use
 thermal pass; broader DNS-latency-during-generation coverage) but do
 not block moving on.
 
-**Remaining:** authentication integration for the Conversation Service,
-auto-enabling its systemd unit, and `web.search`/`web.fetch` (blocked on
-the SearXNG decision above).
+**Remaining:** auto-enabling the Conversation Service's systemd unit, and
+`web.search`/`web.fetch` (blocked on the SearXNG decision above).
 
 **Depends on:** Stable appliance update boundary
 

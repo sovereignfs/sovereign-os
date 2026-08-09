@@ -181,6 +181,50 @@ class AuthEndpointTests(unittest.TestCase):
         self.assertEqual(204, response.status)
         self.assertEqual(b"", body)
 
+    def test_verify_mutating_requires_both_session_and_csrf_token(self):
+        connection = self.live.connection()
+        connection.request("GET", "/api/v1/auth/verify-mutating")
+        anonymous_response = connection.getresponse()
+        self.assertEqual(401, anonymous_response.status)
+        self.assertEqual(b"", anonymous_response.read())
+        connection.close()
+
+        self.live.set_password("correct horse battery staple")
+        login_response, login_body = self._login("correct horse battery staple")
+        cookie = login_response.getheader("Set-Cookie").split(";")[0]
+
+        # Valid session, no CSRF token at all -- unlike plain /verify,
+        # this must reject.
+        connection = self.live.connection()
+        connection.request("GET", "/api/v1/auth/verify-mutating", headers={"Cookie": cookie})
+        response = connection.getresponse()
+        self.assertEqual(403, response.status)
+        self.assertEqual(b"", response.read())
+        connection.close()
+
+        # Valid session, wrong CSRF token.
+        connection = self.live.connection()
+        connection.request(
+            "GET",
+            "/api/v1/auth/verify-mutating",
+            headers={"Cookie": cookie, "X-CSRF-Token": "not the real token"},
+        )
+        response = connection.getresponse()
+        self.assertEqual(403, response.status)
+        connection.close()
+
+        # Valid session, correct CSRF token.
+        connection = self.live.connection()
+        connection.request(
+            "GET",
+            "/api/v1/auth/verify-mutating",
+            headers={"Cookie": cookie, "X-CSRF-Token": login_body["csrf_token"]},
+        )
+        response = connection.getresponse()
+        self.assertEqual(204, response.status)
+        self.assertEqual(b"", response.read())
+        connection.close()
+
     def test_logout_requires_matching_csrf_token(self):
         self.live.set_password("correct horse battery staple")
         login_response, login_body = self._login("correct horse battery staple")
@@ -659,6 +703,30 @@ class ServiceGatingProvisioningTests(unittest.TestCase):
         start = nginx.index("location @signin {")
         block = nginx[start : nginx.index("}", start)]
         self.assertIn("return 302 /console/?next=$request_uri;", block)
+
+
+class ConversationServiceGatingProvisioningTests(unittest.TestCase):
+    """RFC-0002: the Conversation Service's mutating endpoint checks its
+    own session/CSRF via console-auth delegation, not an nginx
+    auth_request -- see /api/v1/auth/verify-mutating above."""
+
+    def test_health_route_is_proxied_and_unauthenticated(self):
+        nginx = NGINX.read_text()
+        start = nginx.index("location = /api/v1/conversation/health {")
+        block = nginx[start : nginx.index("}", start)]
+        self.assertIn("127.0.0.1:8092/api/v1/conversation/health", block)
+        self.assertNotIn("auth_request", block)
+
+    def test_message_route_is_proxied_with_a_long_read_timeout(self):
+        nginx = NGINX.read_text()
+        start = nginx.index("location = /api/v1/conversation/message {")
+        block = nginx[start : nginx.index("}", start)]
+        self.assertIn("127.0.0.1:8092/api/v1/conversation/message", block)
+        # Not the 5s every other API location in this file uses -- a turn
+        # can run multiple real inference calls across propose/execute/
+        # narrate rounds.
+        self.assertIn("proxy_read_timeout 180s;", block)
+        self.assertNotIn("auth_request", block)
 
 
 if __name__ == "__main__":

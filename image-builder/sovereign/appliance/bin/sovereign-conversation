@@ -4,6 +4,8 @@ import json
 import os
 import pathlib
 import sys
+import urllib.error
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
@@ -15,14 +17,19 @@ import sovereign_inference as inference  # noqa: E402
 
 
 # Loopback-only, matching every other Sovereign service (console-health,
-# console-auth). RFC-0002 calls for this to sit behind the same
-# authentication boundary console-auth already established (ADR-0007) --
-# that integration is NOT done here. This service is not yet safe to
-# reach from anything but another loopback-only, already-trusted process;
-# it must not be proxied to the LAN as-is.
+# console-auth). RFC-0002: reuses console-auth's own session/CSRF
+# boundary (ADR-0007) for the mutating /message endpoint rather than
+# keeping an independent auth store -- see _check_authentication(). Still
+# bound to loopback itself as defense in depth; Nginx is the only thing
+# expected to reach it from the LAN.
 LISTEN_ADDRESS = os.environ.get("SOVEREIGN_CONVERSATION_ADDRESS", "127.0.0.1")
 LISTEN_PORT = int(os.environ.get("SOVEREIGN_CONVERSATION_PORT", "8092"))
 MAX_REQUEST_BODY_BYTES = 65536
+
+# console-auth's own loopback port -- see console-auth's
+# /api/v1/auth/verify-mutating.
+AUTH_BASE_URL = os.environ.get("SOVEREIGN_CONSOLE_AUTH_BASE_URL", "http://127.0.0.1:8091")
+AUTH_REQUEST_TIMEOUT_SECONDS = 5
 
 # ADR-0013: llama.cpp + Qwen2.5-3B-Instruct is the selected runner/model;
 # the default base URL matches the benchmark harness's own default for
@@ -72,6 +79,10 @@ class ConversationHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/api/v1/conversation/health":
+            # Deliberately unauthenticated, matching /api/v1/health's own
+            # boundary -- liveness/model info only, nothing household-
+            # specific, the same reasoning that keeps Console's own health
+            # endpoint public.
             self._send_json(200, _provider.health())
         else:
             self.send_error(404)
@@ -82,7 +93,38 @@ class ConversationHandler(BaseHTTPRequestHandler):
         else:
             self.send_error(404)
 
+    def _check_authentication(self):
+        """Delegates to console-auth's session+CSRF check (RFC-0002:
+        reuse the existing auth boundary rather than keep an independent
+        one). Returns True if the caller may proceed; otherwise sends the
+        appropriate error response itself and returns False."""
+        request = urllib.request.Request(
+            f"{AUTH_BASE_URL}/api/v1/auth/verify-mutating", method="GET"
+        )
+        cookie = self.headers.get("Cookie")
+        if cookie:
+            request.add_header("Cookie", cookie)
+        csrf_header = self.headers.get("X-CSRF-Token")
+        if csrf_header:
+            request.add_header("X-CSRF-Token", csrf_header)
+        try:
+            urllib.request.urlopen(request, timeout=AUTH_REQUEST_TIMEOUT_SECONDS)  # noqa: S310
+            return True
+        except urllib.error.HTTPError as error:
+            if error.code == 401:
+                self._send_json(401, {"error": {"code": "NOT_AUTHENTICATED", "message": "a valid Console session is required"}})
+            elif error.code == 403:
+                self._send_json(403, {"error": {"code": "CSRF_MISMATCH", "message": "missing or invalid CSRF token"}})
+            else:
+                self._send_json(502, {"error": {"code": "AUTH_SERVICE_ERROR", "message": "the authentication service returned an unexpected response"}})
+            return False
+        except (urllib.error.URLError, OSError):
+            self._send_json(503, {"error": {"code": "AUTH_SERVICE_UNAVAILABLE", "message": "could not reach the authentication service"}})
+            return False
+
     def _handle_message(self):
+        if not self._check_authentication():
+            return
         body = self._read_json_body()
         if not isinstance(body, dict) or not isinstance(body.get("message"), str) or not body["message"].strip():
             self._send_json(400, {"error": {"code": "INVALID_REQUEST", "message": "a non-empty 'message' string is required"}})

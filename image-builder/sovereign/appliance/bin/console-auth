@@ -292,17 +292,25 @@ class AuthHandler(BaseHTTPRequestHandler):
         morsel = jar.get(SESSION_COOKIE_NAME)
         return morsel.value if morsel else None
 
+    def _check_session_and_csrf(self):
+        """Returns (session, None) for a valid, CSRF-verified request, or
+        (None, status_code) -- 401 for no/expired session, 403 for a
+        missing or mismatched CSRF token."""
+        session = lookup_session(self._session_token())
+        if session is None:
+            return None, 401
+        csrf_header = self.headers.get("X-CSRF-Token")
+        if not csrf_header or not hmac.compare_digest(csrf_header, session["csrf_token"]):
+            return None, 403
+        return session, None
+
     def _require_authenticated_session(self):
         """Returns the session dict for a valid, CSRF-verified request, or
         sends the appropriate error response and returns None."""
-        token = self._session_token()
-        session = lookup_session(token)
+        session, status = self._check_session_and_csrf()
         if session is None:
-            self._send_json(401, {"error": "not_authenticated"})
-            return None
-        csrf_header = self.headers.get("X-CSRF-Token")
-        if not csrf_header or not hmac.compare_digest(csrf_header, session["csrf_token"]):
-            self._send_json(403, {"error": "csrf_mismatch"})
+            error = "not_authenticated" if status == 401 else "csrf_mismatch"
+            self._send_json(status, {"error": error})
             return None
         return session
 
@@ -323,6 +331,8 @@ class AuthHandler(BaseHTTPRequestHandler):
             self._handle_session()
         elif self.path == "/api/v1/auth/verify":
             self._handle_verify()
+        elif self.path == "/api/v1/auth/verify-mutating":
+            self._handle_verify_mutating()
         else:
             self.send_error(404)
 
@@ -457,6 +467,20 @@ class AuthHandler(BaseHTTPRequestHandler):
         # that's about to enforce its own login next regardless.
         session = lookup_session(self._session_token())
         self.send_response(204 if session is not None else 401)
+        self.send_header("Content-Length", "0")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+
+    def _handle_verify_mutating(self):
+        # RFC-0002: other loopback-only Sovereign services (the
+        # Conversation Service today) reuse this same auth boundary for
+        # their own mutating requests rather than each keeping an
+        # independent session store. Unlike /verify above, this checks
+        # CSRF too -- the caller here is gating a request that does real
+        # work (inference, capability execution) directly, not read
+        # navigation to a panel that enforces its own login next.
+        _, status = self._check_session_and_csrf()
+        self.send_response(status or 204)
         self.send_header("Content-Length", "0")
         self.send_header("Cache-Control", "no-store")
         self.end_headers()

@@ -81,10 +81,10 @@ def healthy_payload():
 
 
 def dispatch_urlopen(rules):
-    # rules: list of (url_substring, response) consumed in order, one per
-    # matching call -- mirrors that a single turn can call the same path
-    # (e.g. /v1/chat/completions) more than once across propose/execute
-    # rounds, each needing its own canned response.
+    # rules: list of (url_substring, response_or_exception) consumed in
+    # order, one per matching call -- mirrors that a single turn can call
+    # the same path (e.g. /v1/chat/completions) more than once across
+    # propose/execute rounds, each needing its own canned response.
     remaining = list(rules)
 
     def _urlopen(request, timeout=None):
@@ -92,10 +92,16 @@ def dispatch_urlopen(rules):
         for index, (substring, response) in enumerate(remaining):
             if substring in url:
                 del remaining[index]
+                if isinstance(response, BaseException):
+                    raise response
                 return response
         raise AssertionError(f"unexpected urlopen call: {url} (remaining rules: {remaining})")
 
     return _urlopen
+
+
+def auth_ok():
+    return ("/api/v1/auth/verify-mutating", mock.MagicMock())
 
 
 class LiveConversationServer:
@@ -130,7 +136,7 @@ class ConversationServiceTests(unittest.TestCase):
         self.live = LiveConversationServer(self.audit_path)
         self.addCleanup(self.live.stop)
 
-    def _post_message(self, payload):
+    def _post_message(self, payload, headers=None):
         connection = self.live.connection()
         if isinstance(payload, (dict, list)):
             body = json.dumps(payload)
@@ -140,7 +146,7 @@ class ConversationServiceTests(unittest.TestCase):
             "POST",
             "/api/v1/conversation/message",
             body=body,
-            headers={"Content-Type": "application/json"},
+            headers=headers or {"Content-Type": "application/json"},
         )
         response = connection.getresponse()
         parsed = json.loads(response.read())
@@ -148,6 +154,7 @@ class ConversationServiceTests(unittest.TestCase):
         return response, parsed
 
     def test_health_endpoint_reports_provider_health(self):
+        # Deliberately unauthenticated -- no auth_ok() rule needed here.
         with mock.patch("urllib.request.urlopen") as urlopen:
             urlopen.side_effect = dispatch_urlopen([("/health", json_response({"status": "ok"}))])
             connection = self.live.connection()
@@ -161,7 +168,7 @@ class ConversationServiceTests(unittest.TestCase):
     def test_plain_message_returns_narration_with_no_capability_events(self):
         with mock.patch("urllib.request.urlopen") as urlopen:
             urlopen.side_effect = dispatch_urlopen(
-                [("/v1/chat/completions", chat_completion(content="Hello there."))]
+                [auth_ok(), ("/v1/chat/completions", chat_completion(content="Hello there."))]
             )
             response, body = self._post_message({"message": "hi"})
         self.assertEqual(200, response.status)
@@ -169,17 +176,23 @@ class ConversationServiceTests(unittest.TestCase):
         self.assertEqual([], body["capability_events"])
 
     def test_missing_message_is_rejected(self):
-        response, body = self._post_message({})
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            response, body = self._post_message({})
         self.assertEqual(400, response.status)
         self.assertEqual("INVALID_REQUEST", body["error"]["code"])
 
     def test_non_list_messages_history_is_rejected(self):
-        response, body = self._post_message({"message": "hi", "messages": "not a list"})
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            response, body = self._post_message({"message": "hi", "messages": "not a list"})
         self.assertEqual(400, response.status)
         self.assertEqual("INVALID_REQUEST", body["error"]["code"])
 
     def test_malformed_json_body_is_rejected(self):
-        response, body = self._post_message("not json")
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            response, body = self._post_message("not json")
         self.assertEqual(400, response.status)
         self.assertEqual("INVALID_REQUEST", body["error"]["code"])
 
@@ -189,6 +202,7 @@ class ConversationServiceTests(unittest.TestCase):
         with mock.patch("urllib.request.urlopen") as urlopen:
             urlopen.side_effect = dispatch_urlopen(
                 [
+                    auth_ok(),
                     ("/v1/chat/completions", proposal),
                     (system.HEALTH_BASE_URL, json_response(healthy_payload())),
                     ("/v1/chat/completions", narration),
@@ -208,10 +222,68 @@ class ConversationServiceTests(unittest.TestCase):
 
     def test_unreachable_provider_reports_502(self):
         with mock.patch("urllib.request.urlopen") as urlopen:
-            urlopen.side_effect = urllib.error.URLError("connection refused")
+            urlopen.side_effect = dispatch_urlopen(
+                [auth_ok(), ("/v1/chat/completions", urllib.error.URLError("connection refused"))]
+            )
             response, body = self._post_message({"message": "hi"})
         self.assertEqual(502, response.status)
         self.assertEqual("PROVIDER_UNAVAILABLE", body["error"]["code"])
+
+    def test_message_without_a_session_is_rejected_as_not_authenticated(self):
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen(
+                [("/api/v1/auth/verify-mutating", urllib.error.HTTPError("url", 401, "unauthorized", {}, None))]
+            )
+            response, body = self._post_message({"message": "hi"})
+        self.assertEqual(401, response.status)
+        self.assertEqual("NOT_AUTHENTICATED", body["error"]["code"])
+
+    def test_message_with_a_session_but_no_csrf_token_is_rejected(self):
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen(
+                [("/api/v1/auth/verify-mutating", urllib.error.HTTPError("url", 403, "forbidden", {}, None))]
+            )
+            response, body = self._post_message(
+                {"message": "hi"},
+                headers={
+                    "Content-Type": "application/json",
+                    "Cookie": "sovereign_console_session=abc123",
+                },
+            )
+        self.assertEqual(403, response.status)
+        self.assertEqual("CSRF_MISMATCH", body["error"]["code"])
+
+    def test_message_when_auth_service_is_unreachable_reports_503(self):
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen(
+                [("/api/v1/auth/verify-mutating", urllib.error.URLError("connection refused"))]
+            )
+            response, body = self._post_message({"message": "hi"})
+        self.assertEqual(503, response.status)
+        self.assertEqual("AUTH_SERVICE_UNAVAILABLE", body["error"]["code"])
+
+    def test_message_forwards_the_caller_s_cookie_and_csrf_header_to_console_auth(self):
+        captured = {}
+
+        def capture(request, timeout=None):
+            if "/api/v1/auth/verify-mutating" in request.full_url:
+                captured["cookie"] = request.get_header("Cookie")
+                captured["csrf"] = request.get_header("X-csrf-token")
+                return mock.MagicMock()
+            return chat_completion(content="hi there")
+
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = capture
+            self._post_message(
+                {"message": "hi"},
+                headers={
+                    "Content-Type": "application/json",
+                    "Cookie": "sovereign_console_session=abc123",
+                    "X-CSRF-Token": "the-real-token",
+                },
+            )
+        self.assertEqual("sovereign_console_session=abc123", captured["cookie"])
+        self.assertEqual("the-real-token", captured["csrf"])
 
 
 class ConversationProvisioningTests(unittest.TestCase):
