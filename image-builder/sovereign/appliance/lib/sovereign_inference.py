@@ -84,6 +84,20 @@ class LlamaCppProvider:
             raise ProviderError("PROVIDER_UNREACHABLE", "Could not reach the inference provider") from error
 
     def generate(self, messages, capability_catalog=None, max_tokens=None, timeout_seconds=30, stream=True):
+        if stream and capability_catalog:
+            # _generate_streaming only parses token/usage deltas -- it has
+            # no incremental tool-call reassembly (a deliberate scoping
+            # decision, see the module docstring). Silently dropping a
+            # real capability proposal because it arrived as a streamed
+            # delta instead of a single-shot response is exactly the kind
+            # of silent, surprising failure this project avoids everywhere
+            # else (RFC-0003's "audit always", RFC-0004's strict parsing) --
+            # fail loudly here instead, at the one call that would
+            # otherwise lose it.
+            raise ProviderError(
+                "STREAMING_WITH_TOOLS_UNSUPPORTED",
+                "This adapter cannot parse tool calls from a streamed response; call with stream=False when capability_catalog is set",
+            )
         body = {"messages": messages, "stream": stream}
         if max_tokens is not None:
             body["max_tokens"] = max_tokens

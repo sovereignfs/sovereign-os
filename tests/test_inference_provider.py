@@ -105,18 +105,31 @@ class StreamingGenerationTests(unittest.TestCase):
             list(provider.generate([{"role": "user", "content": "hi"}]))
         self.assertEqual(caught.exception.code, "PROVIDER_UNREACHABLE")
 
+    def test_streaming_with_capability_catalog_is_refused(self):
+        # LlamaCppProvider cannot parse tool calls from a streamed
+        # response -- silently dropping a real proposal would be exactly
+        # the kind of surprising failure this project avoids elsewhere.
+        # It must refuse loudly, and before ever making a request.
+        provider = inference.LlamaCppProvider()
+        catalog = [{"name": "system.health", "version": 1, "argument_schema": {}}]
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            with self.assertRaises(inference.ProviderError) as caught:
+                list(provider.generate([{"role": "user", "content": "hi"}], capability_catalog=catalog, stream=True))
+            self.assertEqual(caught.exception.code, "STREAMING_WITH_TOOLS_UNSUPPORTED")
+            urlopen.assert_not_called()
+
+
+class SingleShotGenerationTests(unittest.TestCase):
     @mock.patch("urllib.request.urlopen")
     def test_capability_catalog_becomes_tools_in_request_body(self, urlopen):
-        urlopen.return_value = sse_response(['data: [DONE]'])
+        urlopen.return_value = json_response({"choices": [{"message": {"content": "ok"}}]})
         provider = inference.LlamaCppProvider()
         catalog = [{"name": "system.health", "version": 1, "argument_schema": {"type": "object", "properties": {}, "required": [], "additionalProperties": False}}]
-        list(provider.generate([{"role": "user", "content": "hi"}], capability_catalog=catalog))
+        list(provider.generate([{"role": "user", "content": "hi"}], capability_catalog=catalog, stream=False))
         request = urlopen.call_args[0][0]
         body = json.loads(request.data)
         self.assertEqual(body["tools"][0]["function"]["name"], "system.health")
 
-
-class SingleShotGenerationTests(unittest.TestCase):
     @mock.patch("urllib.request.urlopen")
     def test_yields_capability_proposal_from_tool_call(self, urlopen):
         urlopen.return_value = json_response({

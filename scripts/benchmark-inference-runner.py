@@ -99,12 +99,20 @@ def run_corpus_item(provider, item, stream, catalog):
     proposals = []
     usage = None
     error = None
+    uses_capabilities = item.get("use_capabilities", True)
+    # A capability proposal can only be read back from a single-shot
+    # response (LlamaCppProvider.generate() refuses stream=True with a
+    # catalog present, for exactly this reason) -- an item measuring
+    # tool-selection accuracy must not silently fall back to streaming
+    # and lose it. Pure-chat items still measure token-rate/TTFT via
+    # streaming, per the harness's --no-stream flag.
+    item_stream = stream and not uses_capabilities
     try:
         for chunk in provider.generate(
             item["messages"],
-            capability_catalog=catalog if item.get("use_capabilities", True) else None,
+            capability_catalog=catalog if uses_capabilities else None,
             timeout_seconds=item.get("timeout_seconds", 30),
-            stream=stream,
+            stream=item_stream,
         ):
             if not inference.validate_chunk(chunk):
                 raise ValueError(f"provider yielded a malformed chunk: {chunk!r}")

@@ -22,12 +22,14 @@ class FakeProvider:
         self._health = health if health is not None else {"healthy": True, "model_name": "fake", "runtime_version": "0"}
         self._raise_error = raise_error
         self.last_capability_catalog = None
+        self.last_stream = None
 
     def health(self):
         return self._health
 
     def generate(self, messages, capability_catalog=None, max_tokens=None, timeout_seconds=30, stream=True):
         self.last_capability_catalog = capability_catalog
+        self.last_stream = stream
         if self._raise_error is not None:
             raise self._raise_error
         yield from self._chunks
@@ -130,6 +132,23 @@ class RunCorpusItemTests(BenchmarkRunnerTestCase):
         catalog = [{"name": "system.health"}]
         self.module["run_corpus_item"](provider, self.item(), stream=True, catalog=catalog)
         self.assertEqual(provider.last_capability_catalog, catalog)
+
+    def test_capability_items_always_run_single_shot_even_if_harness_streams(self):
+        # Regression test for a real bug this exact scenario hit on real
+        # hardware: LlamaCppProvider can't read tool calls from a
+        # streamed response, so a capability-using item must never be
+        # sent with stream=True regardless of the harness-wide flag, or
+        # a real capability proposal silently disappears.
+        provider = FakeProvider()
+        self.module["run_corpus_item"](provider, self.item(), stream=True, catalog=[{"name": "system.health"}])
+        self.assertFalse(provider.last_stream)
+
+    def test_plain_chat_items_respect_the_harness_stream_flag(self):
+        provider = FakeProvider()
+        self.module["run_corpus_item"](
+            provider, self.item(use_capabilities=False), stream=True, catalog=[{"name": "system.health"}]
+        )
+        self.assertTrue(provider.last_stream)
 
 
 class RunBenchmarkTests(BenchmarkRunnerTestCase):
