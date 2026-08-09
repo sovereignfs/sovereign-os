@@ -6,7 +6,7 @@ RFCs are proposals, not decisions. Start with the [RFC template](../templates/rf
 
 - RFC-0001: Monorepo structure
 - [RFC-0002: Local conversation and inference runtime architecture](0002-local-conversation-and-inference-runtime.md) - Accepted
-- RFC-0003: Capability contract
+- [RFC-0003: Capability contract](0003-capability-contract.md) - Draft
 - RFC-0004: AI capability invocation
 - [RFC-0010: Raspberry Pi image deployment](0010-raspberry-pi-image-deployment.md) - Proposed
 - RFC-0006: Pi-hole integration
@@ -24,7 +24,7 @@ when their problem and evidence are mature enough for a concrete proposal.
 RFC-0002 through RFC-0004 and RFC-0006 are the proposal set required for
 [Milestone 01.2](../roadmap/01-2-local-conversation-capabilities.md).
 RFC-0002 (runtime and conversation architecture) is Accepted; RFC-0003
-(capability contract), RFC-0004 (AI capability invocation), and RFC-0006
-(Pi-hole capability mapping) remain to be written before implementation
-begins in earnest. Implementation must preserve the accepted appliance
-and update boundaries.
+(capability contract) is drafted and pending review; RFC-0004 (AI
+capability invocation) and RFC-0006 (Pi-hole capability mapping) remain
+to be written before implementation begins in earnest. Implementation
+must preserve the accepted appliance and update boundaries.

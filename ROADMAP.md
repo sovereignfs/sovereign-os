@@ -345,10 +345,14 @@ and the milestone plan
 ([docs/roadmap/01-2-local-conversation-capabilities.md](docs/roadmap/01-2-local-conversation-capabilities.md))
 already existed; [RFC-0002](docs/rfcs/0002-local-conversation-and-inference-runtime.md)
 (runtime and conversation architecture — the first of the milestone's
-required documents) is now Accepted (2026-08-09). RFC-0003
-(capability contract), RFC-0004 (AI capability invocation), and RFC-0006
-(Pi-hole capability mapping) remain to be written before implementation
-begins in earnest; no hardware or code work has started yet.
+required documents) is now Accepted (2026-08-09).
+[RFC-0003](docs/rfcs/0003-capability-contract.md) (capability contract —
+the typed registry and deterministic executor's validation pipeline,
+classifying `system.health`, Pi-hole read-only capabilities,
+`web.search`, and `web.fetch`) is drafted and pending review. RFC-0004
+(AI capability invocation) and RFC-0006 (Pi-hole capability mapping)
+remain to be written before implementation begins in earnest; no
+hardware or code work has started yet.
 
 **Depends on:** Stable appliance update boundary
 
