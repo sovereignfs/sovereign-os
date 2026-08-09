@@ -1,9 +1,9 @@
 # RFC-0003: Capability Contract
 
-**Status:** Draft
+**Status:** Accepted (2026-08-09, project creator)
 **Author:** Project creator and Claude
 **Created:** 2026-08-09
-**Reviewers:**
+**Reviewers:** Project creator
 **Target phase:** [Milestone 01.2, Local Conversation and Capabilities](../roadmap/01-2-local-conversation-capabilities.md)
 **Supersedes:** None
 
@@ -404,4 +404,8 @@ either implementation-level or explicitly deferred to RFC-0004/0006.
 
 ## Decision
 
-Pending review.
+**Accepted (2026-08-09, project creator).** The capability schema, the
+six-stage executor pipeline, the structural confirmation model, and the
+audit event shape are accepted as the platform contract RFC-0004 and
+RFC-0006 build on. The Unresolved Questions above are non-blocking
+follow-ups, not gating conditions.

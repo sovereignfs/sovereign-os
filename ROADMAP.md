@@ -357,8 +357,9 @@ untrusted-forever boundary on capability results), and
 [RFC-0006](docs/rfcs/0006-pihole-capability-mapping.md) (Pi-hole
 capability mapping — `pihole.status`/`pihole.summary`, aggregate-only,
 no per-domain/per-client detail, carrying forward Console health's own
-privacy boundary) are all drafted and pending review. All four of the
-milestone's required RFCs now exist; none is implemented yet.
+privacy boundary) are all Accepted (2026-08-09, project creator). All
+four of the milestone's required RFCs now exist and are accepted;
+implementation is starting.
 [docs/research/pihole-api-assessment.md](docs/research/pihole-api-assessment.md),
 RFC-0006's remaining prerequisite, is Concluded (2026-08-09) — a real
 authenticated round trip against the live Pi-hole API on the

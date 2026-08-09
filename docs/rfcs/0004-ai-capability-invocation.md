@@ -1,9 +1,9 @@
 # RFC-0004: AI Capability Invocation
 
-**Status:** Draft
+**Status:** Accepted (2026-08-09, project creator)
 **Author:** Project creator and Claude
 **Created:** 2026-08-09
-**Reviewers:**
+**Reviewers:** Project creator
 **Target phase:** [Milestone 01.2, Local Conversation and Capabilities](../roadmap/01-2-local-conversation-capabilities.md)
 **Supersedes:** None
 
@@ -435,4 +435,9 @@ implementation-level or explicitly deferred elsewhere.
 
 ## Decision
 
-Pending review.
+**Accepted (2026-08-09, project creator).** The catalog-exposure
+mechanism, strict proposal parsing, the bounded multi-step invocation
+loop, the per-invocation confirmation-token flow, and the
+untrusted-forever boundary on capability results are accepted as the
+model-invocation path onto RFC-0003's executor. The Unresolved
+Questions above are non-blocking follow-ups, not gating conditions.

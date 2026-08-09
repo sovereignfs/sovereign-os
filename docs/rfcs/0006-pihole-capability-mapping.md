@@ -1,9 +1,9 @@
 # RFC-0006: Pi-hole Capability Mapping
 
-**Status:** Draft
+**Status:** Accepted (2026-08-09, project creator)
 **Author:** Project creator and Claude
 **Created:** 2026-08-09
-**Reviewers:**
+**Reviewers:** Project creator
 **Target phase:** [Milestone 01.2, Local Conversation and Capabilities](../roadmap/01-2-local-conversation-capabilities.md)
 **Supersedes:** None
 
@@ -424,4 +424,8 @@ implementation-level:
 
 ## Decision
 
-Pending review.
+**Accepted (2026-08-09, project creator).** `pihole.status` and
+`pihole.summary`, their schemas, aggregate-only privacy boundary, and
+credential-handling requirements, are accepted, incorporating the
+real, live-verified findings from
+[docs/research/pihole-api-assessment.md](../research/pihole-api-assessment.md).
