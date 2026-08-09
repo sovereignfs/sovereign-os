@@ -378,9 +378,13 @@ every round is single-shot), a working confirmation pause/resume flow
 (capabilities requiring confirmation are detected and refused with a
 clear error — nothing registered needs one yet), and conversation
 storage (stateless; the caller supplies full history per call). 26
-unit/HTTP-layer tests cover the turn loop and the live service; no
-real-hardware smoke test yet (the established next step for every
-capability in this milestone).
+unit/HTTP-layer tests cover the turn loop and the live service, and it
+has been smoke-tested end to end on the real device — real inference
+(llama.cpp + Qwen2.5-3B-Instruct), all three registered capabilities
+proposed/executed/narrated correctly (including a model-chosen
+structured argument for `pihole.summary`), a compliant audit trail, and
+correct error handling. See the
+[smoke test report](docs/research/conversation-service-smoke-test-report.md).
 
 Wiring in the Pi-hole capabilities surfaced a real production gap:
 `pihole-admin-password` was root-only (`0600`), which an unprivileged
@@ -424,9 +428,9 @@ open per ADR-0013's Required Follow-up (a realistic intermittent-use
 thermal pass; broader DNS-latency-during-generation coverage) but do
 not block moving on.
 
-**Remaining:** a real-hardware smoke test of the Conversation Service,
-authentication integration, auto-enabling its systemd unit, and
-`web.search`/`web.fetch` (blocked on the SearXNG decision above).
+**Remaining:** authentication integration for the Conversation Service,
+auto-enabling its systemd unit, and `web.search`/`web.fetch` (blocked on
+the SearXNG decision above).
 
 **Depends on:** Stable appliance update boundary
 
