@@ -1,0 +1,1823 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sovereign OS — Design System Reference</title>
+<!--
+  Static, dependency-free reference for the proposed Sovereign OS design
+  system ("Garnet" direction: stone neutrals + deep garnet accent). Pure
+  design documentation — open directly in a browser, no build step. Not
+  shipped in the appliance image.
+
+  The Google Fonts <link> below is ONLY so this reference page can preview
+  Hanken Grotesk / JetBrains Mono. The real Console ships every asset in
+  the image and loads nothing from the internet; fontFamily tokens name the
+  font first in the stack and fall back to the system font when it isn't
+  present — same convention as the sibling Sovereign products.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
+  rel="stylesheet"
+/>
+<style>
+  :root {
+    /* ---- primitives: stone neutral scale ---- */
+    --sv-white: #ffffff;
+    --sv-black: #000000;
+    --sv-stone-50: #f7f6f4;
+    --sv-stone-100: #efedea;
+    --sv-stone-200: #e5e3df;
+    --sv-stone-300: #cfccc7;
+    --sv-stone-400: #a5a19a;
+    --sv-stone-500: #807c76;
+    --sv-stone-600: #615d57;
+    --sv-stone-700: #484540;
+    --sv-stone-800: #33302c;
+    --sv-stone-900: #232019;
+    --sv-stone-950: #191715;
+
+    /* ---- primitives: garnet accent scale ---- */
+    --sv-garnet-100: #f6e3e6;
+    --sv-garnet-200: #ebc2c9;
+    --sv-garnet-300: #d99aa6;
+    --sv-garnet-400: #c4707f;
+    --sv-garnet-500: #a94c5d;
+    --sv-garnet-600: #8e3a4b;
+    --sv-garnet-700: #752e3e;
+    --sv-garnet-800: #5c2331;
+    --sv-garnet-900: #421823;
+
+    /* ---- primitives: status ----
+       error-solid is deliberately a BRIGHT pure red (#dc2626, not a deep
+       one): the brand accent is itself a red, so the danger semantic keeps
+       maximum value/saturation distance from garnet. Never darken it
+       toward the accent. */
+    --sv-amber-100: #fff7ed;
+    --sv-amber-200: #fed7aa;
+    --sv-amber-800: #b45309;
+    --sv-amber-900: #92400e;
+    --sv-green-100: #ecfdf3;
+    --sv-green-200: #bbf7d0;
+    --sv-green-800: #167c4a;
+    --sv-green-900: #14532d;
+    --sv-red-100: #fef2f2;
+    --sv-red-200: #fecaca;
+    --sv-red-600: #dc2626;
+    --sv-red-800: #991b1b;
+    --sv-red-900: #7f1d1d;
+    --sv-blue-100: #eff6ff;
+    --sv-blue-200: #dbeafe;
+    --sv-blue-800: #1d4ed8;
+    --sv-blue-900: #1e3a8a;
+
+    /* ---- primitives: spacing / radius / type / motion ---- */
+    --sv-space-1: 4px;
+    --sv-space-2: 8px;
+    --sv-space-3: 12px;
+    --sv-space-4: 16px;
+    --sv-space-5: 20px;
+    --sv-space-6: 24px;
+    --sv-space-8: 32px;
+    --sv-space-10: 40px;
+    --sv-space-12: 48px;
+    --sv-space-16: 64px;
+
+    --sv-radius-sm: 6px;
+    --sv-radius-md: 8px;
+    --sv-radius-lg: 11px;
+    --sv-radius-xl: 12px;
+    --sv-radius-2xl: 14px;
+    --sv-radius-full: 9999px;
+
+    --sv-font-family-body: 'Hanken Grotesk', -apple-system, 'Segoe UI', system-ui, sans-serif;
+    --sv-font-family-mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+
+    --sv-font-size-label: 11px;
+    --sv-font-size-xs: 12px;
+    --sv-font-size-caption: 13px;
+    --sv-font-size-sm: 14px;
+    --sv-font-size-md: 16px;
+    --sv-font-size-lg: 18px;
+    --sv-font-size-xl: 20px;
+    --sv-font-size-2xl: 24px;
+
+    --sv-font-weight-regular: 400;
+    --sv-font-weight-medium: 500;
+    --sv-font-weight-semibold: 600;
+    --sv-font-weight-bold: 700;
+
+    --sv-touch-target-min: 44px;
+    --sv-motion-duration-fast: 150ms;
+
+    /* ---- semantic: light (default) ---- */
+    --sv-color-surface: var(--sv-stone-50);
+    --sv-color-surface-sunken: var(--sv-stone-100);
+    --sv-color-surface-raised: var(--sv-white);
+    --sv-color-text-primary: var(--sv-stone-800);
+    --sv-color-text-muted: var(--sv-stone-500);
+    --sv-color-text-subtle: var(--sv-stone-400);
+    --sv-color-text-on-accent: var(--sv-white);
+    --sv-color-border: var(--sv-stone-200);
+    --sv-color-border-strong: var(--sv-stone-300);
+    --sv-color-accent: var(--sv-garnet-700);
+    --sv-color-accent-hover: var(--sv-garnet-800);
+    --sv-color-accent-subtle: rgba(117, 46, 62, 0.1);
+    --sv-color-focus-ring: var(--sv-garnet-700);
+    --sv-color-scrim: rgba(25, 23, 21, 0.5);
+
+    --sv-color-error-surface: var(--sv-red-100);
+    --sv-color-error-text: var(--sv-red-800);
+    --sv-color-error-border: var(--sv-red-200);
+    --sv-color-error-solid: var(--sv-red-600);
+    --sv-color-warning-surface: var(--sv-amber-100);
+    --sv-color-warning-text: var(--sv-amber-800);
+    --sv-color-warning-border: var(--sv-amber-200);
+    --sv-color-success-surface: var(--sv-green-100);
+    --sv-color-success-text: var(--sv-green-800);
+    --sv-color-success-border: var(--sv-green-200);
+    --sv-color-info-surface: var(--sv-blue-100);
+    --sv-color-info-text: var(--sv-blue-800);
+    --sv-color-info-border: var(--sv-blue-200);
+
+    --sv-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08);
+    --sv-shadow-popover: 0 10px 38px rgba(0, 0, 0, 0.16);
+  }
+
+  html[data-theme='dark'] {
+    --sv-color-surface: var(--sv-stone-950);
+    --sv-color-surface-sunken: var(--sv-stone-900);
+    --sv-color-surface-raised: var(--sv-stone-900);
+    --sv-color-text-primary: var(--sv-stone-50);
+    --sv-color-text-muted: var(--sv-stone-400);
+    --sv-color-text-subtle: var(--sv-stone-600);
+    --sv-color-text-on-accent: var(--sv-garnet-900);
+    --sv-color-border: var(--sv-stone-800);
+    --sv-color-border-strong: var(--sv-stone-700);
+    --sv-color-accent: var(--sv-garnet-300);
+    --sv-color-accent-hover: var(--sv-garnet-400);
+    --sv-color-accent-subtle: rgba(217, 154, 166, 0.14);
+    --sv-color-focus-ring: var(--sv-garnet-200);
+    --sv-color-scrim: rgba(0, 0, 0, 0.5);
+
+    --sv-color-error-surface: var(--sv-red-900);
+    --sv-color-error-text: var(--sv-red-200);
+    --sv-color-error-border: var(--sv-red-800);
+    --sv-color-error-solid: var(--sv-red-600);
+    --sv-color-warning-surface: var(--sv-amber-900);
+    --sv-color-warning-text: var(--sv-amber-200);
+    --sv-color-warning-border: var(--sv-amber-800);
+    --sv-color-success-surface: var(--sv-green-900);
+    --sv-color-success-text: var(--sv-green-200);
+    --sv-color-success-border: var(--sv-green-800);
+    --sv-color-info-surface: var(--sv-blue-900);
+    --sv-color-info-text: var(--sv-blue-100);
+    --sv-color-info-border: var(--sv-blue-800);
+
+    --sv-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.4);
+    --sv-shadow-popover: 0 10px 38px rgba(0, 0, 0, 0.6);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    background: var(--sv-color-surface);
+    color: var(--sv-color-text-primary);
+    font-family: var(--sv-font-family-body);
+    font-size: var(--sv-font-size-md);
+    line-height: 1.5;
+    transition:
+      background var(--sv-motion-duration-fast) ease,
+      color var(--sv-motion-duration-fast) ease;
+  }
+
+  .page {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: var(--sv-space-8) var(--sv-space-6) var(--sv-space-16);
+  }
+
+  header.top {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--sv-space-4) var(--sv-space-6);
+    background: var(--sv-color-surface-raised);
+    border-bottom: 1px solid var(--sv-color-border);
+  }
+
+  header.top h1 {
+    font-size: var(--sv-font-size-lg);
+    font-weight: var(--sv-font-weight-semibold);
+    margin: 0;
+  }
+
+  header.top p {
+    margin: 2px 0 0;
+    font-size: var(--sv-font-size-caption);
+    color: var(--sv-color-text-muted);
+  }
+
+  #theme-toggle {
+    font-family: var(--sv-font-family-body);
+    font-weight: var(--sv-font-weight-medium);
+    font-size: var(--sv-font-size-caption);
+    background: var(--sv-color-surface);
+    color: var(--sv-color-text-primary);
+    border: 1px solid var(--sv-color-border-strong);
+    border-radius: var(--sv-radius-md);
+    padding: var(--sv-space-2) var(--sv-space-4);
+    cursor: pointer;
+  }
+
+  #theme-toggle:hover {
+    background: var(--sv-color-surface-sunken);
+  }
+
+  section {
+    margin-top: var(--sv-space-12);
+  }
+
+  section > h2 {
+    font-size: var(--sv-font-size-xl);
+    font-weight: var(--sv-font-weight-semibold);
+    margin: 0 0 var(--sv-space-1);
+  }
+
+  section > p.desc {
+    margin: 0 0 var(--sv-space-6);
+    color: var(--sv-color-text-muted);
+    font-size: var(--sv-font-size-sm);
+    max-width: 680px;
+  }
+
+  h3.sub {
+    font-size: var(--sv-font-size-sm);
+    font-weight: var(--sv-font-weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--sv-color-text-muted);
+    margin: var(--sv-space-6) 0 var(--sv-space-3);
+  }
+
+  /* ---- swatches ---- */
+  .scale {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+    border-radius: var(--sv-radius-lg);
+    overflow: hidden;
+    border: 1px solid var(--sv-color-border);
+  }
+
+  .swatch {
+    height: 72px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: var(--sv-space-2);
+    font-size: var(--sv-font-size-label);
+    font-family: var(--sv-font-family-mono);
+  }
+
+  .swatch .name {
+    font-weight: var(--sv-font-weight-semibold);
+  }
+
+  /* ---- typography ---- */
+  .font-sample {
+    border: 1px solid var(--sv-color-border);
+    border-radius: var(--sv-radius-xl);
+    padding: var(--sv-space-5);
+    background: var(--sv-color-surface-raised);
+    margin-bottom: var(--sv-space-3);
+  }
+
+  .font-sample .sample-heading {
+    font-size: var(--sv-font-size-caption);
+    color: var(--sv-color-text-muted);
+    margin: 0 0 var(--sv-space-2);
+  }
+
+  .font-sample .sample-text {
+    font-size: var(--sv-font-size-xl);
+    margin: 0;
+  }
+
+  .font-sample.mono .sample-text {
+    font-family: var(--sv-font-family-mono);
+    font-size: var(--sv-font-size-md);
+  }
+
+  .machine-fact {
+    font-family: var(--sv-font-family-mono);
+  }
+
+  /* ---- components ---- */
+  .component-block {
+    border: 1px solid var(--sv-color-border);
+    border-radius: var(--sv-radius-xl);
+    padding: var(--sv-space-6);
+    background: var(--sv-color-surface-raised);
+    margin-bottom: var(--sv-space-4);
+  }
+
+  .component-block h4 {
+    margin: 0 0 var(--sv-space-4);
+    font-size: var(--sv-font-size-sm);
+    font-weight: var(--sv-font-weight-semibold);
+  }
+
+  .component-block p.note {
+    margin: var(--sv-space-3) 0 0;
+    font-size: var(--sv-font-size-caption);
+    color: var(--sv-color-text-muted);
+    max-width: 560px;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: var(--sv-space-3);
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border-width: 1px;
+    border-style: solid;
+    border-radius: var(--sv-radius-md);
+    font-family: var(--sv-font-family-body);
+    font-weight: var(--sv-font-weight-medium);
+    cursor: pointer;
+    transition: background-color var(--sv-motion-duration-fast) ease;
+    height: 38px;
+    padding: 0 var(--sv-space-4);
+    font-size: var(--sv-font-size-sm);
+  }
+
+  .btn:focus-visible {
+    outline: 2px solid var(--sv-color-focus-ring);
+    outline-offset: 2px;
+  }
+
+  .btn.primary {
+    background: var(--sv-color-accent);
+    border-color: transparent;
+    color: var(--sv-color-text-on-accent);
+  }
+  .btn.primary:hover {
+    background: var(--sv-color-accent-hover);
+  }
+
+  .btn.secondary {
+    background: var(--sv-color-surface-raised);
+    border-color: var(--sv-color-border-strong);
+    color: var(--sv-color-text-primary);
+  }
+  .btn.secondary:hover {
+    background: var(--sv-color-surface-sunken);
+  }
+
+  .btn.ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--sv-color-text-primary);
+  }
+  .btn.ghost:hover {
+    background: var(--sv-color-accent-subtle);
+  }
+
+  .btn.danger {
+    background: var(--sv-color-error-solid);
+    border-color: transparent;
+    color: var(--sv-white);
+  }
+
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 240px;
+  }
+
+  .field label {
+    font-size: var(--sv-font-size-caption);
+    font-weight: var(--sv-font-weight-medium);
+  }
+
+  .field input,
+  .field textarea {
+    font-family: var(--sv-font-family-body);
+    font-size: var(--sv-font-size-sm);
+    height: 38px;
+    padding: 0 var(--sv-space-3);
+    border-radius: var(--sv-radius-md);
+    border: 1px solid var(--sv-color-border-strong);
+    background: var(--sv-color-surface-raised);
+    color: var(--sv-color-text-primary);
+    outline: none;
+  }
+
+  .field textarea {
+    height: auto;
+    min-height: 38px;
+    padding: 9px var(--sv-space-3);
+    resize: none;
+    line-height: 1.4;
+  }
+
+  .field input:focus,
+  .field textarea:focus {
+    border-color: var(--sv-color-focus-ring);
+    box-shadow: 0 0 0 2px var(--sv-color-accent-subtle);
+  }
+
+  .field .hint {
+    font-size: 11px;
+    color: var(--sv-color-text-muted);
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 9px;
+    border-radius: var(--sv-radius-full);
+    font-size: 11px;
+    font-weight: var(--sv-font-weight-medium);
+    white-space: nowrap;
+  }
+
+  .pill svg {
+    width: 11px;
+    height: 11px;
+  }
+
+  .pill.ok {
+    background: var(--sv-color-success-surface);
+    color: var(--sv-color-success-text);
+  }
+  .pill.warn {
+    background: var(--sv-color-warning-surface);
+    color: var(--sv-color-warning-text);
+  }
+  .pill.bad {
+    background: var(--sv-color-error-surface);
+    color: var(--sv-color-error-text);
+  }
+  .pill.neutral {
+    background: var(--sv-color-surface-sunken);
+    color: var(--sv-color-text-muted);
+  }
+
+  /* ---- mark ---- */
+  .mark-row {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--sv-space-8);
+    flex-wrap: wrap;
+  }
+
+  .mark-item {
+    text-align: center;
+    font-size: var(--sv-font-size-caption);
+    color: var(--sv-color-text-muted);
+  }
+
+  /* ---- screens ---- */
+  .screen-tabs {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: var(--sv-space-3);
+    margin-bottom: var(--sv-space-6);
+  }
+
+  .screen-tab {
+    flex-shrink: 0;
+    font-family: var(--sv-font-family-body);
+    font-size: var(--sv-font-size-caption);
+    font-weight: var(--sv-font-weight-medium);
+    padding: var(--sv-space-2) var(--sv-space-3);
+    border-radius: var(--sv-radius-full);
+    border: 1px solid var(--sv-color-border-strong);
+    background: var(--sv-color-surface-raised);
+    color: var(--sv-color-text-muted);
+    cursor: pointer;
+  }
+
+  .screen-tab.active {
+    background: var(--sv-color-accent);
+    border-color: transparent;
+    color: var(--sv-color-text-on-accent);
+  }
+
+  .browser-frame {
+    display: flex;
+    flex-direction: column;
+    height: 660px;
+    border: 1px solid var(--sv-color-border-strong);
+    border-radius: var(--sv-radius-xl);
+    overflow: hidden;
+    background: var(--sv-color-surface);
+    box-shadow: var(--sv-shadow-popover);
+  }
+
+  .browser-titlebar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--sv-space-3);
+    height: 36px;
+    padding: 0 var(--sv-space-3);
+    background: var(--sv-color-surface-sunken);
+    border-bottom: 1px solid var(--sv-color-border);
+  }
+
+  .browser-titlebar .lights {
+    display: flex;
+    gap: 6px;
+  }
+
+  .browser-titlebar .lights span {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: var(--sv-color-border-strong);
+  }
+
+  .browser-titlebar .url {
+    flex: 1;
+    max-width: 340px;
+    margin: 0 auto;
+    padding: 3px 12px;
+    border-radius: var(--sv-radius-full);
+    background: var(--sv-color-surface);
+    font-family: var(--sv-font-family-mono);
+    font-size: 11px;
+    color: var(--sv-color-text-muted);
+    text-align: center;
+  }
+
+  .console-topbar {
+    flex-shrink: 0;
+    padding: var(--sv-space-3) var(--sv-space-6);
+    background: var(--sv-color-surface);
+    border-bottom: 1px solid var(--sv-color-border);
+  }
+
+  /* Chrome bars (topbar, trust strip, footer) align their content to the
+     same 760px column the page content uses — the brand and actions sit
+     over the content, not pinned to the window edges. */
+  .console-bar-inner {
+    width: 100%;
+    max-width: 760px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: var(--sv-space-4);
+  }
+
+  .console-brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+
+  .console-brand svg {
+    flex-shrink: 0;
+    display: block;
+  }
+
+  /* Tight two-line lockup: both lines share the icon's left edge and the
+     pair is vertically centered against the icon as one block. */
+  .console-brand .wordmark {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    line-height: 1.15;
+  }
+
+  .console-brand .wordmark strong {
+    font-weight: var(--sv-font-weight-semibold);
+    font-size: var(--sv-font-size-sm);
+    color: var(--sv-color-text-primary);
+  }
+
+  .console-brand .wordmark small {
+    font-weight: var(--sv-font-weight-regular);
+    font-size: 11px;
+    color: var(--sv-color-text-muted);
+    margin-top: 1px;
+  }
+
+  .console-nav {
+    display: flex;
+    gap: 4px;
+    margin-left: var(--sv-space-4);
+  }
+
+  .console-nav a {
+    padding: 6px 10px;
+    border-radius: var(--sv-radius-md);
+    font-size: var(--sv-font-size-caption);
+    color: var(--sv-color-text-muted);
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .console-nav a.active {
+    background: var(--sv-color-surface-sunken);
+    color: var(--sv-color-text-primary);
+    font-weight: var(--sv-font-weight-medium);
+  }
+
+  .auth-wrap {
+    margin-left: auto;
+    position: relative;
+  }
+
+  /* Sign-in popover — anchored under the topbar button, matching the shipped
+     console's dropdown auth panel. One credential, no username: the Console
+     has a single administrator whose password is generated at first boot. */
+  .auth-pop {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    z-index: 5;
+    width: 280px;
+    padding: var(--sv-space-4);
+    background: var(--sv-color-surface-raised);
+    border: 1px solid var(--sv-color-border);
+    border-radius: var(--sv-radius-xl);
+    box-shadow: var(--sv-shadow-popover);
+    display: none;
+    flex-direction: column;
+    gap: var(--sv-space-3);
+  }
+
+  .auth-pop.open {
+    display: flex;
+  }
+
+  .auth-pop h3 {
+    margin: 0;
+    font-size: var(--sv-font-size-sm);
+    font-weight: var(--sv-font-weight-semibold);
+  }
+
+  .auth-pop .auth-caption {
+    margin: -6px 0 0;
+    font-size: 11px;
+    color: var(--sv-color-text-muted);
+  }
+
+  .auth-pop .auth-message {
+    margin: 0;
+    min-height: 1em;
+    font-size: 11px;
+    color: var(--sv-color-error-text);
+  }
+
+  /* Error state: message in the aria-live region plus a solid error border
+     on the field. No shake or flash animation — reduced-motion is a design
+     brief requirement, so the error is stated, not performed. */
+  .auth-pop .field.error input {
+    border-color: var(--sv-color-error-solid);
+  }
+
+  .auth-pop .auth-reset {
+    margin: 0;
+    padding-top: var(--sv-space-2);
+    border-top: 1px solid var(--sv-color-border);
+    font-size: 11px;
+    color: var(--sv-color-text-subtle);
+  }
+
+  /* Signed-in state: the frame carries .authed; controls that mutate the
+     device are hidden until then. The signed-in identity is a quiet label,
+     not a user menu — the Console has exactly one administrator. */
+  .auth-user {
+    display: flex;
+    align-items: center;
+    gap: var(--sv-space-3);
+  }
+
+  .auth-user .who {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--sv-font-size-caption);
+    color: var(--sv-color-text-muted);
+  }
+
+  .auth-user .who .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--sv-color-accent);
+  }
+
+  .authed-only {
+    display: none !important;
+  }
+
+  .browser-frame.authed .authed-only {
+    display: inline-flex !important;
+  }
+
+  .browser-frame.authed .signedout-only {
+    display: none !important;
+  }
+
+  .console-screen {
+    display: none;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .console-screen.active {
+    display: flex;
+  }
+
+  .console-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--sv-space-6);
+  }
+
+  .console-inner {
+    max-width: 760px;
+    margin: 0 auto;
+  }
+
+  .hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sv-space-4);
+    flex-wrap: wrap;
+    margin-bottom: var(--sv-space-5);
+  }
+
+  .eyebrow {
+    font-size: 11px;
+    font-weight: var(--sv-font-weight-semibold);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--sv-color-text-muted);
+    margin: 0 0 2px;
+  }
+
+  .hero h1 {
+    font-size: var(--sv-font-size-2xl);
+    font-weight: var(--sv-font-weight-semibold);
+    margin: 0;
+  }
+
+  .hero .lede {
+    margin: 2px 0 0;
+    font-size: var(--sv-font-size-sm);
+    color: var(--sv-color-text-muted);
+  }
+
+  .status-panel {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: var(--sv-space-3) var(--sv-space-4);
+    border: 1px solid var(--sv-color-border);
+    border-radius: var(--sv-radius-xl);
+    background: var(--sv-color-surface-raised);
+  }
+
+  .status-panel .checked {
+    display: block;
+    font-size: 11px;
+    color: var(--sv-color-text-subtle);
+  }
+
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: var(--sv-space-3);
+    margin-bottom: var(--sv-space-5);
+  }
+
+  .metric-card {
+    background: var(--sv-color-surface-raised);
+    border: 1px solid var(--sv-color-border);
+    border-radius: var(--sv-radius-xl);
+    padding: var(--sv-space-3) var(--sv-space-4);
+  }
+
+  .metric-card .label {
+    font-size: 11px;
+    color: var(--sv-color-text-muted);
+  }
+
+  .metric-card .value {
+    font-size: var(--sv-font-size-lg);
+    font-weight: var(--sv-font-weight-semibold);
+    margin-top: 2px;
+  }
+
+  .metric-card .detail {
+    font-size: 11px;
+    color: var(--sv-color-text-subtle);
+    margin-top: 2px;
+  }
+
+  .panel {
+    background: var(--sv-color-surface-raised);
+    border: 1px solid var(--sv-color-border);
+    border-radius: var(--sv-radius-xl);
+    padding: var(--sv-space-4) var(--sv-space-5);
+    margin-bottom: var(--sv-space-4);
+  }
+
+  .panel-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--sv-space-3);
+  }
+
+  .panel-heading h2 {
+    font-size: var(--sv-font-size-md);
+    font-weight: var(--sv-font-weight-semibold);
+    margin: 0;
+  }
+
+  .check-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sv-space-3);
+    padding: 10px 0;
+    border-bottom: 1px solid var(--sv-color-border);
+  }
+
+  .check-row:last-child {
+    border-bottom: none;
+  }
+
+  .check-row .name {
+    font-size: var(--sv-font-size-sm);
+    font-weight: var(--sv-font-weight-medium);
+  }
+
+  .check-row .detail {
+    font-family: var(--sv-font-family-mono);
+    font-size: 11px;
+    color: var(--sv-color-text-muted);
+    margin-top: 1px;
+  }
+
+  /* A detail line that is a human sentence, not a machine fact, stays in
+     the body face — mono is reserved for identifiers, per the typography
+     rule. Wrap any embedded machine fact in .machine-fact. */
+  .check-row .detail.human {
+    font-family: var(--sv-font-family-body);
+  }
+
+  /* ---- chat ---- */
+  .trust-strip {
+    flex-shrink: 0;
+    padding: 6px var(--sv-space-6);
+    background: var(--sv-color-surface-sunken);
+    border-bottom: 1px solid var(--sv-color-border);
+    font-size: var(--sv-font-size-xs);
+    color: var(--sv-color-text-muted);
+  }
+
+  .trust-strip .console-bar-inner {
+    gap: 6px;
+  }
+
+  .trust-strip .machine-fact {
+    font-size: 11px;
+  }
+
+  .chat-thread {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sv-space-3);
+  }
+
+  .bubble {
+    max-width: 72%;
+    padding: var(--sv-space-3) var(--sv-space-4);
+    border-radius: var(--sv-radius-2xl);
+    font-size: var(--sv-font-size-sm);
+    line-height: 1.5;
+  }
+
+  .bubble.assistant {
+    align-self: flex-start;
+    background: var(--sv-color-surface-sunken);
+    border-bottom-left-radius: var(--sv-radius-sm);
+  }
+
+  .bubble.user {
+    align-self: flex-end;
+    background: var(--sv-color-accent);
+    color: var(--sv-color-text-on-accent);
+    border-bottom-right-radius: var(--sv-radius-sm);
+  }
+
+  /* Capability receipt — every reply that invoked a capability says so
+     (milestone 01.2's disclosure requirement). Core glyph = the device
+     boundary: closed square for a request that stayed on the device, square
+     with an outward arrow for one that left the home network. The label is
+     the capability id in mono, then the provider and the boundary outcome. */
+  .receipt {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    align-self: flex-start;
+    margin: -6px 0 0 10px;
+    font-size: 11px;
+    color: var(--sv-color-text-subtle);
+  }
+
+  .receipt svg {
+    width: 11px;
+    height: 11px;
+    flex-shrink: 0;
+  }
+
+  .receipt .machine-fact {
+    font-size: 10px;
+  }
+
+  .composer {
+    flex-shrink: 0;
+    border-top: 1px solid var(--sv-color-border);
+    padding: var(--sv-space-3) var(--sv-space-6);
+  }
+
+  .composer-inner {
+    max-width: 760px;
+    margin: 0 auto;
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+  }
+
+  .send-btn {
+    width: var(--sv-touch-target-min);
+    height: var(--sv-touch-target-min);
+    border-radius: 50%;
+    background: var(--sv-color-accent);
+    color: var(--sv-color-text-on-accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  /* Voice input — a quiet sibling of send, never the primary affordance:
+     the concept paper makes voice optional, so the mic must read as an
+     alternative, not a requirement. Speech recognition and synthesis run
+     on this device; the receipts under voice messages say so in the same
+     grammar as every other capability. */
+  .mic-btn {
+    width: var(--sv-touch-target-min);
+    height: var(--sv-touch-target-min);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--sv-color-text-muted);
+    border: 1px solid var(--sv-color-border-strong);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  .mic-btn:hover {
+    background: var(--sv-color-accent-subtle);
+    color: var(--sv-color-text-primary);
+  }
+
+  .receipt.from-user {
+    align-self: flex-end;
+    margin: -6px 10px 0 0;
+  }
+
+  /* ---- activity log ---- */
+  .filter-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 11px;
+    border-radius: var(--sv-radius-full);
+    border: 1px solid var(--sv-color-border-strong);
+    background: var(--sv-color-surface-raised);
+    color: var(--sv-color-text-muted);
+    font-family: var(--sv-font-family-body);
+    font-size: var(--sv-font-size-xs);
+    font-weight: var(--sv-font-weight-medium);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .filter-chip.active {
+    background: var(--sv-color-accent);
+    border-color: transparent;
+    color: var(--sv-color-text-on-accent);
+  }
+
+  .log-day {
+    padding: var(--sv-space-4) 0 var(--sv-space-1);
+    font-size: 11px;
+    font-weight: var(--sv-font-weight-semibold);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--sv-color-text-muted);
+  }
+
+  .log-time {
+    flex-shrink: 0;
+    width: 44px;
+    font-family: var(--sv-font-family-mono);
+    font-size: 11px;
+    color: var(--sv-color-text-subtle);
+  }
+
+  .check-row .log-body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .console-footer {
+    flex-shrink: 0;
+    padding: var(--sv-space-2) var(--sv-space-6);
+    border-top: 1px solid var(--sv-color-border);
+    font-size: 11px;
+    color: var(--sv-color-text-subtle);
+  }
+
+  .console-footer .console-bar-inner {
+    justify-content: space-between;
+    gap: var(--sv-space-3);
+  }
+
+  footer.page-footer {
+    margin-top: var(--sv-space-16);
+    padding-top: var(--sv-space-6);
+    border-top: 1px solid var(--sv-color-border);
+    font-size: var(--sv-font-size-caption);
+    color: var(--sv-color-text-muted);
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div>
+    <h1>Sovereign OS — Design System Reference</h1>
+    <p>Garnet direction · stone neutrals + deep garnet accent · proposal</p>
+  </div>
+  <button id="theme-toggle" onclick="toggleTheme()">Switch to dark</button>
+</header>
+
+<div class="page">
+
+  <section id="colors">
+    <h2>Color</h2>
+    <p class="desc">
+      Two primitive scales — stone (neutrals) and garnet (accent) — mapped by a
+      semantic layer that is the only thing changing between light and dark.
+      Because the accent is itself a red, <strong>error-solid stays a bright
+      pure red</strong> and must never be darkened toward garnet; status is
+      always icon + text, never color alone (per the Console health brief).
+    </p>
+
+    <h3 class="sub">Stone scale (neutrals)</h3>
+    <div class="scale">
+      <div class="swatch" style="background:var(--sv-stone-50); color:var(--sv-stone-800);"><span class="name">stone50</span>#F7F6F4</div>
+      <div class="swatch" style="background:var(--sv-stone-100); color:var(--sv-stone-800);"><span class="name">stone100</span>#EFEDEA</div>
+      <div class="swatch" style="background:var(--sv-stone-200); color:var(--sv-stone-800);"><span class="name">stone200</span>#E5E3DF</div>
+      <div class="swatch" style="background:var(--sv-stone-300); color:var(--sv-stone-800);"><span class="name">stone300</span>#CFCCC7</div>
+      <div class="swatch" style="background:var(--sv-stone-400); color:var(--sv-stone-950);"><span class="name">stone400</span>#A5A19A</div>
+      <div class="swatch" style="background:var(--sv-stone-500); color:var(--sv-white);"><span class="name">stone500</span>#807C76</div>
+      <div class="swatch" style="background:var(--sv-stone-600); color:var(--sv-white);"><span class="name">stone600</span>#615D57</div>
+      <div class="swatch" style="background:var(--sv-stone-700); color:var(--sv-white);"><span class="name">stone700</span>#484540</div>
+      <div class="swatch" style="background:var(--sv-stone-800); color:var(--sv-white);"><span class="name">stone800</span>#33302C</div>
+      <div class="swatch" style="background:var(--sv-stone-900); color:var(--sv-white);"><span class="name">stone900</span>#232019</div>
+      <div class="swatch" style="background:var(--sv-stone-950); color:var(--sv-white);"><span class="name">stone950</span>#191715</div>
+    </div>
+
+    <h3 class="sub">Garnet scale (accent)</h3>
+    <div class="scale">
+      <div class="swatch" style="background:var(--sv-garnet-100); color:var(--sv-garnet-900);"><span class="name">garnet100</span>#F6E3E6</div>
+      <div class="swatch" style="background:var(--sv-garnet-200); color:var(--sv-garnet-900);"><span class="name">garnet200</span>#EBC2C9</div>
+      <div class="swatch" style="background:var(--sv-garnet-300); color:var(--sv-garnet-900);"><span class="name">garnet300</span>#D99AA6</div>
+      <div class="swatch" style="background:var(--sv-garnet-400); color:var(--sv-white);"><span class="name">garnet400</span>#C4707F</div>
+      <div class="swatch" style="background:var(--sv-garnet-500); color:var(--sv-white);"><span class="name">garnet500</span>#A94C5D</div>
+      <div class="swatch" style="background:var(--sv-garnet-600); color:var(--sv-white);"><span class="name">garnet600</span>#8E3A4B</div>
+      <div class="swatch" style="background:var(--sv-garnet-700); color:var(--sv-white);"><span class="name">garnet700</span>#752E3E</div>
+      <div class="swatch" style="background:var(--sv-garnet-800); color:var(--sv-white);"><span class="name">garnet800</span>#5C2331</div>
+      <div class="swatch" style="background:var(--sv-garnet-900); color:var(--sv-white);"><span class="name">garnet900</span>#421823</div>
+    </div>
+
+    <h3 class="sub">Garnet vs. danger — the managed adjacency</h3>
+    <div class="component-block">
+      <div class="row">
+        <button class="btn primary">Install update</button>
+        <button class="btn danger">Remove service</button>
+        <span class="pill bad">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 8v5"/><path d="M12 16.5h.01"/><circle cx="12" cy="12" r="9.5"/></svg>
+          Unavailable
+        </span>
+        <span class="pill ok">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-11"/></svg>
+          Healthy
+        </span>
+      </div>
+      <p class="note">
+        The brand accent (deep, desaturated wine) and the danger semantic
+        (bright pure red) share a family on purpose but never a value range.
+        Rules: danger fills use <code class="machine-fact">error-solid</code>
+        only; destructive actions always carry an icon or explicit verb; no
+        garnet fill may exceed garnet500's saturation on an interactive
+        control.
+      </p>
+    </div>
+
+    <h3 class="sub">Status pills</h3>
+    <div class="row" style="margin-bottom:var(--sv-space-4);">
+      <span class="pill ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-11"/></svg>Healthy</span>
+      <span class="pill warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 8v5"/><path d="M12 16.5h.01"/></svg>Degraded</span>
+      <span class="pill bad"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>Unavailable</span>
+      <span class="pill neutral">Unknown</span>
+    </div>
+  </section>
+
+  <section id="typography">
+    <h2>Typography</h2>
+    <p class="desc">
+      Hanken Grotesk (body) · JetBrains Mono (code) — fallback stacks apply
+      when web fonts are not loaded. OS gives mono an elevated role:
+      <strong>machine facts render in mono, human sentences in Hanken.</strong>
+      Versions, IPs, checksums, release identifiers, and capability ids are
+      machine facts.
+    </p>
+
+    <div class="font-sample">
+      <p class="sample-heading">--sv-font-family-body — human sentences</p>
+      <p class="sample-text" style="font-weight:600;">Your Sovereign system is healthy.</p>
+      <p class="sample-text" style="font-weight:400; font-size:var(--sv-font-size-md);">Private services, running on hardware you control.</p>
+    </div>
+    <div class="font-sample mono">
+      <p class="sample-heading">--sv-font-family-mono — machine facts</p>
+      <p class="sample-text">v0.1.0-preview.23 · 192.168.1.4 · sha256:9f2c…a41d · dns.query</p>
+    </div>
+  </section>
+
+  <section id="mark">
+    <h2>Mark</h2>
+    <p class="desc">
+      The family grammar: the spark (the assistant) inside each product's own
+      trust boundary. Sovereign OS's boundary is the machine itself — a
+      rounded silicon square, the spark in the core. The glyph doubles in-UI
+      as the capability-receipt icon: the closed square marks what stayed on
+      the device; an outward arrow marks what left the home network.
+    </p>
+    <div class="mark-row">
+      <div class="mark-item">
+        <svg viewBox="0 0 24 24" width="72" height="72" fill="none">
+          <rect x="3.8" y="3.8" width="16.4" height="16.4" rx="4" stroke="var(--sv-color-accent)" stroke-width="1.7"/>
+          <path d="M12 7.6l1.25 3.15L16.4 12l-3.15 1.25L12 16.4l-1.25-3.15L7.6 12l3.15-1.25L12 7.6z" fill="var(--sv-color-accent)"/>
+        </svg>
+        <div>72px</div>
+      </div>
+      <div class="mark-item">
+        <svg viewBox="0 0 24 24" width="40" height="40" fill="none">
+          <rect x="3.8" y="3.8" width="16.4" height="16.4" rx="4" stroke="var(--sv-color-accent)" stroke-width="1.8"/>
+          <path d="M12 7.6l1.25 3.15L16.4 12l-3.15 1.25L12 16.4l-1.25-3.15L7.6 12l3.15-1.25L12 7.6z" fill="var(--sv-color-accent)"/>
+        </svg>
+        <div>40px</div>
+      </div>
+      <div class="mark-item">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
+          <rect x="3.8" y="3.8" width="16.4" height="16.4" rx="4" stroke="var(--sv-color-accent)" stroke-width="2"/>
+          <path d="M12 7.6l1.25 3.15L16.4 12l-3.15 1.25L12 16.4l-1.25-3.15L7.6 12l3.15-1.25L12 7.6z" fill="var(--sv-color-accent)"/>
+        </svg>
+        <div>20px</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="screens">
+    <h2>Console screens</h2>
+    <p class="desc">
+      The Console is a static, no-build web page shipped in the appliance
+      image — every asset local, both schemes, flat surfaces (the current
+      gradient and backdrop blur are dropped). Health reflects the shipped
+      read-only console restyled; Chat previews milestone 01.2's conversation
+      surface with its required local-vs-internet disclosure.
+    </p>
+
+    <div class="screen-tabs">
+      <button class="screen-tab" data-screen="first-run" onclick="showScreen('first-run')">First run</button>
+      <button class="screen-tab active" data-screen="health" onclick="showScreen('health')">Health</button>
+      <button class="screen-tab" data-screen="chat" onclick="showScreen('chat')">Chat (01.2 preview)</button>
+      <button class="screen-tab" data-screen="home" onclick="showScreen('home')">Home Assistant operations</button>
+      <button class="screen-tab" data-screen="activity" onclick="showScreen('activity')">Activity log</button>
+    </div>
+
+    <div class="browser-frame">
+      <div class="browser-titlebar">
+        <span class="lights"><span></span><span></span><span></span></span>
+        <span class="url">sovereign.local/console/</span>
+      </div>
+
+      <div class="console-topbar">
+        <div class="console-bar-inner">
+        <span class="console-brand">
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="none">
+            <rect x="3.8" y="3.8" width="16.4" height="16.4" rx="4" stroke="var(--sv-color-accent)" stroke-width="1.8"/>
+            <path d="M12 7.6l1.25 3.15L16.4 12l-3.15 1.25L12 16.4l-1.25-3.15L7.6 12l3.15-1.25L12 7.6z" fill="var(--sv-color-accent)"/>
+          </svg>
+          <span class="wordmark"><strong>Sovereign OS</strong><small>Console</small></span>
+        </span>
+        <nav class="console-nav">
+          <a id="nav-health" class="active" onclick="showScreen('health')">Health</a>
+          <a id="nav-chat" onclick="showScreen('chat')">Chat</a>
+          <a id="nav-home" onclick="showScreen('home')">Home Assistant</a>
+          <a id="nav-activity" onclick="showScreen('activity')">Activity</a>
+        </nav>
+        <div class="auth-wrap">
+          <span class="auth-user authed-only">
+            <span class="who"><span class="dot" aria-hidden="true"></span>Administrator</span>
+            <button class="btn secondary" style="height:32px; font-size:var(--sv-font-size-caption);" onclick="signOut()">Sign out</button>
+          </span>
+          <button id="auth-toggle" class="btn secondary signedout-only" style="height:32px; font-size:var(--sv-font-size-caption);" aria-expanded="false" aria-controls="auth-pop" onclick="toggleAuth()">Sign in</button>
+          <div class="auth-pop" id="auth-pop" role="dialog" aria-label="Sign in to Console">
+            <h3>Sign in to Console</h3>
+            <p class="auth-caption">Signing in unlocks actions that change this device &mdash; installing updates, changing capability scope.</p>
+            <div class="field" style="width:100%;">
+              <label for="auth-credential">Console password</label>
+              <input id="auth-credential" name="password" type="password" autocomplete="current-password" style="width:100%;" />
+            </div>
+            <button class="btn primary" style="width:100%;" onclick="signIn()">Sign in</button>
+            <p class="auth-message" id="auth-message" role="status" aria-live="polite"></p>
+            <p class="auth-reset">Generated at first boot. Lost it? Run <span class="machine-fact">sovereign-console-password</span> on the device.</p>
+          </div>
+        </div>
+        </div>
+      </div>
+
+      <!-- FIRST RUN (onboarding) -->
+      <div class="console-screen" id="cscreen-first-run">
+        <div class="console-scroll">
+          <div class="console-inner" style="max-width:560px;">
+            <div style="text-align:center; padding:var(--sv-space-8) 0 var(--sv-space-6);">
+              <svg viewBox="0 0 24 24" width="56" height="56" fill="none" style="margin-bottom:var(--sv-space-4);">
+                <rect x="3.8" y="3.8" width="16.4" height="16.4" rx="4" stroke="var(--sv-color-accent)" stroke-width="1.7"/>
+                <path d="M12 7.6l1.25 3.15L16.4 12l-3.15 1.25L12 16.4l-1.25-3.15L7.6 12l3.15-1.25L12 7.6z" fill="var(--sv-color-accent)"/>
+              </svg>
+              <h1 style="font-size:var(--sv-font-size-2xl); font-weight:var(--sv-font-weight-semibold); margin:0 0 var(--sv-space-1);">Welcome to Sovereign OS</h1>
+              <p style="margin:0; font-size:var(--sv-font-size-sm); color:var(--sv-color-text-muted);">Your device booted and set itself up. Two things are already running; one step needs you.</p>
+              <p class="machine-fact" style="margin:var(--sv-space-3) 0 0; font-size:var(--sv-font-size-caption); color:var(--sv-color-text-subtle);">sovereign.local &middot; 192.168.1.4 &middot; v0.1.0-preview.23</p>
+            </div>
+
+            <div class="panel">
+              <div class="check-row">
+                <div>
+                  <div class="name">Device online</div>
+                  <div class="detail human">Identity and credentials generated on first boot.</div>
+                </div>
+                <span class="pill ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-11"/></svg>Done</span>
+              </div>
+              <div class="check-row">
+                <div>
+                  <div class="name">Network protection running</div>
+                  <div class="detail">Pi-hole &middot; /dns/admin/</div>
+                </div>
+                <span class="pill ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-11"/></svg>Done</span>
+              </div>
+              <div class="check-row">
+                <div>
+                  <div class="name">Point your router's DNS here</div>
+                  <div class="detail human">Use <span class="machine-fact" style="color:var(--sv-color-text-primary);">192.168.1.4</span> as your router's DNS server.</div>
+                </div>
+                <span class="pill neutral">Waiting</span>
+              </div>
+              <p style="margin:var(--sv-space-3) 0 0; font-size:11px; color:var(--sv-color-text-subtle);">
+                This is the one step Sovereign can't do for you &mdash; it never
+                changes your router's settings on its own. This becomes Done
+                automatically when devices start asking this device for DNS.
+              </p>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:var(--sv-space-2); padding-bottom:var(--sv-space-8);">
+              <button class="btn primary" style="width:100%;" onclick="showScreen('health')">Open your Console</button>
+              <button class="btn ghost" style="width:100%;">How do I change my router's DNS?</button>
+            </div>
+          </div>
+        </div>
+        <div class="console-footer">
+          <div class="console-bar-inner">
+            <span class="machine-fact">Raspberry Pi 5 &middot; 16 GB</span>
+            <span>Local-first &middot; No telemetry</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- HEALTH -->
+      <div class="console-screen active" id="cscreen-health">
+        <div class="console-scroll">
+          <div class="console-inner">
+            <div class="hero">
+              <div>
+                <p class="eyebrow">Local system overview</p>
+                <h1>Your Sovereign system</h1>
+                <p class="lede">Private services, running on hardware you control.</p>
+              </div>
+              <div class="status-panel">
+                <span class="pill ok">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-11"/></svg>
+                  Healthy
+                </span>
+                <span class="checked">Checked 12 seconds ago</span>
+              </div>
+            </div>
+
+            <div class="metrics">
+              <div class="metric-card">
+                <div class="label">Data storage</div>
+                <div class="value">86 GB free</div>
+                <div class="detail">of 118 GB on DATA</div>
+              </div>
+              <div class="metric-card">
+                <div class="label">Memory</div>
+                <div class="value">11.2 GB free</div>
+                <div class="detail">of 16 GB</div>
+              </div>
+              <div class="metric-card">
+                <div class="label">Temperature</div>
+                <div class="value">47&deg;C</div>
+                <div class="detail">normal range</div>
+              </div>
+              <div class="metric-card">
+                <div class="label">Uptime</div>
+                <div class="value">18 days</div>
+                <div class="detail machine-fact">v0.1.0-preview.23</div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>System health</h2>
+                <button class="btn secondary" style="height:32px; font-size:var(--sv-font-size-caption);">Refresh</button>
+              </div>
+              <div class="check-row">
+                <div>
+                  <div class="name">DNS resolution</div>
+                  <div class="detail">dns.query &middot; 53/udp</div>
+                </div>
+                <span class="pill ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-11"/></svg>Passing</span>
+              </div>
+              <div class="check-row">
+                <div>
+                  <div class="name">Pi-hole service</div>
+                  <div class="detail">/dns/admin/ &middot; container healthy</div>
+                </div>
+                <span class="pill ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-11"/></svg>Passing</span>
+              </div>
+              <div class="check-row">
+                <div>
+                  <div class="name">DATA partition</div>
+                  <div class="detail">/data &middot; mounted read-write</div>
+                </div>
+                <span class="pill ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-11"/></svg>Passing</span>
+              </div>
+              <div class="check-row">
+                <div>
+                  <div class="name">Local routing</div>
+                  <div class="detail">sovereign.local &middot; mDNS</div>
+                </div>
+                <span class="pill ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-11"/></svg>Passing</span>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Installed service</p>
+                  <h2>Network protection</h2>
+                </div>
+                <button class="btn primary" style="height:34px;">Open Pi-hole</button>
+              </div>
+              <p style="margin:0; font-size:var(--sv-font-size-caption); color:var(--sv-color-text-muted);">
+                Pi-hole filters unwanted DNS requests for devices on your network.
+              </p>
+            </div>
+
+            <div class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Software updates</p>
+                  <h2>Appliance version</h2>
+                </div>
+                <span style="display:inline-flex; gap:8px;">
+                  <button class="btn secondary" style="height:32px; font-size:var(--sv-font-size-caption);">Check now</button>
+                  <button class="btn primary authed-only" style="height:32px; font-size:var(--sv-font-size-caption);">Install update</button>
+                </span>
+              </div>
+              <p style="margin:0; font-size:var(--sv-font-size-caption); color:var(--sv-color-text-muted);">
+                <span class="machine-fact" style="color:var(--sv-color-text-primary);">v0.1.0-preview.23</span>
+                &middot; up to date &middot; signed release &middot; rollback available
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="console-footer">
+          <div class="console-bar-inner">
+            <span class="machine-fact">Raspberry Pi 5 &middot; 16 GB</span>
+            <span>Local-first &middot; No telemetry</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- CHAT (01.2 preview) -->
+      <div class="console-screen" id="cscreen-chat">
+        <div class="trust-strip">
+          <div class="console-bar-inner">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><rect x="3.8" y="3.8" width="16.4" height="16.4" rx="4"/><path d="M12 8.4l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1 1-2.6z" fill="currentColor" stroke="none"/></svg>
+            Local &middot; no internet used
+            <span class="machine-fact" style="margin-left:auto;">qwen2.5-7b &middot; llama.cpp</span>
+          </div>
+        </div>
+        <div class="console-scroll">
+          <div class="console-inner">
+            <div class="chat-thread" style="padding:8px 0;">
+              <div class="bubble user">Why can't I reach ads.example.com?</div>
+              <div class="bubble assistant">Pi-hole blocked it — <span class="machine-fact" style="font-size:12px;">ads.example.com</span> matches the default blocklist. It was queried 14 times today by 2 devices. Want me to whitelist it?</div>
+              <span class="receipt">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3.8" y="3.8" width="16.4" height="16.4" rx="4"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/></svg>
+                <span class="machine-fact">dns.query</span>&nbsp;&middot; Pi-hole &middot; stayed local
+              </span>
+              <div class="bubble user">What's the weather saying for tomorrow?</div>
+              <div class="bubble assistant">Tomorrow looks dry and mild &mdash; around 21&deg;C with light wind. Sources are cited below.</div>
+              <span class="receipt">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.8" y="6.2" width="13.6" height="13.6" rx="3.5"/><path d="M13.5 10.5L20.5 3.5"/><path d="M16 3.5h4.5V8"/></svg>
+                <span class="machine-fact">web.search</span>&nbsp;&middot; SearXNG &middot; left the home network
+              </span>
+              <div class="bubble user" style="display:flex; align-items:baseline; gap:7px;">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; align-self:center;"><path d="M12 2.5a3 3 0 013 3v6a3 3 0 01-6 0v-6a3 3 0 013-3z"/><path d="M5.5 11.5a6.5 6.5 0 0013 0"/><path d="M12 18v3.5"/></svg>
+                Turn off the porch light.
+              </div>
+              <span class="receipt from-user">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3.8" y="3.8" width="16.4" height="16.4" rx="4"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/></svg>
+                <span class="machine-fact">voice.stt</span>&nbsp;&middot; whisper.cpp &middot; stayed local
+              </span>
+              <div class="bubble assistant">Done &mdash; the porch light is off.</div>
+              <span class="receipt">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3.8" y="3.8" width="16.4" height="16.4" rx="4"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/></svg>
+                <span class="machine-fact">home.control</span>&nbsp;&middot; light.porch &middot; stayed local
+              </span>
+              <span class="receipt" style="margin-top:-2px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3.8" y="3.8" width="16.4" height="16.4" rx="4"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/></svg>
+                <span class="machine-fact">voice.tts</span>&nbsp;&middot; piper &middot; spoken aloud &middot; stayed local
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="composer">
+          <div class="composer-inner">
+            <div class="field" style="flex:1; width:auto;">
+              <textarea rows="2" placeholder="Ask about your home &mdash; Enter to send, Shift+Enter for a new line"></textarea>
+            </div>
+            <button class="mic-btn" aria-label="Speak instead of typing">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5a3 3 0 013 3v6a3 3 0 01-6 0v-6a3 3 0 013-3z"/><path d="M5.5 11.5a6.5 6.5 0 0013 0"/><path d="M12 18v3.5"/></svg>
+            </button>
+            <button class="send-btn" aria-label="Send">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="console-footer">
+          <div class="console-bar-inner">
+            <span class="machine-fact">Raspberry Pi 5 &middot; 16 GB</span>
+            <span>Local-first &middot; No telemetry</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- HOME ASSISTANT OPERATIONS -->
+      <div class="console-screen" id="cscreen-home">
+        <div class="console-scroll">
+          <div class="console-inner">
+            <div class="hero">
+              <div>
+                <p class="eyebrow">Installed service</p>
+                <h1>Home Assistant</h1>
+                <p class="lede">What the assistant did in your home, and what it's allowed to do.</p>
+              </div>
+              <div class="status-panel">
+                <span class="pill ok">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-11"/></svg>
+                  Connected
+                </span>
+                <span class="checked machine-fact">homeassistant.local:8123</span>
+              </div>
+            </div>
+
+            <div class="metrics">
+              <div class="metric-card">
+                <div class="label">Entities</div>
+                <div class="value">42</div>
+                <div class="detail">across 6 domains</div>
+              </div>
+              <div class="metric-card">
+                <div class="label">Automations</div>
+                <div class="value">12</div>
+                <div class="detail">managed in Home Assistant</div>
+              </div>
+              <div class="metric-card">
+                <div class="label">Last operation</div>
+                <div class="value">2 min ago</div>
+                <div class="detail">via Chat</div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Recent operations</h2>
+              </div>
+              <div class="check-row">
+                <div>
+                  <div class="name">Turned off the living room lights</div>
+                  <div class="detail">18:42 &middot; home.control &middot; light.living_room &middot; via Chat</div>
+                </div>
+                <span class="pill ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-11"/></svg>Done</span>
+              </div>
+              <div class="check-row">
+                <div>
+                  <div class="name">Set the thermostat to 21&deg;C</div>
+                  <div class="detail">17:05 &middot; home.control &middot; climate.hallway &middot; via Chat</div>
+                </div>
+                <span class="pill ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-11"/></svg>Done</span>
+              </div>
+              <div class="check-row">
+                <div>
+                  <div class="name">Unlock the front door</div>
+                  <div class="detail">16:48 &middot; home.control &middot; lock.front_door &middot; via Chat</div>
+                </div>
+                <span class="pill bad"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>Refused</span>
+              </div>
+              <p style="margin:var(--sv-space-3) 0 0; font-size:11px; color:var(--sv-color-text-subtle);">
+                Every operation the assistant performs is validated against the
+                scope you granted before it runs, and recorded here. Locks are
+                not granted, so the request was refused &mdash; the model cannot
+                override that.
+              </p>
+            </div>
+
+            <div class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Capability scope</p>
+                  <h2>What the assistant may control</h2>
+                </div>
+                <button class="btn secondary authed-only" style="height:32px; font-size:var(--sv-font-size-caption);">Change scope</button>
+              </div>
+              <div class="check-row">
+                <div>
+                  <div class="name">Lights</div>
+                  <div class="detail">home.control &middot; domain light</div>
+                </div>
+                <span class="pill ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-11"/></svg>Granted</span>
+              </div>
+              <div class="check-row">
+                <div>
+                  <div class="name">Climate</div>
+                  <div class="detail">home.control &middot; domain climate</div>
+                </div>
+                <span class="pill ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-11"/></svg>Granted</span>
+              </div>
+              <div class="check-row">
+                <div>
+                  <div class="name">Locks</div>
+                  <div class="detail">home.control &middot; domain lock</div>
+                </div>
+                <span class="pill neutral">Not granted</span>
+              </div>
+              <div class="check-row">
+                <div>
+                  <div class="name">Cameras</div>
+                  <div class="detail">home.control &middot; domain camera</div>
+                </div>
+                <span class="pill neutral">Not granted</span>
+              </div>
+              <p style="margin:var(--sv-space-3) 0 0; font-size:11px; color:var(--sv-color-text-subtle);">
+                Granting one domain never grants another. Changing scope
+                requires signing in.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="console-footer">
+          <div class="console-bar-inner">
+            <span class="machine-fact">Raspberry Pi 5 &middot; 16 GB</span>
+            <span>Local-first &middot; No telemetry</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACTIVITY LOG -->
+      <div class="console-screen" id="cscreen-activity">
+        <div class="console-scroll">
+          <div class="console-inner">
+            <div class="hero">
+              <div>
+                <p class="eyebrow">Recorded on this device</p>
+                <h1>Activity</h1>
+                <p class="lede">Everything the assistant did, and every administrative action &mdash; one ledger.</p>
+              </div>
+            </div>
+
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:var(--sv-space-2);">
+              <button class="filter-chip active">All</button>
+              <button class="filter-chip">Stayed local</button>
+              <button class="filter-chip">Left the network</button>
+              <button class="filter-chip">Refused</button>
+            </div>
+
+            <div class="log-day">Today</div>
+            <div class="panel" style="padding-top:var(--sv-space-1); padding-bottom:var(--sv-space-1);">
+              <div class="check-row">
+                <span class="log-time">18:42</span>
+                <div class="log-body">
+                  <div class="name">Turned off the porch light</div>
+                  <div class="detail">voice.stt &middot; home.control &middot; light.porch &middot; stayed local &middot; via voice</div>
+                </div>
+                <span class="pill ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-11"/></svg>Done</span>
+              </div>
+              <div class="check-row">
+                <span class="log-time">18:12</span>
+                <div class="log-body">
+                  <div class="name">Searched the web for ferry times</div>
+                  <div class="detail">web.search &middot; SearXNG &middot; left the home network &middot; via Chat</div>
+                </div>
+                <span class="pill ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-11"/></svg>Done</span>
+              </div>
+              <div class="check-row">
+                <span class="log-time">17:05</span>
+                <div class="log-body">
+                  <div class="name">Set the thermostat to 21&deg;C</div>
+                  <div class="detail">home.control &middot; climate.hallway &middot; stayed local &middot; via Chat</div>
+                </div>
+                <span class="pill ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-11"/></svg>Done</span>
+              </div>
+              <div class="check-row">
+                <span class="log-time">16:48</span>
+                <div class="log-body">
+                  <div class="name">Unlock the front door</div>
+                  <div class="detail">home.control &middot; lock.front_door &middot; domain not granted &middot; via Chat</div>
+                </div>
+                <span class="pill bad"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>Refused</span>
+              </div>
+              <div class="check-row">
+                <span class="log-time">16:45</span>
+                <div class="log-body">
+                  <div class="name">Administrator signed in</div>
+                  <div class="detail">console.auth &middot; from 192.168.1.22</div>
+                </div>
+                <span class="pill neutral">Auth</span>
+              </div>
+            </div>
+
+            <div class="log-day">Yesterday</div>
+            <div class="panel" style="padding-top:var(--sv-space-1); padding-bottom:var(--sv-space-1);">
+              <div class="check-row">
+                <span class="log-time">09:14</span>
+                <div class="log-body">
+                  <div class="name">Installed update v0.1.0-preview.23</div>
+                  <div class="detail">update.install &middot; signed sovereign-production-1 &middot; rollback point kept &middot; by Administrator</div>
+                </div>
+                <span class="pill ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-11"/></svg>Done</span>
+              </div>
+              <div class="check-row">
+                <span class="log-time">09:02</span>
+                <div class="log-body">
+                  <div class="name">Checked for updates</div>
+                  <div class="detail">update.check &middot; release channel &middot; left the home network &middot; by Administrator</div>
+                </div>
+                <span class="pill ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-11"/></svg>Done</span>
+              </div>
+            </div>
+
+            <p style="margin:var(--sv-space-3) 0 var(--sv-space-6); font-size:11px; color:var(--sv-color-text-subtle);">
+              Recorded on this device only &mdash; never uploaded. Entries older
+              than 30 days are pruned automatically. Query and browsing history
+              stay in Pi-hole; this ledger records what the platform itself did.
+            </p>
+          </div>
+        </div>
+        <div class="console-footer">
+          <div class="console-bar-inner">
+            <span class="machine-fact">Raspberry Pi 5 &middot; 16 GB</span>
+            <span>Local-first &middot; No telemetry</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="page-footer">
+    Reference only — proposal for the Sovereign OS Console design system
+    (Garnet direction). Values are the source of truth for a future
+    <code class="machine-fact">tokens.css</code> in the Console assets; keep
+    this file in sync with it once implemented.
+  </footer>
+
+</div>
+
+<script>
+  function toggleTheme() {
+    const html = document.documentElement;
+    const isDark = html.getAttribute('data-theme') === 'dark';
+    html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+    document.getElementById('theme-toggle').textContent = isDark ? 'Switch to dark' : 'Switch to light';
+  }
+
+  function clearAuthError() {
+    document.getElementById('auth-message').textContent = '';
+    document.getElementById('auth-credential').closest('.field').classList.remove('error');
+  }
+
+  function toggleAuth() {
+    const pop = document.getElementById('auth-pop');
+    const btn = document.getElementById('auth-toggle');
+    const open = !pop.classList.contains('open');
+    pop.classList.toggle('open', open);
+    btn.setAttribute('aria-expanded', String(open));
+    clearAuthError();
+    if (open) document.getElementById('auth-credential').focus();
+  }
+
+  // Demo behavior: an empty submit shows the error state; any non-empty
+  // password "succeeds". The real console verifies against the first-boot
+  // credential server-side — the states are what this mock specifies, not
+  // the check itself.
+  function signIn() {
+    const input = document.getElementById('auth-credential');
+    if (!input.value.trim()) {
+      document.getElementById('auth-message').textContent =
+        'That password didn’t match. Check the credential from first boot and try again.';
+      input.closest('.field').classList.add('error');
+      input.focus();
+      return;
+    }
+    clearAuthError();
+    document.getElementById('auth-pop').classList.remove('open');
+    document.getElementById('auth-toggle').setAttribute('aria-expanded', 'false');
+    input.value = '';
+    document.querySelector('.browser-frame').classList.add('authed');
+  }
+
+  function signOut() {
+    document.querySelector('.browser-frame').classList.remove('authed');
+  }
+
+  function showScreen(id) {
+    document
+      .querySelectorAll('.console-screen')
+      .forEach((el) => el.classList.toggle('active', el.id === 'cscreen-' + id));
+    document
+      .querySelectorAll('.screen-tab')
+      .forEach((el) => el.classList.toggle('active', el.dataset.screen === id));
+    document.getElementById('nav-health').classList.toggle('active', id === 'health');
+    document.getElementById('nav-chat').classList.toggle('active', id === 'chat');
+    document.getElementById('nav-home').classList.toggle('active', id === 'home');
+    document.getElementById('nav-activity').classList.toggle('active', id === 'activity');
+  }
+</script>
+
+</body>
+</html>
