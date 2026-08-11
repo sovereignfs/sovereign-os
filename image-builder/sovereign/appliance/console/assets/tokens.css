@@ -1,0 +1,181 @@
+/*
+ * Sovereign OS Console design tokens ("Garnet" direction).
+ * Source of truth: docs/design/console-design-system-reference.html and
+ * docs/design/console-visual-direction.md. Stone neutrals + garnet accent,
+ * light default with an automatic dark mapping (no theme-toggle UI exists
+ * in the Console, so the OS-level preference drives it). Every value here
+ * is a literal — no external font or resource is loaded from this file.
+ */
+
+:root {
+  /* ---- primitives: stone neutral scale ---- */
+  --sv-white: #ffffff;
+  --sv-black: #000000;
+  --sv-stone-50: #f7f6f4;
+  --sv-stone-100: #efedea;
+  --sv-stone-200: #e5e3df;
+  --sv-stone-300: #cfccc7;
+  --sv-stone-400: #a5a19a;
+  --sv-stone-500: #807c76;
+  --sv-stone-600: #615d57;
+  --sv-stone-700: #484540;
+  --sv-stone-800: #33302c;
+  --sv-stone-900: #232019;
+  --sv-stone-950: #191715;
+
+  /* ---- primitives: garnet accent scale ---- */
+  --sv-garnet-100: #f6e3e6;
+  --sv-garnet-200: #ebc2c9;
+  --sv-garnet-300: #d99aa6;
+  --sv-garnet-400: #c4707f;
+  --sv-garnet-500: #a94c5d;
+  --sv-garnet-600: #8e3a4b;
+  --sv-garnet-700: #752e3e;
+  --sv-garnet-800: #5c2331;
+  --sv-garnet-900: #421823;
+
+  /* ---- primitives: status ----
+     error-solid is deliberately a BRIGHT pure red (#dc2626, not a deep
+     one): the brand accent is itself a red, so the danger semantic keeps
+     maximum value/saturation distance from garnet. Never darken it
+     toward the accent. */
+  --sv-amber-100: #fff7ed;
+  --sv-amber-200: #fed7aa;
+  --sv-amber-800: #b45309;
+  --sv-amber-900: #92400e;
+  --sv-green-100: #ecfdf3;
+  --sv-green-200: #bbf7d0;
+  --sv-green-800: #167c4a;
+  --sv-green-900: #14532d;
+  --sv-red-100: #fef2f2;
+  --sv-red-200: #fecaca;
+  --sv-red-600: #dc2626;
+  --sv-red-800: #991b1b;
+  --sv-red-900: #7f1d1d;
+  --sv-blue-100: #eff6ff;
+  --sv-blue-200: #dbeafe;
+  --sv-blue-800: #1d4ed8;
+  --sv-blue-900: #1e3a8a;
+
+  /* ---- primitives: spacing / radius / type / motion ---- */
+  --sv-space-1: 4px;
+  --sv-space-2: 8px;
+  --sv-space-3: 12px;
+  --sv-space-4: 16px;
+  --sv-space-5: 20px;
+  --sv-space-6: 24px;
+  --sv-space-8: 32px;
+  --sv-space-10: 40px;
+  --sv-space-12: 48px;
+  --sv-space-16: 64px;
+
+  --sv-radius-sm: 6px;
+  --sv-radius-md: 8px;
+  --sv-radius-lg: 11px;
+  --sv-radius-xl: 12px;
+  --sv-radius-2xl: 14px;
+  --sv-radius-full: 9999px;
+
+  /* Named first in the stack per the sibling Sovereign products'
+     convention; the Console ships no font files, so every device renders
+     the system fallback until/unless a follow-up bundles the woff2s. */
+  --sv-font-family-body: 'Hanken Grotesk', -apple-system, 'Segoe UI', system-ui, sans-serif;
+  --sv-font-family-mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+
+  --sv-font-size-label: 11px;
+  --sv-font-size-xs: 12px;
+  --sv-font-size-caption: 13px;
+  --sv-font-size-sm: 14px;
+  --sv-font-size-md: 16px;
+  --sv-font-size-lg: 18px;
+  --sv-font-size-xl: 20px;
+  --sv-font-size-2xl: 24px;
+
+  --sv-font-weight-regular: 400;
+  --sv-font-weight-medium: 500;
+  --sv-font-weight-semibold: 600;
+  --sv-font-weight-bold: 700;
+
+  --sv-touch-target-min: 44px;
+  --sv-motion-duration-fast: 150ms;
+
+  /* ---- semantic: light (default) ---- */
+  --sv-color-surface: var(--sv-stone-50);
+  --sv-color-surface-sunken: var(--sv-stone-100);
+  --sv-color-surface-raised: var(--sv-white);
+  --sv-color-text-primary: var(--sv-stone-800);
+  /* text-muted and text-subtle share stone-600: it is the lightest step
+     on this ramp that clears WCAG AA (4.5:1) against this surface for the
+     caption/machine-fact text they're used for. stone-500/stone-400 (the
+     original two-tier mapping) read at 3.84:1 / 2.38:1 -- below the
+     floor. See docs/design/console-visual-direction.md's Accessibility
+     section for the full contrast audit. */
+  --sv-color-text-muted: var(--sv-stone-600);
+  --sv-color-text-subtle: var(--sv-stone-600);
+  --sv-color-text-on-accent: var(--sv-white);
+  --sv-color-border: var(--sv-stone-200);
+  --sv-color-border-strong: var(--sv-stone-300);
+  --sv-color-accent: var(--sv-garnet-700);
+  --sv-color-accent-hover: var(--sv-garnet-800);
+  --sv-color-accent-subtle: rgba(117, 46, 62, 0.1);
+  --sv-color-focus-ring: var(--sv-garnet-700);
+  --sv-color-scrim: rgba(25, 23, 21, 0.5);
+
+  --sv-color-error-surface: var(--sv-red-100);
+  --sv-color-error-text: var(--sv-red-800);
+  --sv-color-error-border: var(--sv-red-200);
+  --sv-color-error-solid: var(--sv-red-600);
+  --sv-color-warning-surface: var(--sv-amber-100);
+  --sv-color-warning-text: var(--sv-amber-800);
+  --sv-color-warning-border: var(--sv-amber-200);
+  --sv-color-success-surface: var(--sv-green-100);
+  --sv-color-success-text: var(--sv-green-800);
+  --sv-color-success-border: var(--sv-green-200);
+  --sv-color-info-surface: var(--sv-blue-100);
+  --sv-color-info-text: var(--sv-blue-800);
+  --sv-color-info-border: var(--sv-blue-200);
+
+  --sv-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --sv-shadow-popover: 0 10px 38px rgba(0, 0, 0, 0.16);
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sv-color-surface: var(--sv-stone-950);
+    --sv-color-surface-sunken: var(--sv-stone-900);
+    --sv-color-surface-raised: var(--sv-stone-900);
+    --sv-color-text-primary: var(--sv-stone-50);
+    /* Mirrors the light-theme constraint above: stone-400 is the lightest
+       step that clears 4.5:1 against this surface, so muted and subtle
+       share it here too (stone-600 alone was 2.49:1). */
+    --sv-color-text-muted: var(--sv-stone-400);
+    --sv-color-text-subtle: var(--sv-stone-400);
+    --sv-color-text-on-accent: var(--sv-garnet-900);
+    --sv-color-border: var(--sv-stone-800);
+    --sv-color-border-strong: var(--sv-stone-700);
+    --sv-color-accent: var(--sv-garnet-300);
+    --sv-color-accent-hover: var(--sv-garnet-400);
+    --sv-color-accent-subtle: rgba(217, 154, 166, 0.14);
+    --sv-color-focus-ring: var(--sv-garnet-200);
+    --sv-color-scrim: rgba(0, 0, 0, 0.5);
+
+    --sv-color-error-surface: var(--sv-red-900);
+    --sv-color-error-text: var(--sv-red-200);
+    --sv-color-error-border: var(--sv-red-800);
+    --sv-color-error-solid: var(--sv-red-600);
+    --sv-color-warning-surface: var(--sv-amber-900);
+    --sv-color-warning-text: var(--sv-amber-200);
+    --sv-color-warning-border: var(--sv-amber-800);
+    --sv-color-success-surface: var(--sv-green-900);
+    --sv-color-success-text: var(--sv-green-200);
+    --sv-color-success-border: var(--sv-green-800);
+    --sv-color-info-surface: var(--sv-blue-900);
+    --sv-color-info-text: var(--sv-blue-100);
+    --sv-color-info-border: var(--sv-blue-800);
+
+    --sv-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.4);
+    --sv-shadow-popover: 0 10px 38px rgba(0, 0, 0, 0.6);
+  }
+}

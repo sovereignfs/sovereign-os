@@ -28,6 +28,7 @@ APPLIANCE_FILES = {
     "bin/verify-update-health": 0o755,
     "console/assets/console.css": 0o644,
     "console/assets/console.js": 0o644,
+    "console/assets/tokens.css": 0o644,
     "console/index.html": 0o644,
     "lib/sovereign_capabilities.py": 0o644,
     "lib/sovereign_conversation.py": 0o644,
