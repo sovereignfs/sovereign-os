@@ -117,8 +117,14 @@
     --sv-color-surface-sunken: var(--sv-stone-100);
     --sv-color-surface-raised: var(--sv-white);
     --sv-color-text-primary: var(--sv-stone-800);
-    --sv-color-text-muted: var(--sv-stone-500);
-    --sv-color-text-subtle: var(--sv-stone-400);
+    /* stone-500/stone-400 (the original muted/subtle mapping) read at
+       3.84:1 / 2.38:1 against this surface — both below WCAG AA's 4.5:1
+       floor for the machine-fact/caption text they're actually used for.
+       stone-600 is the lightest step on this ramp that clears AA here, so
+       muted and subtle share it: there is no AA-safe tone between "reads
+       like primary text" and "fails contrast" at this lightness/hue. */
+    --sv-color-text-muted: var(--sv-stone-600);
+    --sv-color-text-subtle: var(--sv-stone-600);
     --sv-color-text-on-accent: var(--sv-white);
     --sv-color-border: var(--sv-stone-200);
     --sv-color-border-strong: var(--sv-stone-300);
@@ -151,8 +157,11 @@
     --sv-color-surface-sunken: var(--sv-stone-900);
     --sv-color-surface-raised: var(--sv-stone-900);
     --sv-color-text-primary: var(--sv-stone-50);
+    /* Same AA constraint as the light theme above, mirrored: stone-600
+       (2.49:1 here) fails, stone-400 is the lightest step that clears
+       4.5:1 against this surface, so muted and subtle share it. */
     --sv-color-text-muted: var(--sv-stone-400);
-    --sv-color-text-subtle: var(--sv-stone-600);
+    --sv-color-text-subtle: var(--sv-stone-400);
     --sv-color-text-on-accent: var(--sv-garnet-900);
     --sv-color-border: var(--sv-stone-800);
     --sv-color-border-strong: var(--sv-stone-700);
@@ -1090,6 +1099,13 @@
     font-size: var(--sv-font-size-caption);
     color: var(--sv-color-text-muted);
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      scroll-behavior: auto !important;
+      transition: none !important;
+    }
+  }
 </style>
 </head>
 <body>
@@ -1236,15 +1252,21 @@
       The Console is a static, no-build web page shipped in the appliance
       image — every asset local, both schemes, flat surfaces (the current
       gradient and backdrop blur are dropped). Health reflects the shipped
-      read-only console restyled; Chat previews milestone 01.2's conversation
-      surface with its required local-vs-internet disclosure.
+      read-only console restyled. Chat previews milestone 01.2's
+      local-vs-internet disclosure and capability-receipt pattern only — the
+      voice input/output and Home Assistant device control shown alongside it
+      are longer-term assistant vision, not 01.2 scope: voice is explicit
+      01.2 non-scope and Home Assistant mutation is deferred to the
+      confirmation-gated vertical slice that follows 01.2 (see
+      <span class="machine-fact">docs/roadmap/01-2-local-conversation-capabilities.md</span>
+      §7 and §11).
     </p>
 
     <div class="screen-tabs">
       <button class="screen-tab" data-screen="first-run" onclick="showScreen('first-run')">First run</button>
       <button class="screen-tab active" data-screen="health" onclick="showScreen('health')">Health</button>
-      <button class="screen-tab" data-screen="chat" onclick="showScreen('chat')">Chat (01.2 preview)</button>
-      <button class="screen-tab" data-screen="home" onclick="showScreen('home')">Home Assistant operations</button>
+      <button class="screen-tab" data-screen="chat" onclick="showScreen('chat')">Chat (assistant vision)</button>
+      <button class="screen-tab" data-screen="home" onclick="showScreen('home')">Home Assistant (assistant vision)</button>
       <button class="screen-tab" data-screen="activity" onclick="showScreen('activity')">Activity log</button>
     </div>
 
@@ -1463,7 +1485,7 @@
         </div>
       </div>
 
-      <!-- CHAT (01.2 preview) -->
+      <!-- CHAT (assistant vision — disclosure/receipts are 01.2 scope; voice and Home Assistant control are not, see docs/roadmap/01-2-local-conversation-capabilities.md §7/§11) -->
       <div class="console-screen" id="cscreen-chat">
         <div class="trust-strip">
           <div class="console-bar-inner">
