@@ -7,10 +7,31 @@ const labels = {
 };
 
 const statusPanel = document.querySelector("#overall-status");
-const statusLabel = document.querySelector("#status-label");
+const statusPill = document.querySelector("#status-pill");
 const checkedAt = document.querySelector("#checked-at");
 const checks = document.querySelector("#checks");
 const retry = document.querySelector("#retry");
+
+// Cloned from the hidden templates in index.html rather than built with
+// createElementNS: the SVG namespace URI is a fixed XML identifier, not a
+// network resource, but it reads as one to this file's own "no http(s)://
+// anywhere in the bundle" safety check, so the icons are authored once in
+// markup instead.
+function pillIcon(kind) {
+  const templateId = kind === "bad" ? "#pill-icon-bad" : "#pill-icon-ok";
+  const icon = document.querySelector(templateId).cloneNode(true);
+  icon.removeAttribute("id");
+  return icon;
+}
+
+function setPill(element, kind, text, withIcon) {
+  element.className = `pill ${kind}`;
+  element.replaceChildren();
+  if (withIcon) element.append(pillIcon(kind));
+  const label = document.createElement("span");
+  label.textContent = text;
+  element.append(label);
+}
 
 function formatBytes(value) {
   if (!Number.isFinite(value)) return "Unavailable";
@@ -43,12 +64,17 @@ function renderChecks(values) {
   Object.entries(values).forEach(([name, check]) => {
     const row = document.createElement("div");
     row.className = "check-row";
-    const title = document.createElement("strong");
-    title.className = `check-state ${check.status}`;
+    const text = document.createElement("div");
+    const title = document.createElement("div");
+    title.className = "name";
     title.textContent = labels[name] || name;
-    const summary = document.createElement("span");
+    const summary = document.createElement("div");
+    summary.className = "detail human";
     summary.textContent = check.summary;
-    row.append(title, summary);
+    text.append(title, summary);
+    const pill = document.createElement("span");
+    setPill(pill, check.status === "healthy" ? "ok" : "warn", check.status === "healthy" ? "Passing" : "Degraded", true);
+    row.append(text, pill);
     checks.append(row);
   });
 }
@@ -78,7 +104,7 @@ function renderNetwork(interfaces) {
 
 function renderHealth(data) {
   statusPanel.className = `status-panel ${data.status}`;
-  statusLabel.textContent = data.status === "healthy" ? "All systems healthy" : "Needs attention";
+  setPill(statusPill, data.status === "healthy" ? "ok" : "warn", data.status === "healthy" ? "All systems healthy" : "Needs attention", true);
   checkedAt.textContent = `Checked ${new Date(data.checked_at).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})}`;
 
   const storage = data.system.data_storage;
@@ -97,7 +123,7 @@ function renderHealth(data) {
 
 function renderUnavailable() {
   statusPanel.className = "status-panel unavailable";
-  statusLabel.textContent = "Health unavailable";
+  setPill(statusPill, "bad", "Health unavailable", true);
   checkedAt.textContent = "The local health service did not respond";
   checks.replaceChildren();
   const message = document.createElement("p");
@@ -518,3 +544,25 @@ async function loadBaseOsStatus() {
 }
 
 loadBaseOsStatus();
+
+// Console is one static file behind several Nginx routes (/console/health/,
+// /console/chat/, /console/home/, /console/activity/); there is no
+// server-side render per route, so the path picked at load time decides
+// which single .console-page stays visible and which nav link is active.
+const PAGE_BY_PATH = {
+  "/console/": "health",
+  "/console/health/": "health",
+  "/console/chat/": "chat",
+  "/console/home/": "home",
+  "/console/activity/": "activity",
+};
+
+const currentPage = PAGE_BY_PATH[window.location.pathname] || "health";
+
+document.querySelectorAll(".console-page").forEach((section) => {
+  section.hidden = section.id !== `page-${currentPage}`;
+});
+
+document.querySelectorAll("[data-page-link]").forEach((link) => {
+  link.classList.toggle("active", link.dataset.pageLink === currentPage);
+});

@@ -3,156 +3,385 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="dark">
+    <meta name="color-scheme" content="light dark">
     <title>Sovereign Console</title>
     <link rel="stylesheet" href="/console/assets/console.css">
     <script src="/console/assets/console.js" defer></script>
   </head>
   <body>
+    <div hidden id="pill-icon-templates">
+      <svg id="pill-icon-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-11"/></svg>
+      <svg id="pill-icon-bad" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </div>
     <a class="skip-link" href="#main">Skip to status</a>
     <header class="topbar">
-      <a class="brand" href="/console/" aria-label="Sovereign Console home">
-        <span class="brand-mark" aria-hidden="true">S</span>
-        <span>
-          <strong>Sovereign</strong>
-          <small>Console</small>
-        </span>
-      </a>
-      <nav aria-label="Console navigation">
-        <a class="active" href="/console/health/">Health</a>
-      </nav>
-      <div class="auth-panel" id="auth-panel">
-        <button id="auth-toggle" type="button" aria-expanded="false" aria-controls="auth-form">Sign in</button>
-        <button id="auth-signout" type="button" hidden>Sign out</button>
-        <form id="auth-form" class="auth-form" hidden>
-          <label for="auth-credential">Console credential</label>
-          <input id="auth-credential" name="password" type="password" autocomplete="current-password" required>
-          <button id="auth-submit" type="submit">Sign in</button>
-          <p id="auth-message" role="status" aria-live="polite"></p>
-        </form>
+      <div class="bar-inner">
+        <a class="brand" href="/console/" aria-label="Sovereign Console home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none">
+              <rect x="3.8" y="3.8" width="16.4" height="16.4" rx="4" stroke="currentColor" stroke-width="1.8"/>
+              <path d="M12 7.6l1.25 3.15L16.4 12l-3.15 1.25L12 16.4l-1.25-3.15L7.6 12l3.15-1.25L12 7.6z" fill="currentColor"/>
+            </svg>
+          </span>
+          <span class="wordmark"><strong>Sovereign OS</strong><small>Console</small></span>
+        </a>
+        <nav class="console-nav" aria-label="Console navigation">
+          <a data-page-link="health" href="/console/health/">Health</a>
+          <a data-page-link="chat" href="/console/chat/">Chat</a>
+          <a data-page-link="home" href="/console/home/">Home Assistant</a>
+          <a data-page-link="activity" href="/console/activity/">Activity</a>
+        </nav>
+        <div class="auth-wrap" id="auth-panel">
+          <button id="auth-toggle" type="button" class="btn secondary sm" aria-expanded="false" aria-controls="auth-form">Sign in</button>
+          <button id="auth-signout" type="button" class="btn secondary sm" hidden>Sign out</button>
+          <form id="auth-form" class="pop" hidden>
+            <label for="auth-credential">Console credential</label>
+            <div class="field grow">
+              <input id="auth-credential" name="password" type="password" autocomplete="current-password" required>
+            </div>
+            <button id="auth-submit" type="submit" class="btn primary">Sign in</button>
+            <p id="auth-message" role="status" aria-live="polite"></p>
+          </form>
+        </div>
       </div>
     </header>
 
     <main id="main">
-      <section class="hero" aria-labelledby="page-title">
-        <div>
-          <p class="eyebrow">Local system overview</p>
-          <h1 id="page-title">Your Sovereign system</h1>
-          <p class="lede">Private services, running on hardware you control.</p>
-        </div>
-        <div id="overall-status" class="status-panel loading" role="status" aria-live="polite">
-          <span class="status-dot" aria-hidden="true"></span>
+      <section id="page-health" class="console-page" aria-labelledby="page-title">
+        <div class="hero">
           <div>
-            <small>Overall status</small>
-            <strong id="status-label">Checking</strong>
-            <span id="checked-at">Contacting the device…</span>
+            <p class="eyebrow">Local system overview</p>
+            <h1 id="page-title">Your Sovereign system</h1>
+            <p class="lede">Private services, running on hardware you control.</p>
+          </div>
+          <div id="overall-status" class="status-panel loading" role="status" aria-live="polite">
+            <span id="status-pill" class="pill neutral">
+              <span id="status-icon" aria-hidden="true"></span>
+              <span id="status-label">Checking</span>
+            </span>
+            <span id="checked-at" class="checked">Contacting the device…</span>
           </div>
         </div>
-      </section>
 
-      <section class="metrics" aria-label="System measurements">
-        <article class="metric-card">
-          <span>Data storage</span>
-          <strong id="storage-value">—</strong>
-          <small id="storage-detail">Checking available space</small>
-        </article>
-        <article class="metric-card">
-          <span>Memory</span>
-          <strong id="memory-value">—</strong>
-          <small id="memory-detail">Checking available memory</small>
-        </article>
-        <article class="metric-card">
-          <span>Temperature</span>
-          <strong id="temperature-value">—</strong>
-          <small>Current device temperature</small>
-        </article>
-        <article class="metric-card">
-          <span>Uptime</span>
-          <strong id="uptime-value">—</strong>
-          <small id="version-detail">Sovereign OS</small>
-        </article>
-      </section>
+        <div class="metrics" aria-label="System measurements">
+          <div class="metric-card">
+            <div class="label">Data storage</div>
+            <div class="value" id="storage-value">—</div>
+            <div class="detail" id="storage-detail">Checking available space</div>
+          </div>
+          <div class="metric-card">
+            <div class="label">Memory</div>
+            <div class="value" id="memory-value">—</div>
+            <div class="detail" id="memory-detail">Checking available memory</div>
+          </div>
+          <div class="metric-card">
+            <div class="label">Temperature</div>
+            <div class="value" id="temperature-value">—</div>
+            <div class="detail">Current device temperature</div>
+          </div>
+          <div class="metric-card">
+            <div class="label">Uptime</div>
+            <div class="value" id="uptime-value">—</div>
+            <div class="detail" id="version-detail">Sovereign OS</div>
+          </div>
+        </div>
 
-      <section class="content-grid">
-        <section class="panel" aria-labelledby="services-title">
+        <div class="panel" aria-labelledby="services-title">
           <div class="panel-heading">
             <div>
               <p class="eyebrow">Required checks</p>
               <h2 id="services-title">System health</h2>
             </div>
-            <button id="retry" type="button">Refresh</button>
+            <button id="retry" type="button" class="btn secondary sm">Refresh</button>
           </div>
-          <div id="checks" class="check-list" aria-live="polite">
+          <div id="checks" aria-live="polite">
             <p class="placeholder">Running local health checks…</p>
           </div>
-        </section>
+        </div>
 
-        <aside class="panel service-panel" aria-labelledby="dns-title">
+        <div class="panel" aria-labelledby="dns-title">
           <p class="eyebrow">Installed service</p>
           <div class="service-icon" aria-hidden="true">DNS</div>
           <h2 id="dns-title">Network protection</h2>
-          <p>Pi-hole filters unwanted DNS requests for devices on your network.</p>
-          <a class="primary-action" href="/dns/admin/">Open Pi-hole <span aria-hidden="true">→</span></a>
-        </aside>
-      </section>
-
-      <section class="panel network-panel" aria-labelledby="network-title">
-        <div>
-          <p class="eyebrow">Local connectivity</p>
-          <h2 id="network-title">Network</h2>
+          <p class="placeholder" style="margin:0 0 var(--sv-space-3);">Pi-hole filters unwanted DNS requests for devices on your network.</p>
+          <a class="btn primary" href="/dns/admin/">Open Pi-hole <span aria-hidden="true">→</span></a>
         </div>
-        <div id="network-list" class="network-list">
-          <span class="placeholder">Checking interfaces…</span>
-        </div>
-      </section>
 
-      <section class="panel update-panel" aria-labelledby="update-title">
-        <div class="update-panel-row">
-          <div>
-            <p class="eyebrow">Software updates</p>
-            <h2 id="update-title">Appliance version</h2>
-            <p id="update-summary" class="placeholder">Checking…</p>
-            <dl id="update-details" class="update-details" hidden>
-              <div><dt>Channel</dt><dd id="update-detail-channel"></dd></div>
-              <div><dt>Download size</dt><dd id="update-detail-size"></dd></div>
-              <div><dt>Reboot required</dt><dd id="update-detail-reboot"></dd></div>
-              <div><dt>Rollback</dt><dd id="update-detail-rollback"></dd></div>
-              <div><dt>Release notes</dt><dd><a id="update-detail-notes" href="#" target="_blank" rel="noopener noreferrer">View notes</a></dd></div>
-            </dl>
+        <div class="panel" aria-labelledby="network-title">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Local connectivity</p>
+              <h2 id="network-title">Network</h2>
+            </div>
           </div>
-          <div class="update-panel-actions">
-            <button id="update-check-now" type="button" hidden>Check now</button>
-            <button id="update-install-now" type="button" hidden>Install update</button>
+          <div id="network-list" class="network-list">
+            <span class="placeholder">Checking interfaces…</span>
           </div>
         </div>
-        <form id="install-form" class="auth-form install-form" hidden>
-          <label for="install-credential">Confirm your Console password to install</label>
-          <input id="install-credential" name="password" type="password" autocomplete="current-password" required>
-          <button id="install-submit" type="submit">Install now</button>
-          <p id="install-message" role="status" aria-live="polite"></p>
+
+        <div class="panel" aria-labelledby="update-title">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Software updates</p>
+              <h2 id="update-title">Appliance version</h2>
+            </div>
+            <span style="position:relative; display:inline-flex; gap:8px;">
+              <button id="update-check-now" type="button" class="btn secondary sm" hidden>Check now</button>
+              <button id="update-install-now" type="button" class="btn primary sm" hidden>Install update</button>
+              <form id="install-form" class="pop" hidden>
+                <label for="install-credential">Confirm your Console password to install</label>
+                <div class="field grow">
+                  <input id="install-credential" name="password" type="password" autocomplete="current-password" required>
+                </div>
+                <button id="install-submit" type="submit" class="btn primary">Install now</button>
+                <p id="install-message" role="status" aria-live="polite"></p>
+              </form>
+            </span>
+          </div>
+          <p id="update-summary" class="placeholder">Checking…</p>
+          <dl id="update-details" class="update-details" hidden>
+            <div><dt>Channel</dt><dd id="update-detail-channel"></dd></div>
+            <div><dt>Download size</dt><dd id="update-detail-size"></dd></div>
+            <div><dt>Reboot required</dt><dd id="update-detail-reboot"></dd></div>
+            <div><dt>Rollback</dt><dd id="update-detail-rollback"></dd></div>
+            <div><dt>Release notes</dt><dd><a id="update-detail-notes" href="#" target="_blank" rel="noopener noreferrer">View notes</a></dd></div>
+          </dl>
+        </div>
+
+        <div class="panel" aria-labelledby="base-os-title">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Software updates</p>
+              <h2 id="base-os-title">Base-OS version</h2>
+            </div>
+          </div>
+          <p id="base-os-summary" class="placeholder">Checking…</p>
+          <dl id="base-os-details" class="update-details" hidden>
+            <div><dt>Target version</dt><dd id="base-os-detail-version"></dd></div>
+            <div><dt>Reboot required</dt><dd>Yes</dd></div>
+            <div><dt>Updated</dt><dd id="base-os-detail-updated"></dd></div>
+          </dl>
+        </div>
+      </section>
+
+      <section id="page-chat" class="console-page" hidden aria-labelledby="chat-title">
+        <div class="preview-banner">
+          <strong>Preview</strong>
+          <span>Chat is part of a later milestone and isn't available on this device yet. This page shows the planned design — nothing here is connected to a real model or your data.</span>
+        </div>
+        <div class="trust-strip">
+          <div class="bar-inner">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><rect x="3.8" y="3.8" width="16.4" height="16.4" rx="4"/><path d="M12 8.4l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1 1-2.6z" fill="currentColor" stroke="none"/></svg>
+            Local &middot; no internet used
+            <span class="machine-fact" style="margin-left:auto;">qwen2.5-7b &middot; llama.cpp</span>
+          </div>
+        </div>
+        <h1 id="chat-title" class="visually-hidden" style="position:absolute; left:-9999px;">Chat</h1>
+        <div class="chat-thread">
+          <div class="bubble user">Why can't I reach ads.example.com?</div>
+          <div class="bubble assistant">Pi-hole blocked it — <span class="machine-fact" style="font-size:12px;">ads.example.com</span> matches the default blocklist. It was queried 14 times today by 2 devices. Want me to whitelist it?</div>
+          <span class="receipt">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3.8" y="3.8" width="16.4" height="16.4" rx="4"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/></svg>
+            <span class="machine-fact">dns.query</span>&nbsp;&middot; Pi-hole &middot; stayed local
+          </span>
+          <div class="bubble user">What's the weather saying for tomorrow?</div>
+          <div class="bubble assistant">Tomorrow looks dry and mild &mdash; around 21&deg;C with light wind. Sources are cited below.</div>
+          <span class="receipt">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.8" y="6.2" width="13.6" height="13.6" rx="3.5"/><path d="M13.5 10.5L20.5 3.5"/><path d="M16 3.5h4.5V8"/></svg>
+            <span class="machine-fact">web.search</span>&nbsp;&middot; SearXNG &middot; left the home network
+          </span>
+        </div>
+        <form class="composer" aria-hidden="true">
+          <div class="composer-inner">
+            <div class="field grow">
+              <textarea rows="2" placeholder="Ask about your home — Enter to send, Shift+Enter for a new line" disabled></textarea>
+            </div>
+            <span class="mic-btn" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5a3 3 0 013 3v6a3 3 0 01-6 0v-6a3 3 0 013-3z"/><path d="M5.5 11.5a6.5 6.5 0 0013 0"/><path d="M12 18v3.5"/></svg>
+            </span>
+            <span class="send-btn" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+            </span>
+          </div>
         </form>
       </section>
 
-      <section class="panel update-panel" aria-labelledby="base-os-title">
-        <div class="update-panel-row">
+      <section id="page-home" class="console-page" hidden aria-labelledby="home-title">
+        <div class="preview-banner">
+          <strong>Preview</strong>
+          <span>Home Assistant control is part of a later milestone and isn't available on this device yet. This page shows the planned design, including how a refused action would be recorded.</span>
+        </div>
+        <div class="hero">
           <div>
-            <p class="eyebrow">Software updates</p>
-            <h2 id="base-os-title">Base-OS version</h2>
-            <p id="base-os-summary" class="placeholder">Checking…</p>
-            <dl id="base-os-details" class="update-details" hidden>
-              <div><dt>Target version</dt><dd id="base-os-detail-version"></dd></div>
-              <div><dt>Reboot required</dt><dd>Yes</dd></div>
-              <div><dt>Updated</dt><dd id="base-os-detail-updated"></dd></div>
-            </dl>
+            <p class="eyebrow">Installed service</p>
+            <h1 id="home-title">Home Assistant</h1>
+            <p class="lede">What the assistant did in your home, and what it's allowed to do.</p>
+          </div>
+          <div class="status-panel">
+            <span class="pill ok"><span aria-hidden="true">✓</span> Connected</span>
+            <span class="checked machine-fact">homeassistant.local:8123</span>
+          </div>
+        </div>
+
+        <div class="metrics">
+          <div class="metric-card">
+            <div class="label">Entities</div>
+            <div class="value">42</div>
+            <div class="detail">across 6 domains</div>
+          </div>
+          <div class="metric-card">
+            <div class="label">Automations</div>
+            <div class="value">12</div>
+            <div class="detail">managed in Home Assistant</div>
+          </div>
+          <div class="metric-card">
+            <div class="label">Last operation</div>
+            <div class="value">2 min ago</div>
+            <div class="detail">via Chat</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-heading"><h2>Recent operations</h2></div>
+          <div class="check-row">
+            <div>
+              <div class="name">Turned off the living room lights</div>
+              <div class="detail">18:42 &middot; home.control &middot; light.living_room &middot; via Chat</div>
+            </div>
+            <span class="pill ok"><span aria-hidden="true">✓</span> Done</span>
+          </div>
+          <div class="check-row">
+            <div>
+              <div class="name">Set the thermostat to 21&deg;C</div>
+              <div class="detail">17:05 &middot; home.control &middot; climate.hallway &middot; via Chat</div>
+            </div>
+            <span class="pill ok"><span aria-hidden="true">✓</span> Done</span>
+          </div>
+          <div class="check-row">
+            <div>
+              <div class="name">Unlock the front door</div>
+              <div class="detail">16:48 &middot; home.control &middot; lock.front_door &middot; via Chat</div>
+            </div>
+            <span class="pill bad"><span aria-hidden="true">✕</span> Refused</span>
+          </div>
+          <p style="margin:var(--sv-space-3) 0 0; font-size:11px; color:var(--sv-color-text-subtle);">
+            Every operation the assistant performs is validated against the scope you granted before it runs, and recorded here. Locks are not granted, so the request was refused &mdash; the model cannot override that.
+          </p>
+        </div>
+
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Capability scope</p>
+              <h2>What the assistant may control</h2>
+            </div>
+          </div>
+          <div class="check-row">
+            <div><div class="name">Lights</div><div class="detail">home.control &middot; domain light</div></div>
+            <span class="pill ok"><span aria-hidden="true">✓</span> Granted</span>
+          </div>
+          <div class="check-row">
+            <div><div class="name">Climate</div><div class="detail">home.control &middot; domain climate</div></div>
+            <span class="pill ok"><span aria-hidden="true">✓</span> Granted</span>
+          </div>
+          <div class="check-row">
+            <div><div class="name">Locks</div><div class="detail">home.control &middot; domain lock</div></div>
+            <span class="pill neutral">Not granted</span>
+          </div>
+          <div class="check-row">
+            <div><div class="name">Cameras</div><div class="detail">home.control &middot; domain camera</div></div>
+            <span class="pill neutral">Not granted</span>
+          </div>
+          <p style="margin:var(--sv-space-3) 0 0; font-size:11px; color:var(--sv-color-text-subtle);">
+            Granting one domain never grants another. Changing scope requires signing in.
+          </p>
+        </div>
+      </section>
+
+      <section id="page-activity" class="console-page" hidden aria-labelledby="activity-title">
+        <div class="preview-banner">
+          <strong>Preview</strong>
+          <span>The unified activity ledger is part of a later milestone and isn't available on this device yet. This page shows the planned design.</span>
+        </div>
+        <div class="hero">
+          <div>
+            <p class="eyebrow">Recorded on this device</p>
+            <h1 id="activity-title">Activity</h1>
+            <p class="lede">Everything the assistant did, and every administrative action &mdash; one ledger.</p>
+          </div>
+        </div>
+
+        <div class="filter-row">
+          <span class="filter-chip active">All</span>
+          <span class="filter-chip">Stayed local</span>
+          <span class="filter-chip">Left the network</span>
+          <span class="filter-chip">Refused</span>
+        </div>
+
+        <div class="log-day">Today</div>
+        <div class="panel">
+          <div class="check-row">
+            <span class="log-time">18:42</span>
+            <div class="log-body">
+              <div class="name">Turned off the porch light</div>
+              <div class="detail">voice.stt &middot; home.control &middot; light.porch &middot; stayed local &middot; via voice</div>
+            </div>
+            <span class="pill ok"><span aria-hidden="true">✓</span> Done</span>
+          </div>
+          <div class="check-row">
+            <span class="log-time">18:12</span>
+            <div class="log-body">
+              <div class="name">Searched the web for ferry times</div>
+              <div class="detail">web.search &middot; SearXNG &middot; left the home network &middot; via Chat</div>
+            </div>
+            <span class="pill ok"><span aria-hidden="true">✓</span> Done</span>
+          </div>
+          <div class="check-row">
+            <span class="log-time">16:48</span>
+            <div class="log-body">
+              <div class="name">Unlock the front door</div>
+              <div class="detail">home.control &middot; lock.front_door &middot; domain not granted &middot; via Chat</div>
+            </div>
+            <span class="pill bad"><span aria-hidden="true">✕</span> Refused</span>
+          </div>
+          <div class="check-row">
+            <span class="log-time">16:45</span>
+            <div class="log-body">
+              <div class="name">Administrator signed in</div>
+              <div class="detail">console.auth &middot; from 192.168.1.22</div>
+            </div>
+            <span class="pill neutral">Auth</span>
+          </div>
+        </div>
+
+        <div class="log-day">Yesterday</div>
+        <div class="panel">
+          <div class="check-row">
+            <span class="log-time">09:14</span>
+            <div class="log-body">
+              <div class="name">Installed update v0.1.0-preview.23</div>
+              <div class="detail">update.install &middot; signed sovereign-production-1 &middot; rollback point kept &middot; by Administrator</div>
+            </div>
+            <span class="pill ok"><span aria-hidden="true">✓</span> Done</span>
+          </div>
+          <div class="check-row">
+            <span class="log-time">09:02</span>
+            <div class="log-body">
+              <div class="name">Checked for updates</div>
+              <div class="detail">update.check &middot; release channel &middot; left the home network &middot; by Administrator</div>
+            </div>
+            <span class="pill ok"><span aria-hidden="true">✓</span> Done</span>
           </div>
         </div>
       </section>
     </main>
 
-    <footer>
-      <span id="system-model">Sovereign device</span>
-      <span>Release @SOVEREIGN_RELEASE_VERSION@</span>
-      <span>Local-first · No telemetry</span>
+    <footer class="page-footer">
+      <div class="bar-inner">
+        <span id="system-model">Sovereign device</span>
+        <span>Release @SOVEREIGN_RELEASE_VERSION@</span>
+        <span>Local-first · No telemetry</span>
+      </div>
     </footer>
   </body>
 </html>
