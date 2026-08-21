@@ -1,6 +1,6 @@
 # RFC-0017: `web.search` and `web.fetch` Capability Mapping
 
-**Status:** Draft
+**Status:** Accepted (2026-08-21, project creator)
 **Author:** Project creator and Claude
 **Created:** 2026-08-21
 **Reviewers:** Project creator
@@ -502,8 +502,12 @@ today, since `system.health`/Pi-hole are all `automatic`) is unaffected,
 verified by the existing `test_conversation_service.py` test suite
 continuing to pass unmodified. The confirmation wire format this RFC
 fixes is intentionally general (token/capability/version/arguments), not
-`web.search`/`web.fetch`-specific, so Milestone 5's future mutating
-Home Assistant capabilities reuse it rather than needing a second design.
+`web.search`/`web.fetch`-specific — confirmed in practice, not just in
+theory, when [RFC-0018](0018-home-assistant-read-only-capability-mapping.md)
+reused it unchanged for Home Assistant's own read-only capability pair
+(this RFC originally expected that reuse to come from Milestone 5's
+*mutating* slice specifically; it turned out to already be exercised by
+the read-only slice first, with no changes needed to the format itself).
 
 ## Operations and Observability
 
@@ -631,10 +635,20 @@ above:
   an individual upstream engine fails but others in the same query
   succeed (partial results vs. treating any engine failure as a whole-
   capability failure) — needs real observation, not speculation.
-- Whether `/data/sovereign/capabilities/policy.json` should hold other future opt-in
+- ~~Whether `/data/sovereign/capabilities/policy.json` should hold other future opt-in
   toggles (a general device-policy file) or stay `web.search`-specific
-  until a second policy flag actually exists — deferred until Milestone 5
-  or another feature needs its own toggle.
+  until a second policy flag actually exists~~ — resolved by
+  [RFC-0018](0018-home-assistant-read-only-capability-mapping.md)
+  (Accepted): stays `web.search`-specific. Home Assistant's own
+  enabled/base-URL/allowlist config lives in a separate
+  `home-assistant.json` rather than growing `policy.json` into a
+  general device-config blob, and its own executor-level toggle
+  (`home_assistant_enabled`) is a distinct `policy_key` on the
+  capability itself rather than a second field silently piggybacking on
+  `external_enabled` — see `sovereign_capabilities.Capability`'s
+  `policy_key`/`policy_check` generalization, added specifically to
+  keep these two independent (RFC-0018 found that without it, enabling
+  web search would have silently enabled Home Assistant too).
 
 ## Acceptance Criteria
 
@@ -754,5 +768,29 @@ separating proposal from build-out):
 
 ## Decision
 
-Leave blank until review. Record approval, rejection, or requested
-changes with date and owner.
+**Accepted (2026-08-21, project creator, reviewed by Claude at the
+project creator's direction).** The `web.search`/`web.fetch` mapping,
+the SSRF-safe fetch policy, the confirmation pause/resume wire format,
+and the `policy.json` design are accepted as this milestone's platform
+contract — all already implemented, hardware-smoke-tested (see the
+[web.search/confirmation flow hardware qualification report](../research/web-search-and-confirmation-flow-hardware-qualification-report.md)),
+and, as of RFC-0018, proven general enough for a second capability
+pair to reuse without modification.
+
+This review re-checked the RFC against the current codebase rather than
+re-approving it as originally written. It held up well — the
+Acceptance Criteria section had already been kept current with
+strikethrough/resolution notes as implementation landed, a good
+practice this review continues rather than redoes. One real piece of
+drift was found and fixed: the Unresolved Questions entry about
+`policy.json`'s scope was still marked open, even though RFC-0018 had
+already answered it (a separate `home-assistant.json`, not a shared
+file) three commits ago. The Compatibility section's prediction that
+*mutating* Home Assistant capabilities would be the first to reuse the
+confirmation wire format was also corrected — the read-only slice
+reused it first, unmodified, which is a stronger proof of the format's
+generality than what was originally predicted, not a discrepancy to
+paper over.
+
+The Unresolved Questions above are accepted as non-blocking follow-ups,
+matching RFC-0003's own precedent for its own Unresolved Questions.

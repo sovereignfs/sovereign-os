@@ -362,11 +362,11 @@ and [system.health](docs/research/system-health-capability-smoke-test-report.md)
 reports. `web.search` and `web.fetch` are now implemented too
 (`sovereign_websearch.py`), against
 [RFC-0017](docs/rfcs/0017-web-search-and-fetch-capability-mapping.md)
-(Draft, awaiting project-owner review — implemented ahead of formal
-acceptance, matching this project's own precedent, e.g. the Conversation
-Service itself shipped against RFC-0002/0003/0004 before those RFCs'
-Decision sections were filled in). Both are backed by the now-embedded
-SearXNG service: `image-builder/sovereign/searxng-image.env` (real
+(Accepted 2026-08-21 — implemented and hardware-qualified ahead of
+formal acceptance, matching this project's own precedent, e.g. the
+Conversation Service itself shipped against RFC-0002/0003/0004 before
+those RFCs' Decision sections were filled in). Both are backed by the
+now-embedded SearXNG service: `image-builder/sovereign/searxng-image.env` (real
 pinned ARM64 digest, `ghcr.io/searxng/searxng`) and `appliance/searxng/`
 (compose template, `settings.yml`, `start-searxng`/`stop-searxng`, the
 same artifact/import/server three-stage systemd shape Pi-hole and
@@ -608,20 +608,21 @@ trust strip. Sending is gated on a signed-in Console session — the
 composer stays disabled with a "Sign in to chat with Sovereign" prompt
 until then, matching the same session boundary the update-install flow
 uses. Client-side history sent back on each turn is capped at 20 messages
-to stay under `/message`'s 64KiB request-body ceiling. Home Assistant and
-Activity remain static design previews. Implemented and unit-tested
-(`tests/test_console.py`); **not yet hardware-qualified** — this has only
-been exercised against a local stub server, not the real device.
+to stay under `/message`'s 64KiB request-body ceiling. Activity remains a
+static design preview; Home Assistant's page now carries real,
+Console-wired settings for its own read-only integration (Milestone 5)
+alongside its still-preview mutating-control mockup. Implemented,
+unit-tested (`tests/test_console.py`), and **hardware-qualified** — see
+the [web.search/confirmation flow hardware qualification report](docs/research/web-search-and-confirmation-flow-hardware-qualification-report.md)
+for a real browser-authenticated Chat pass driven by the project owner.
 
-**Remaining:** hardware qualification of the Chat wiring above; a real
-`rpi-image-gen` base-OS build exercising the llama-server deployment path
-end to end (this session's qualification reproduced the embedding step by
-hand with real tooling, not through the actual build pipeline);
-`web.search`/`web.fetch` — deployment, capability implementation, the
-confirmation/policy wiring, the Console approve/deny confirmation UI, and
-the settings toggle to set `external_enabled` are all done now (see
-above), still awaiting RFC-0017 project-owner review and hardware
-qualification.
+**Remaining:** a real `rpi-image-gen` base-OS build exercising the
+llama-server deployment path end to end (this session's qualification
+reproduced the embedding step by hand with real tooling, not through the
+actual build pipeline). `web.search`/`web.fetch` itself — deployment,
+capability implementation, confirmation/policy wiring, Console UI, and
+hardware qualification — is done, and RFC-0017 is now Accepted (see
+above).
 
 **Depends on:** Stable appliance update boundary
 
@@ -781,7 +782,7 @@ This milestone closes the remaining “flash once” gap.
 - 🟡 SearXNG-backed web-search capability — implemented, unit-tested,
   fully wired into Console's Chat UI including the settings toggle, and
   smoke-tested end-to-end on real Raspberry Pi 5 hardware (RFC-0017,
-  Draft); a real signed-release qualification (artifact/import systemd
+  Accepted); a real signed-release qualification (artifact/import systemd
   paths, the real hardened sandbox) remains
 - 🟡 Home Assistant capability integration — read-only entity/history
   mapping (RFC-0018) implemented and Console-wired; real-hardware

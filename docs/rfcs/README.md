@@ -13,7 +13,7 @@ RFCs are proposals, not decisions. Start with the [RFC template](../templates/rf
 - [RFC-0014: Appliance update system](0014-appliance-update-system.md) - Implemented
 - [RFC-0015: Update discovery - channel metadata and device-side checking](0015-update-discovery.md) - Accepted
 - [RFC-0016: Full base-OS updates (A/B root filesystem)](0016-full-base-os-updates.md) - Accepted
-- [RFC-0017: web.search and web.fetch capability mapping](0017-web-search-and-fetch-capability-mapping.md) - Draft
+- [RFC-0017: web.search and web.fetch capability mapping](0017-web-search-and-fetch-capability-mapping.md) - Accepted
 - [RFC-0018: Home Assistant read-only capability mapping](0018-home-assistant-read-only-capability-mapping.md) - Accepted
 
 RFC-0001 refers to earlier platform work and remains unwritten; create it
@@ -35,11 +35,17 @@ RFC-0017 is the milestone's remaining required document (`web.search`
 privacy design), drafted 2026-08-21 against
 [docs/research/searxng-deployment-assessment.md](../research/searxng-deployment-assessment.md)
 and the confirmation-flow/policy-state gaps already visible in
-`sovereign_conversation.py`. Awaiting project-owner review.
+`sovereign_conversation.py`. Implemented and hardware-qualified before
+formal review (this project's own precedent), then reviewed and accepted
+2026-08-21 — the review found and fixed one real piece of drift (a
+resolved Unresolved Question that was still marked open) rather than
+re-approving the text unchanged.
 
 RFC-0018 is Milestone 5's first document (Home Assistant read-only entity/
 history capability mapping), drafted 2026-08-21 against RFC-0017's
 already-shipped confirmation wire format and Home Assistant's own REST API
 documentation, and accepted the same day after review found and fixed a
 stage-numbering inconsistency and a disclosed, non-blocking TLS gap.
-Implementation not yet started.
+Implementation (capability, executor generalization, and Console settings
+UI) shipped the same day, real-hardware qualification blocked on no Home
+Assistant instance existing on the household network yet.
