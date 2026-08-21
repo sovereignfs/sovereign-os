@@ -1,0 +1,12 @@
+#!/bin/sh
+
+set -eu
+
+compose_file=/data/sovereign/apps/searxng/compose.yaml
+
+if [ -f "$compose_file" ]; then
+  docker compose \
+    --project-name sovereign-searxng \
+    --file "$compose_file" \
+    stop --timeout 30
+fi

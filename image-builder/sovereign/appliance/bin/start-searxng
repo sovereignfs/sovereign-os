@@ -1,0 +1,79 @@
+#!/bin/sh
+
+set -eu
+
+state_dir=/data/sovereign
+app_dir=${state_dir}/apps/searxng
+config_dir=${app_dir}/etc-searxng
+cache_dir=${app_dir}/cache-searxng
+secret_dir=${state_dir}/secrets
+secret_file=${secret_dir}/searxng-secret
+compose_file=${app_dir}/compose.yaml
+appliance_root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+release_root=$(CDPATH= cd -- "${appliance_root}/.." && pwd)
+template=${appliance_root}/searxng/compose.yaml.in
+settings_source=${appliance_root}/searxng/settings.yml
+marker=${state_dir}/searxng-ready
+image_environment=${release_root}/searxng-image.env
+. "$image_environment"
+image_reference="${SEARXNG_IMAGE_REPOSITORY#docker.io/}@${SEARXNG_IMAGE_DIGEST}"
+
+install -d -m 0755 "$state_dir" "$app_dir" "$config_dir" "$cache_dir"
+# 0700, root-only: unlike Pi-hole's admin password, nothing besides this
+# script ever needs to read the SearXNG secret (RFC-0017: no other
+# service or DynamicUser consumer needs it), so there is no
+# sovereign-searxng-secrets group to grant.
+install -d -m 0700 "$secret_dir"
+
+if [ ! -s "$secret_file" ]; then
+  umask 077
+  od -An -N32 -tx1 /dev/urandom | tr -d ' \n' > "${secret_file}.tmp"
+  printf '\n' >> "${secret_file}.tmp"
+  mv "${secret_file}.tmp" "$secret_file"
+fi
+chmod 0600 "$secret_file"
+
+# RFC-0017: settings.yml is copied into persistent state once, not
+# overwritten on every start, so an operator's own later edits to the
+# persisted copy survive a restart -- the same guard the secret file
+# above uses. Without this, the container's own entrypoint would
+# generate its own template on first start instead (real, verified
+# behavior: it checks for an existing settings.yml before doing so).
+if [ ! -s "${config_dir}/settings.yml" ]; then
+  install -m 0644 "$settings_source" "${config_dir}/settings.yml.tmp"
+  mv "${config_dir}/settings.yml.tmp" "${config_dir}/settings.yml"
+fi
+
+sed "s|@SEARXNG_IMAGE_REFERENCE@|${image_reference}|g" \
+  "$template" > "${compose_file}.tmp"
+chmod 0644 "${compose_file}.tmp"
+mv "${compose_file}.tmp" "$compose_file"
+
+SEARXNG_SECRET=$(cat "$secret_file") \
+  docker compose \
+    --project-name sovereign-searxng \
+    --file "$compose_file" \
+    up --detach --no-build --pull never
+
+# The real pinned image ships no Docker HEALTHCHECK (confirmed via
+# `docker inspect`), unlike Pi-hole's -- poll the real homepage instead
+# of a search query, so readiness verification never itself sends a real
+# query to an external engine on every boot.
+attempt=0
+healthy=false
+while [ "$attempt" -lt 90 ]; do
+  if curl --fail --silent --output /dev/null --max-time 3 http://127.0.0.1:8093/; then
+    healthy=true
+    break
+  fi
+  attempt=$((attempt + 1))
+  sleep 2
+done
+
+test "$healthy" = true
+
+{
+  printf 'image=%s\n' "$(docker inspect --format '{{.Image}}' sovereign-searxng)"
+  printf 'health=pass\n'
+} > "${marker}.tmp"
+mv "${marker}.tmp" "$marker"

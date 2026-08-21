@@ -45,9 +45,21 @@ AUDIT_LOG_PATH = pathlib.Path(
     os.environ.get("SOVEREIGN_CONVERSATION_AUDIT_LOG_PATH", str(capabilities.AUDIT_LOG_PATH))
 )
 
+# RFC-0017: the one opt-in policy flag this device has today
+# (external_enabled, gating web.search/web.fetch). Read fresh per
+# request, not cached at process start, so a change takes effect on the
+# next message without a service restart -- the same freshness
+# expectation sovereign-update check's own on-demand reads establish
+# elsewhere in this project.
+POLICY_PATH = pathlib.Path(
+    os.environ.get("SOVEREIGN_CONVERSATION_POLICY_PATH", str(conversation.DEFAULT_POLICY_PATH))
+)
+
+
 _registry = conversation.build_registry()
 _provider = inference.LlamaCppProvider(base_url=PROVIDER_BASE_URL)
 _confirmation_store = capabilities.ConfirmationStore()
+_pending_turn_store = conversation.PendingTurnStore()
 
 
 class ConversationHandler(BaseHTTPRequestHandler):
@@ -84,12 +96,16 @@ class ConversationHandler(BaseHTTPRequestHandler):
             # specific, the same reasoning that keeps Console's own health
             # endpoint public.
             self._send_json(200, _provider.health())
+        elif self.path == "/api/v1/conversation/policy":
+            self._handle_get_policy()
         else:
             self.send_error(404)
 
     def do_POST(self):
         if self.path == "/api/v1/conversation/message":
             self._handle_message()
+        elif self.path == "/api/v1/conversation/policy":
+            self._handle_set_policy()
         else:
             self.send_error(404)
 
@@ -126,7 +142,16 @@ class ConversationHandler(BaseHTTPRequestHandler):
         if not self._check_authentication():
             return
         body = self._read_json_body()
-        if not isinstance(body, dict) or not isinstance(body.get("message"), str) or not body["message"].strip():
+        if not isinstance(body, dict):
+            self._send_json(400, {"error": {"code": "INVALID_REQUEST", "message": "a JSON object body is required"}})
+            return
+
+        confirmation = body.get("confirmation")
+        if confirmation is not None:
+            self._handle_confirmation(confirmation)
+            return
+
+        if not isinstance(body.get("message"), str) or not body["message"].strip():
             self._send_json(400, {"error": {"code": "INVALID_REQUEST", "message": "a non-empty 'message' string is required"}})
             return
         history = body.get("messages")
@@ -139,7 +164,9 @@ class ConversationHandler(BaseHTTPRequestHandler):
         try:
             result = conversation.process_turn(
                 _provider, _registry, history, body["message"],
+                policy=conversation.read_policy(POLICY_PATH),
                 confirmation_store=_confirmation_store,
+                pending_turn_store=_pending_turn_store,
                 audit_log_path=AUDIT_LOG_PATH,
             )
         except conversation.TurnError as error:
@@ -147,6 +174,72 @@ class ConversationHandler(BaseHTTPRequestHandler):
             return
 
         self._send_json(200, result)
+
+    def _handle_confirmation(self, confirmation):
+        if (
+            not isinstance(confirmation, dict)
+            or not isinstance(confirmation.get("token"), str)
+            or not confirmation["token"]
+            or not isinstance(confirmation.get("approve"), bool)
+        ):
+            self._send_json(400, {
+                "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "'confirmation' must be an object with a non-empty string 'token' and a boolean 'approve'",
+                },
+            })
+            return
+
+        try:
+            result = conversation.resume_turn(
+                _provider, _registry, _pending_turn_store, _confirmation_store,
+                confirmation["token"], confirmation["approve"],
+                policy=conversation.read_policy(POLICY_PATH),
+                audit_log_path=AUDIT_LOG_PATH,
+            )
+        except conversation.TurnError as error:
+            # INVALID_CONFIRMATION is the caller's own mistake (unknown,
+            # expired-from-this-store's-perspective, or replayed token) --
+            # every other TurnError this can raise (PROVIDER_UNAVAILABLE
+            # and friends, from continuing the turn after resuming) is the
+            # same downstream-failure shape process_turn's own errors
+            # already use.
+            status = 400 if error.code == "INVALID_CONFIRMATION" else 502
+            self._send_json(status, {"error": {"code": error.code, "message": str(error)}})
+            return
+
+        self._send_json(200, result)
+
+    def _handle_get_policy(self):
+        # Authenticated like every other mutating-adjacent Console
+        # surface here, even though this specific request only reads --
+        # this is administrative device configuration, not liveness
+        # info, and it's only ever rendered inside the already-signed-in
+        # Chat experience, so gating it the same way avoids a second,
+        # inconsistent trust boundary for one settings row.
+        if not self._check_authentication():
+            return
+        policy = conversation.read_policy(POLICY_PATH)
+        self._send_json(200, {"web_search_enabled": policy["external_enabled"]})
+
+    def _handle_set_policy(self):
+        if not self._check_authentication():
+            return
+        body = self._read_json_body()
+        if not isinstance(body, dict) or not isinstance(body.get("web_search_enabled"), bool):
+            self._send_json(400, {
+                "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "'web_search_enabled' must be a boolean",
+                },
+            })
+            return
+        try:
+            policy = conversation.write_policy(body["web_search_enabled"], POLICY_PATH)
+        except OSError as error:
+            self._send_json(502, {"error": {"code": "POLICY_WRITE_FAILED", "message": f"could not persist the policy change: {error}"}})
+            return
+        self._send_json(200, {"web_search_enabled": policy["external_enabled"]})
 
     def log_message(self, format_string, *arguments):
         return

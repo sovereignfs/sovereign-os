@@ -2,7 +2,7 @@
 Description=Audit interrupted Sovereign update transactions
 RequiresMountsFor=/data
 After=sovereign-data-expand.service sovereign-proof.service
-Before=sovereign-pihole.service sovereign-llama-server.service
+Before=sovereign-pihole.service sovereign-llama-server.service sovereign-searxng.service
 ConditionPathIsMountPoint=/data
 
 [Service]
