@@ -28,6 +28,7 @@ SYSUSERS = (
 )
 
 import sovereign_capabilities as capabilities  # noqa: E402
+import sovereign_homeassistant as homeassistant  # noqa: E402
 import sovereign_system as system  # noqa: E402
 import sovereign_websearch as websearch  # noqa: E402
 
@@ -106,10 +107,17 @@ def auth_ok():
 
 
 class LiveConversationServer:
-    def __init__(self, audit_log_path, policy_path=None):
+    def __init__(
+        self, audit_log_path, policy_path=None,
+        home_assistant_config_path=None, home_assistant_token_path=None,
+    ):
         environment = {"SOVEREIGN_CONVERSATION_AUDIT_LOG_PATH": str(audit_log_path)}
         if policy_path is not None:
             environment["SOVEREIGN_CONVERSATION_POLICY_PATH"] = str(policy_path)
+        if home_assistant_config_path is not None:
+            environment["SOVEREIGN_HOME_ASSISTANT_CONFIG_PATH"] = str(home_assistant_config_path)
+        if home_assistant_token_path is not None:
+            environment["SOVEREIGN_HOME_ASSISTANT_TOKEN_PATH"] = str(home_assistant_token_path)
         with mock.patch.dict(__import__("os").environ, environment):
             self.module = runpy.run_path(str(CONVERSATION_SERVICE))
         from http.server import ThreadingHTTPServer
@@ -574,6 +582,338 @@ class PolicyEndpointTests(unittest.TestCase):
         )
 
 
+class HomeAssistantConfigEndpointTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.audit_path = Path(self.temporary.name) / "audit.jsonl"
+        self.config_path = Path(self.temporary.name) / "capabilities" / "home-assistant.json"
+        self.token_path = Path(self.temporary.name) / "secrets" / "home-assistant" / "access-token"
+        self.live = LiveConversationServer(
+            self.audit_path,
+            home_assistant_config_path=self.config_path,
+            home_assistant_token_path=self.token_path,
+        )
+        self.addCleanup(self.live.stop)
+
+    def _get(self, path, headers=None):
+        connection = self.live.connection()
+        connection.request("GET", path, headers=headers or {})
+        response = connection.getresponse()
+        parsed = json.loads(response.read())
+        connection.close()
+        return response, parsed
+
+    def _post(self, path, payload, headers=None):
+        connection = self.live.connection()
+        connection.request(
+            "POST", path, body=json.dumps(payload),
+            headers=headers or {"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        parsed = json.loads(response.read())
+        connection.close()
+        return response, parsed
+
+    def test_get_requires_authentication(self):
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen(
+                [("/api/v1/auth/verify-mutating", urllib.error.HTTPError("url", 401, "unauthorized", {}, None))]
+            )
+            response, body = self._get("/api/v1/conversation/home-assistant")
+        self.assertEqual(401, response.status)
+        self.assertEqual("NOT_AUTHENTICATED", body["error"]["code"])
+
+    def test_get_reflects_the_real_default_disabled_unconfigured(self):
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            response, body = self._get("/api/v1/conversation/home-assistant")
+        self.assertEqual(200, response.status)
+        self.assertEqual(
+            body,
+            {"enabled": False, "base_url": "", "has_access_token": False, "allowlisted_entities": []},
+        )
+
+    def test_post_requires_authentication(self):
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen(
+                [("/api/v1/auth/verify-mutating", urllib.error.HTTPError("url", 403, "forbidden", {}, None))]
+            )
+            response, body = self._post(
+                "/api/v1/conversation/home-assistant",
+                {"enabled": True, "base_url": "http://homeassistant.local:8123", "allowlisted_entities": []},
+            )
+        self.assertEqual(403, response.status)
+        self.assertEqual("CSRF_MISMATCH", body["error"]["code"])
+
+    def test_post_persists_and_get_reflects_it_never_returning_the_token(self):
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            response, body = self._post(
+                "/api/v1/conversation/home-assistant",
+                {
+                    "enabled": True,
+                    "base_url": "http://homeassistant.local:8123",
+                    "allowlisted_entities": ["light.kitchen"],
+                    "access_token": "secret-1",
+                },
+            )
+        self.assertEqual(200, response.status)
+        self.assertEqual(
+            body,
+            {
+                "enabled": True,
+                "base_url": "http://homeassistant.local:8123",
+                "has_access_token": True,
+                "allowlisted_entities": ["light.kitchen"],
+            },
+        )
+        self.assertNotIn("secret-1", json.dumps(body))
+
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            response, body = self._get("/api/v1/conversation/home-assistant")
+        self.assertEqual(body["allowlisted_entities"], ["light.kitchen"])
+        self.assertEqual(homeassistant.read_token(self.token_path), "secret-1")
+
+    def test_omitted_access_token_leaves_the_stored_token_unchanged(self):
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            self._post(
+                "/api/v1/conversation/home-assistant",
+                {
+                    "enabled": True, "base_url": "http://x:8123",
+                    "allowlisted_entities": [], "access_token": "secret-1",
+                },
+            )
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            response, body = self._post(
+                "/api/v1/conversation/home-assistant",
+                {"enabled": True, "base_url": "http://x:8123", "allowlisted_entities": ["light.kitchen"]},
+            )
+        self.assertTrue(body["has_access_token"])
+        self.assertEqual(homeassistant.read_token(self.token_path), "secret-1")
+
+    def test_post_rejects_a_non_boolean_enabled(self):
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            response, body = self._post(
+                "/api/v1/conversation/home-assistant",
+                {"enabled": "yes", "base_url": "http://x:8123", "allowlisted_entities": []},
+            )
+        self.assertEqual(400, response.status)
+        self.assertEqual("INVALID_REQUEST", body["error"]["code"])
+
+    def test_post_rejects_a_non_http_base_url(self):
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            response, body = self._post(
+                "/api/v1/conversation/home-assistant",
+                {"enabled": True, "base_url": "ftp://x", "allowlisted_entities": []},
+            )
+        self.assertEqual(400, response.status)
+        self.assertEqual("INVALID_REQUEST", body["error"]["code"])
+
+    def test_post_rejects_a_non_list_allowlist(self):
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            response, body = self._post(
+                "/api/v1/conversation/home-assistant",
+                {"enabled": True, "base_url": "http://x:8123", "allowlisted_entities": "light.kitchen"},
+            )
+        self.assertEqual(400, response.status)
+        self.assertEqual("INVALID_REQUEST", body["error"]["code"])
+
+
+class HomeAssistantEntitiesProxyEndpointTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.audit_path = Path(self.temporary.name) / "audit.jsonl"
+        self.config_path = Path(self.temporary.name) / "capabilities" / "home-assistant.json"
+        self.token_path = Path(self.temporary.name) / "secrets" / "home-assistant" / "access-token"
+        self.live = LiveConversationServer(
+            self.audit_path,
+            home_assistant_config_path=self.config_path,
+            home_assistant_token_path=self.token_path,
+        )
+        self.addCleanup(self.live.stop)
+
+    def _get(self, headers=None):
+        connection = self.live.connection()
+        connection.request("GET", "/api/v1/conversation/home-assistant/entities", headers=headers or {})
+        response = connection.getresponse()
+        parsed = json.loads(response.read())
+        connection.close()
+        return response, parsed
+
+    def test_requires_authentication(self):
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen(
+                [("/api/v1/auth/verify-mutating", urllib.error.HTTPError("url", 401, "unauthorized", {}, None))]
+            )
+            response, body = self._get()
+        self.assertEqual(401, response.status)
+
+    def test_not_configured_is_a_409(self):
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            response, body = self._get()
+        self.assertEqual(409, response.status)
+        self.assertEqual("HOME_ASSISTANT_NOT_CONFIGURED", body["error"]["code"])
+
+    def test_returns_the_unfiltered_entity_list_not_just_the_allowlist(self):
+        homeassistant.write_config(
+            "http://homeassistant.local:8123", ["light.kitchen"], True, access_token="secret-1",
+            path=self.config_path, token_path=self.token_path,
+        )
+        states_payload = [
+            {"entity_id": "light.kitchen", "state": "on", "attributes": {"friendly_name": "Kitchen"}},
+            {"entity_id": "lock.front_door", "state": "locked", "attributes": {"friendly_name": "Front Door"}},
+        ]
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok(), ("/api/states", json_response(states_payload))])
+            response, body = self._get()
+        self.assertEqual(200, response.status)
+        entity_ids = {entity["entity_id"] for entity in body["entities"]}
+        # Deliberately not filtered to the allowlist -- this is the
+        # settings-page proxy a household uses to build the allowlist.
+        self.assertEqual(entity_ids, {"light.kitchen", "lock.front_door"})
+
+
+class HomeAssistantConfirmationWireFormatTests(unittest.TestCase):
+    # RFC-0018's own Acceptance Criteria: no new wire-format code path,
+    # only a second registration reusing RFC-0017's existing
+    # pending_confirmation/confirmation mechanism.
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.audit_path = Path(self.temporary.name) / "audit.jsonl"
+        self.config_path = Path(self.temporary.name) / "capabilities" / "home-assistant.json"
+        self.token_path = Path(self.temporary.name) / "secrets" / "home-assistant" / "access-token"
+
+    def configure_and_enable(self, allowlist=("light.kitchen",)):
+        homeassistant.write_config(
+            "http://homeassistant.local:8123", list(allowlist), True, access_token="secret-1",
+            path=self.config_path, token_path=self.token_path,
+        )
+
+    def start_server(self):
+        self.live = LiveConversationServer(
+            self.audit_path,
+            home_assistant_config_path=self.config_path,
+            home_assistant_token_path=self.token_path,
+        )
+        self.addCleanup(self.live.stop)
+
+    def _post(self, payload):
+        connection = self.live.connection()
+        connection.request(
+            "POST", "/api/v1/conversation/message",
+            body=json.dumps(payload), headers={"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        parsed = json.loads(response.read())
+        connection.close()
+        return response, parsed
+
+    def test_disabled_by_default_rejects_without_ever_prompting(self):
+        self.start_server()
+        proposal = chat_completion(tool_calls=[tool_call("call_1_0", "home_assistant.list_entities", {})])
+        narration = chat_completion(content="Home Assistant is disabled.")
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen(
+                [auth_ok(), ("/v1/chat/completions", proposal), ("/v1/chat/completions", narration)]
+            )
+            response, body = self._post({"message": "what lights are on"})
+        self.assertEqual(200, response.status)
+        self.assertNotIn("pending_confirmation", body)
+        self.assertEqual(
+            [{"name": "home_assistant.list_entities", "outcome": "rejected", "code": "CAPABILITY_DISABLED"}],
+            body["capability_events"],
+        )
+
+    def test_enabled_proposal_pauses_for_confirmation(self):
+        self.configure_and_enable()
+        self.start_server()
+        proposal = chat_completion(tool_calls=[tool_call("call_1_0", "home_assistant.list_entities", {})])
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok(), ("/v1/chat/completions", proposal)])
+            response, body = self._post({"message": "what lights are on"})
+        self.assertEqual(200, response.status)
+        self.assertEqual("home_assistant.list_entities", body["pending_confirmation"]["capability"])
+        self.assertIn("token", body["pending_confirmation"])
+
+    def test_approving_executes_the_real_capability_and_narrates(self):
+        self.configure_and_enable()
+        self.start_server()
+        proposal = chat_completion(tool_calls=[tool_call("call_1_0", "home_assistant.list_entities", {})])
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok(), ("/v1/chat/completions", proposal)])
+            _, paused = self._post({"message": "what lights are on"})
+        token = paused["pending_confirmation"]["token"]
+
+        states_payload = [{"entity_id": "light.kitchen", "state": "on", "attributes": {}}]
+        narration = chat_completion(content="The kitchen light is on.")
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen(
+                [auth_ok(), ("/api/states", json_response(states_payload)), ("/v1/chat/completions", narration)]
+            )
+            response, body = self._post({"confirmation": {"token": token, "approve": True}})
+        self.assertEqual(200, response.status)
+        self.assertEqual("The kitchen light is on.", body["text"])
+        self.assertEqual(
+            [{"name": "home_assistant.list_entities", "outcome": "executed"}], body["capability_events"],
+        )
+
+    def test_entity_not_allowlisted_is_rejected_before_confirmation(self):
+        self.configure_and_enable(allowlist=("light.kitchen",))
+        self.start_server()
+        proposal = chat_completion(
+            tool_calls=[tool_call("call_1_0", "home_assistant.get_history", {"entity_id": "lock.front_door", "period": "day"})]
+        )
+        narration = chat_completion(content="That entity isn't available.")
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen(
+                [auth_ok(), ("/v1/chat/completions", proposal), ("/v1/chat/completions", narration)]
+            )
+            response, body = self._post({"message": "when was the front door unlocked"})
+        self.assertEqual(200, response.status)
+        self.assertNotIn("pending_confirmation", body)
+        self.assertEqual(
+            [{"name": "home_assistant.get_history", "outcome": "rejected", "code": "ENTITY_NOT_ALLOWLISTED"}],
+            body["capability_events"],
+        )
+
+    def test_enabling_web_search_alone_does_not_enable_home_assistant(self):
+        # Cross-feature independence, proven at the HTTP layer too, not
+        # just the executor unit tests.
+        self.start_server()
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            connection = self.live.connection()
+            connection.request(
+                "POST", "/api/v1/conversation/policy",
+                body=json.dumps({"web_search_enabled": True}),
+                headers={"Content-Type": "application/json"},
+            )
+            connection.getresponse().read()
+            connection.close()
+
+        proposal = chat_completion(tool_calls=[tool_call("call_1_0", "home_assistant.list_entities", {})])
+        narration = chat_completion(content="Home Assistant is disabled.")
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen(
+                [auth_ok(), ("/v1/chat/completions", proposal), ("/v1/chat/completions", narration)]
+            )
+            response, body = self._post({"message": "what lights are on"})
+        self.assertEqual(
+            [{"name": "home_assistant.list_entities", "outcome": "rejected", "code": "CAPABILITY_DISABLED"}],
+            body["capability_events"],
+        )
+
+
 class ConversationProvisioningTests(unittest.TestCase):
     def test_systemd_unit_is_hardened_and_grouped(self):
         service = SYSTEMD_SERVICE.read_text()
@@ -589,6 +929,12 @@ class ConversationProvisioningTests(unittest.TestCase):
         self.assertIn("After=", service)
         self.assertIn("systemd-sysusers.service", service)
         self.assertIn("ReadWritePaths=/data/sovereign/capabilities", service)
+        # RFC-0018: the Home Assistant access token's own writable
+        # directory, deliberately separate from
+        # /data/sovereign/secrets/pihole-admin-password's own -- a
+        # compromised sovereign-conversation.service process must gain no
+        # new ability to touch Pi-hole's credential.
+        self.assertIn("/data/sovereign/secrets/home-assistant", service)
 
     def test_group_declared_via_sysusers(self):
         content = SYSUSERS.read_text()

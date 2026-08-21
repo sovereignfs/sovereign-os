@@ -141,6 +141,8 @@ class Capability:
         timeout_seconds=DEFAULT_TIMEOUT_SECONDS,
         max_result_bytes=DEFAULT_MAX_RESULT_BYTES,
         max_invocations_per_turn=DEFAULT_MAX_INVOCATIONS_PER_TURN,
+        policy_key="external_enabled",
+        policy_check=None,
     ):
         fail(side_effect in SIDE_EFFECTS, "INVALID_CAPABILITY", f"Unknown side_effect '{side_effect}'")
         fail(network in NETWORKS, "INVALID_CAPABILITY", f"Unknown network '{network}'")
@@ -155,6 +157,20 @@ class Capability:
         self.timeout_seconds = timeout_seconds
         self.max_result_bytes = max_result_bytes
         self.max_invocations_per_turn = max_invocations_per_turn
+        # RFC-0018: web.search/web.fetch share one blanket "is any external
+        # capability allowed at all" flag (policy_key's default,
+        # "external_enabled"), but Home Assistant needs its own, distinct
+        # toggle -- enabling web search must not silently also enable Home
+        # Assistant. policy_key names which policy dict key stage 3 checks
+        # for this capability; policy_check is an optional further check
+        # (arguments, policy) -> raises CapabilityError, run immediately
+        # after, for policy decisions that depend on the specific proposed
+        # arguments (Home Assistant's entity allowlist) rather than a
+        # single whole-capability bool. Both default to today's existing
+        # behavior exactly, so every capability that doesn't need this
+        # stays unaffected.
+        self.policy_key = policy_key
+        self.policy_check = policy_check
 
 
 class Registry:
@@ -298,10 +314,12 @@ def invoke(
         stage_reached = "policy_checked"
         if capability.network == "external":
             fail(
-                bool(policy.get("external_enabled", False)),
+                bool(policy.get(capability.policy_key, False)),
                 "CAPABILITY_DISABLED",
                 f"'{name}' is disabled by policy (external network capabilities are opt-in)",
             )
+        if capability.policy_check is not None:
+            capability.policy_check(arguments, policy)
 
         stage_reached = "confirmed"
         if capability.confirmation == "required":

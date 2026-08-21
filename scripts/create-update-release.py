@@ -32,6 +32,7 @@ APPLIANCE_FILES = {
     "console/index.html": 0o644,
     "lib/sovereign_capabilities.py": 0o644,
     "lib/sovereign_conversation.py": 0o644,
+    "lib/sovereign_homeassistant.py": 0o644,
     "lib/sovereign_inference.py": 0o644,
     "lib/sovereign_pihole.py": 0o644,
     "lib/sovereign_system.py": 0o644,
