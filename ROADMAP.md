@@ -644,8 +644,9 @@ Milestone 01.2 will deliver:
 ### 5. Home Automation Integration
 
 **Status:** 🟡 In progress — first (read-only) slice implemented, unit-tested,
-and manually verified in Console; real-hardware qualification blocked on an
-external dependency (see below)
+and manually verified in Console; second (allowlisted-action) slice
+drafted as RFC-0019, awaiting review; real-hardware qualification of
+either slice blocked on an external dependency (see below)
 
 **Depends on:** Qualified capability executor (satisfied — see Milestone 4's
 real-hardware qualification of the confirmation/policy/audit machinery via
@@ -684,6 +685,24 @@ Assistant itself — **real-hardware qualification is blocked**, not merely
 pending: confirmed with the project owner that no Home Assistant instance
 currently exists on the household network, so this milestone has no
 target to qualify against yet. This stays an open item until one does.
+
+[RFC-0019](docs/rfcs/0019-home-assistant-allowlisted-action-capability-mapping.md)
+(Draft) maps the second slice's one capability
+(`home_assistant.set_entity_state`), answering RFC-0003/RFC-0004's
+shared, explicitly-deferred question of what mutating-capability
+confirmation UX should look like now that a real mutating capability
+exists to design one around. Deliberately scoped to `light`/`switch`
+domains only (binary, fully reversible, no numeric range or safety
+implication) — every other domain (locks, climate, covers, cameras) is
+named as out of scope for a future RFC, the concrete answer to
+"confirmation according to risk": narrower scope, not a new confirmation
+tier RFC-0003's table doesn't have. Introduces a second, independent
+allowlist and policy toggle (`controllable_entities`/
+`home_assistant_control_enabled`) so enabling read access never silently
+enables control, mirroring RFC-0018's own web-search/Home-Assistant
+separation one level deeper. Not yet implemented; real-hardware
+qualification depends on the same unresolved external dependency
+(no Home Assistant instance yet) named above.
 
 ### 6. Full Base-OS Updates
 
@@ -785,9 +804,10 @@ This milestone closes the remaining “flash once” gap.
   Accepted); a real signed-release qualification (artifact/import systemd
   paths, the real hardened sandbox) remains
 - 🟡 Home Assistant capability integration — read-only entity/history
-  mapping (RFC-0018) implemented and Console-wired; real-hardware
-  qualification blocked on no Home Assistant instance existing on the
-  household network yet
+  mapping (RFC-0018) implemented and Console-wired; allowlisted-action
+  mapping (RFC-0019, `light`/`switch` only) drafted, awaiting review;
+  real-hardware qualification of either blocked on no Home Assistant
+  instance existing on the household network yet
 - ✅ A/B full base-OS updates (RFC-0016): every Acceptance Criteria item
   hardware-qualified, including a second base-OS update with no
   reflash, the Console panel against a live transaction, and a genuine

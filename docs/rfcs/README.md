@@ -15,6 +15,7 @@ RFCs are proposals, not decisions. Start with the [RFC template](../templates/rf
 - [RFC-0016: Full base-OS updates (A/B root filesystem)](0016-full-base-os-updates.md) - Accepted
 - [RFC-0017: web.search and web.fetch capability mapping](0017-web-search-and-fetch-capability-mapping.md) - Accepted
 - [RFC-0018: Home Assistant read-only capability mapping](0018-home-assistant-read-only-capability-mapping.md) - Accepted
+- [RFC-0019: Home Assistant allowlisted-action capability mapping](0019-home-assistant-allowlisted-action-capability-mapping.md) - Draft
 
 RFC-0001 refers to earlier platform work and remains unwritten; create it
 only when its problem and evidence are mature enough for a concrete
@@ -49,3 +50,9 @@ stage-numbering inconsistency and a disclosed, non-blocking TLS gap.
 Implementation (capability, executor generalization, and Console settings
 UI) shipped the same day, real-hardware qualification blocked on no Home
 Assistant instance existing on the household network yet.
+
+RFC-0019 is Milestone 5's second document (the allowlisted-action slice
+— `home_assistant.set_entity_state`, scoped to `light`/`switch` only),
+drafted 2026-08-21 against RFC-0003/RFC-0004's shared, on-the-record
+deferral of mutating-capability confirmation UX to whichever RFC ships
+the first mutating capability. Awaiting project-owner review.
