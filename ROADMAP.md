@@ -444,15 +444,39 @@ the artifact/import systemd paths and `sovereign-conversation.service`'s
 real `DynamicUser` sandbox remain unexercised (that directory-creation
 question is still open, named in the report's own Limitations).
 
-**Not yet done:** wiring SearXNG into the
-release-bundle/update-release tooling
-(`scripts/create-release-bundle.py`/`create-update-release.py`) the way
-Pi-hole and llama.cpp already are; `sovereign-update`'s own
-component-digest validation, which llama.cpp itself also doesn't have
-yet (a disclosed, shared gap, not specific to SearXNG); and a real
-`rpi-image-gen` build/flash/signed-update qualification of everything in
-this milestone section, so the artifact/import systemd paths and the
-real hardened sandbox get their first genuine exercise.
+**Release tooling is now wired for SearXNG — and a pre-existing llama.cpp
+gap it surfaced is fixed too.** `scripts/create-release-bundle.py` and
+`create-update-release.py` now handle SearXNG's env/OCI-tar/manifest
+component the same way they already handle Pi-hole and llama.cpp.
+Investigating this surfaced a real, pre-existing defect (see the
+[signed-release qualification assessment](docs/research/searxng-signed-release-qualification-assessment.md)):
+the installed `sovereign-update`'s manifest-schema validation and
+`activate_release` were still Pi-hole-only and hardcoded, so any real
+release manifest `create-update-release.py` has produced since llama.cpp
+was added (with a `components.llama` key) would have been rejected
+outright by the installed updater, and llama's own OCI image was never
+actually `docker load`ed on activation. Both are now a single data-driven
+`IMAGE_COMPONENTS` loop covering all three images uniformly
+(`RELEASE_FILES`, the manifest JSON Schema, `validate_release_payload`,
+`activate_release`), with the full update test suite (519 tests) updated
+and passing.
+
+**Still not done, and not achievable without the maintainer's direct
+involvement:** a real `rpi-image-gen` build/flash/signed-update
+qualification of everything in this milestone section, so the
+artifact/import systemd paths and `sovereign-conversation.service`'s real
+`DynamicUser` sandbox get their first genuine exercise. The assessment
+above found this is blocked by three independent, stacking reasons: new
+systemd units cannot reach an already-flashed device through the
+appliance-update mechanism at all (only a base-OS A/B update can, which
+means a full base-OS image build); a real base-OS image build is
+CI-only (native ARM64 GitHub Actions, up to 2 hours, `workflow_dispatch`);
+and signing is, by this project's unbroken precedent
+([ADR-0006](docs/adrs/0006-production-signing-key-custody.md)), a manual
+step the maintainer performs offline with a key the assistant never
+handles. Compose-template validation for llama.cpp's and SearXNG's own
+templates (the way Pi-hole's already is) also remains unextended — a
+smaller, separately scoped follow-up.
 
 **Conversation Service:** implemented — `sovereign_conversation.py`
 (RFC-0003/0004's bounded propose→execute→narrate loop: max 3 rounds per

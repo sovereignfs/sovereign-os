@@ -26,5 +26,6 @@ Research documents establish evidence before the project commits to an implement
 
 - [Pi-hole API assessment](pihole-api-assessment.md)
 - [SearXNG deployment assessment](searxng-deployment-assessment.md) - Concluded (desk research); recommends embedding shape, port, and settings.yml overrides for a future web.search/web.fetch RFC; hardware qualification (digest pin, real footprint, real JSON schema) still pending
+- [SearXNG signed-release qualification assessment](searxng-signed-release-qualification-assessment.md) - Concluded (desk research); real signed-release qualification blocked on CI build + maintainer signing + base-OS update, not achievable from a desk session; found and fixed a pre-existing bug where llama.cpp's own image-import was never wired into the real updater
 
 Use the [research-note template](../templates/research-note.md). Conclusions should identify which RFC or decision they inform.

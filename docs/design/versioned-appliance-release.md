@@ -33,12 +33,19 @@ pointer:
 /opt/sovereign/releases/<version>/
 ├── sovereign-release
 ├── pihole-image.env
+├── llama-image.env
+├── searxng-image.env
 └── appliance/
     ├── bin/
     │   ├── console-auth
     │   ├── console-health
+    │   ├── sovereign-conversation
     │   ├── start-pihole
     │   ├── stop-pihole
+    │   ├── start-llama-server
+    │   ├── stop-llama-server
+    │   ├── start-searxng
+    │   ├── stop-searxng
     │   ├── verify-local-access
     │   └── verify-update-health
     ├── console/
@@ -46,11 +53,26 @@ pointer:
     │   └── assets/
     │       ├── console.css
     │       └── console.js
+    ├── lib/
+    │   └── sovereign_*.py
     ├── nginx/
     │   └── sovereign.conf
-    └── pihole/
-        └── compose.yaml.in
+    ├── pihole/
+    │   └── compose.yaml.in
+    ├── llama/
+    │   ├── compose.yaml.in
+    │   └── model.env
+    └── searxng/
+        ├── compose.yaml.in
+        └── settings.yml
 ```
+
+`sovereign-update` imports each of the three OCI-image components
+(`pihole`, `llama`, `searxng`) through the same generic, data-driven loop —
+it `docker load`s the matching `*-arm64.oci.tar` (transient release-bundle
+content, not copied into the final `/opt/sovereign/releases/<version>/`
+directory above) and cross-checks the imported digest against the signed
+manifest's `components.<name>.digest` before activation proceeds.
 
 Credentials, Pi-hole configuration/database state, generated Compose content,
 backups, transaction journals, and household data remain under
