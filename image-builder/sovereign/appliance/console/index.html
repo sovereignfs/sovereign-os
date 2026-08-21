@@ -204,13 +204,13 @@
       <section id="page-home" class="console-page" hidden aria-labelledby="home-title">
         <div class="preview-banner">
           <strong>Preview</strong>
-          <span>Home Assistant <em>control</em> (turning things on or off) is part of a later milestone and isn't available on this device yet — the recent-operations and capability-scope sections below show that planned design. Reading allowlisted entities and their history is real today; connect it below.</span>
+          <span>Turning allowlisted lights and switches on or off is real today, below. Broader control (locks, climate, covers, cameras) and the automations/operations ledger are part of a later milestone and aren't available on this device yet — the recent-operations and capability-scope sections below show that planned design.</span>
         </div>
         <div class="hero">
           <div>
-            <p class="eyebrow">Read-only integration</p>
+            <p class="eyebrow">Read and light/switch control</p>
             <h1 id="home-title">Home Assistant</h1>
-            <p class="lede">What the assistant may read in your home, and the history it can answer questions about.</p>
+            <p class="lede">What the assistant may read in your home, the history it can answer questions about, and the lights and switches it may turn on or off.</p>
           </div>
           <div class="status-panel">
             <span id="ha-status-pill" class="pill neutral">Not connected</span>
@@ -231,6 +231,13 @@
               <span>Allow Home Assistant</span>
             </label>
             <span class="policy-detail">Reads only the entities you allow below. Leaves your device only when you approve a specific request.</span>
+          </div>
+          <div id="ha-control-policy-row" class="policy-row" hidden>
+            <label class="switch">
+              <input type="checkbox" id="ha-control-enabled-toggle" disabled>
+              <span>Allow control</span>
+            </label>
+            <span class="policy-detail">Turns allowlisted lights and switches on or off, only with your approval each time. Independent of the read setting above.</span>
           </div>
           <div class="field grow">
             <label for="ha-base-url-host">Base URL</label>
@@ -258,12 +265,13 @@
           <div class="panel-heading">
             <div>
               <p class="eyebrow">Allowlist</p>
-              <h2 id="ha-entities-title">Entities the assistant may read</h2>
+              <h2 id="ha-entities-title">Entities the assistant may read and control</h2>
             </div>
-            <button id="ha-save-allowlist" type="button" class="btn primary sm" hidden>Save allowlist</button>
+            <button id="ha-save-allowlist" type="button" class="btn primary sm" hidden>Save entity settings</button>
           </div>
+          <p class="policy-detail" id="ha-entities-hint" hidden>Control is only offered for lights and switches, and only once Read is checked for that entity.</p>
           <div id="ha-entities-list" aria-live="polite">
-            <p class="placeholder">Sign in, save a connection, then load entities to choose which ones the assistant may read.</p>
+            <p class="placeholder">Sign in, save a connection, then load entities to choose which ones the assistant may read and control.</p>
           </div>
           <p id="ha-entities-message" role="status" aria-live="polite"></p>
         </div>

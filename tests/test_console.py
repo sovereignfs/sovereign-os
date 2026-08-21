@@ -532,20 +532,54 @@ class ConsoleTests(unittest.TestCase):
         self.assertRegex(home_section, r'id="ha-save-allowlist"[^>]*hidden')
         self.assertEqual(home_section.count('type="password"'), 1)
 
+    def test_home_assistant_control_settings_start_hidden_and_disabled_in_markup(self):
+        html = HTML.read_text()
+        home_section = html[html.index('id="page-home"') : html.index('id="page-activity"')]
+
+        self.assertRegex(home_section, r'id="ha-control-policy-row"[^>]*hidden')
+        self.assertRegex(home_section, r'id="ha-control-enabled-toggle"[^>]*disabled')
+        self.assertRegex(home_section, r'id="ha-entities-hint"[^>]*hidden')
+
     def test_home_assistant_settings_shown_and_loaded_on_sign_in_hidden_and_reset_on_sign_out(self):
         javascript = JAVASCRIPT.read_text()
 
         signed_in_start = javascript.index("function showSignedIn")
         signed_in_block = javascript[signed_in_start : javascript.index("\n}", signed_in_start)]
         self.assertIn("haPolicyRow.hidden = false", signed_in_block)
+        self.assertIn("haControlPolicyRow.hidden = false", signed_in_block)
+        self.assertIn("haEntitiesHint.hidden = false", signed_in_block)
         self.assertIn("setHaFieldsEnabled(true)", signed_in_block)
         self.assertIn("loadHomeAssistantConfig()", signed_in_block)
 
         signed_out_start = javascript.index("function showSignedOut")
         signed_out_block = javascript[signed_out_start : javascript.index("\n}", signed_out_start)]
         self.assertIn("haPolicyRow.hidden = true", signed_out_block)
+        self.assertIn("haControlPolicyRow.hidden = true", signed_out_block)
+        self.assertIn("haEntitiesHint.hidden = true", signed_out_block)
         self.assertIn("setHaFieldsEnabled(false)", signed_out_block)
         self.assertIn("resetHomeAssistantSettingsUI()", signed_out_block)
+
+    def test_home_assistant_control_toggle_disabled_state_follows_read_toggle(self):
+        javascript = JAVASCRIPT.read_text()
+
+        set_fields_start = javascript.index("function setHaFieldsEnabled")
+        set_fields_block = javascript[set_fields_start : javascript.index("\n}", set_fields_start)]
+        self.assertIn("haControlEnabledToggle.disabled = !enabled", set_fields_block)
+
+        reset_start = javascript.index("function resetHomeAssistantSettingsUI")
+        reset_block = javascript[reset_start : javascript.index("\n}", reset_start)]
+        self.assertIn("haControlEnabledToggle.checked = false", reset_block)
+
+    def test_home_assistant_control_config_is_loaded_and_saved(self):
+        javascript = JAVASCRIPT.read_text()
+
+        load_start = javascript.index("async function loadHomeAssistantConfig")
+        load_block = javascript[load_start : javascript.index("\n}", load_start)]
+        self.assertIn("haControlEnabledToggle.checked = Boolean(data.control_enabled)", load_block)
+
+        save_start = javascript.index("async function saveHomeAssistantConfig")
+        save_block = javascript[save_start : javascript.index("\nhaSaveConnectionButton", save_start)]
+        self.assertIn("control_enabled: haControlEnabledToggle.checked", save_block)
 
     def test_home_assistant_config_endpoint_reads_and_writes_authenticated(self):
         javascript = JAVASCRIPT.read_text()
@@ -609,6 +643,35 @@ class ConsoleTests(unittest.TestCase):
         load_entities_block = javascript[load_entities_start : javascript.index("\n});", load_entities_start)]
         self.assertIn('credentials: "same-origin"', load_entities_block)
         self.assertIn("X-CSRF-Token", load_entities_block)
+
+    def test_render_ha_entities_offers_control_only_for_light_and_switch_domains(self):
+        javascript = JAVASCRIPT.read_text()
+
+        self.assertIn('const HA_CONTROLLABLE_DOMAINS = new Set(["light", "switch"]);', javascript)
+
+        render_start = javascript.index("function renderHaEntities")
+        render_block = javascript[render_start : javascript.index("\nfunction ", render_start + 1)]
+        self.assertIn("const controllable = HA_CONTROLLABLE_DOMAINS.has(entity.domain);", render_block)
+        # Control must never be offered, let alone checked, for a
+        # non-controllable domain -- only built inside the `if (controllable)` branch.
+        self.assertIn("if (controllable) {", render_block)
+
+        # Unchecking Read must cascade: uncheck Control, remove the
+        # entity from haControllableEntities, and re-disable the
+        # checkbox -- otherwise a stale control grant could survive
+        # a household member revoking read access to the same entity.
+        read_listener_start = render_block.index('readCheckbox.addEventListener("change"')
+        read_listener_block = render_block[read_listener_start : render_block.index("});", read_listener_start)]
+        self.assertIn("controlCheckbox.checked = false;", read_listener_block)
+        self.assertIn(
+            "haControllableEntities = haControllableEntities.filter((id) => id !== entity.entity_id);",
+            read_listener_block,
+        )
+        self.assertIn("controlCheckbox.disabled = !readCheckbox.checked;", read_listener_block)
+
+        # The Control checkbox itself starts disabled whenever Read
+        # isn't already checked for that entity.
+        self.assertIn("controlCheckbox.disabled = !readCheckbox.checked;", render_block)
 
     def test_external_capability_names_include_home_assistant(self):
         javascript = JAVASCRIPT.read_text()
