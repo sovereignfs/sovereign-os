@@ -645,7 +645,7 @@ Milestone 01.2 will deliver:
 
 **Status:** 🟡 In progress — first (read-only) slice implemented, unit-tested,
 and manually verified in Console; second (allowlisted-action) slice
-drafted as RFC-0019, awaiting review; real-hardware qualification of
+accepted as RFC-0019, not yet implemented; real-hardware qualification of
 either slice blocked on an external dependency (see below)
 
 **Depends on:** Qualified capability executor (satisfied — see Milestone 4's
@@ -687,7 +687,7 @@ currently exists on the household network, so this milestone has no
 target to qualify against yet. This stays an open item until one does.
 
 [RFC-0019](docs/rfcs/0019-home-assistant-allowlisted-action-capability-mapping.md)
-(Draft) maps the second slice's one capability
+(Accepted 2026-08-21) maps the second slice's one capability
 (`home_assistant.set_entity_state`), answering RFC-0003/RFC-0004's
 shared, explicitly-deferred question of what mutating-capability
 confirmation UX should look like now that a real mutating capability
@@ -700,9 +700,15 @@ tier RFC-0003's table doesn't have. Introduces a second, independent
 allowlist and policy toggle (`controllable_entities`/
 `home_assistant_control_enabled`) so enabling read access never silently
 enables control, mirroring RFC-0018's own web-search/Home-Assistant
-separation one level deeper. Not yet implemented; real-hardware
-qualification depends on the same unresolved external dependency
-(no Home Assistant instance yet) named above.
+separation one level deeper. Review before acceptance found a real gap:
+domain scope was claimed enforced at three points but only one
+(config write) was actually designed — closed by adding two independent
+domain re-checks, since Home Assistant's `climate` domain has real
+`turn_on`/`turn_off` services that wouldn't have failed safely by
+accident if a non-light/switch entity ever reached the service call.
+Not yet implemented; real-hardware qualification depends on the same
+unresolved external dependency (no Home Assistant instance yet) named
+above.
 
 ### 6. Full Base-OS Updates
 
@@ -805,9 +811,9 @@ This milestone closes the remaining “flash once” gap.
   paths, the real hardened sandbox) remains
 - 🟡 Home Assistant capability integration — read-only entity/history
   mapping (RFC-0018) implemented and Console-wired; allowlisted-action
-  mapping (RFC-0019, `light`/`switch` only) drafted, awaiting review;
-  real-hardware qualification of either blocked on no Home Assistant
-  instance existing on the household network yet
+  mapping (RFC-0019, `light`/`switch` only) accepted, not yet
+  implemented; real-hardware qualification of either blocked on no Home
+  Assistant instance existing on the household network yet
 - ✅ A/B full base-OS updates (RFC-0016): every Acceptance Criteria item
   hardware-qualified, including a second base-OS update with no
   reflash, the Console panel against a live transaction, and a genuine

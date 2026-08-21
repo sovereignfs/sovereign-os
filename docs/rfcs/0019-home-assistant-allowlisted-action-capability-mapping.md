@@ -1,6 +1,6 @@
 # RFC-0019: Home Assistant Allowlisted-Action Capability Mapping
 
-**Status:** Draft
+**Status:** Accepted (2026-08-21, project creator)
 **Author:** Project creator and Claude
 **Created:** 2026-08-21
 **Reviewers:** Project creator
@@ -236,14 +236,44 @@ construction — see below), not merely by convention:
   physical-security and privacy implications neither reading nor a
   simple on/off model addresses. All are real, anticipated future
   capabilities — deliberately not designed here.
-- **Enforced, not merely documented.** `write_config()` (extended below)
-  rejects any `controllable_entities` entry whose domain (the
-  `entity_id`'s own dot-prefix, e.g. `light` in `light.kitchen` — the
-  same derivation RFC-0018's `fetch_all_states`/`make_list_entities_implementation`
-  already use) is not `light` or `switch`, regardless of how the entry
-  was submitted — a raw API call bypassing any future Console picker
-  gets the identical rejection, not just a UI that happens not to offer
-  the option.
+- **Enforced independently at three separate points, not derived once
+  and trusted downstream — found to matter concretely, not just in
+  principle, during this RFC's own review (see below).**
+  1. `write_config()` (extended below) rejects any `controllable_entities`
+     entry whose domain (the `entity_id`'s own dot-prefix, e.g. `light`
+     in `light.kitchen` — the same derivation RFC-0018's
+     `fetch_all_states`/`make_list_entities_implementation` already use)
+     is not `light` or `switch`, regardless of how the entry was
+     submitted — a raw API call bypassing any future Console picker gets
+     the identical rejection, not just a UI that happens not to offer the
+     option.
+  2. The executor's stage-3 `policy_check` for this capability re-derives
+     the domain from the proposed `entity_id` and independently confirms
+     it is `light`/`switch` before proceeding — not merely checking list
+     membership and trusting that membership implies a safe domain.
+  3. The implementation itself, immediately before constructing the
+     `POST /api/services/<domain>/...` URL, performs the identical
+     independent check a third time and refuses to proceed if it ever
+     fails — see Idempotent No-Ops.
+
+     Points 2 and 3 are not redundant paranoia: this RFC's own review
+     found that Home Assistant's `climate` domain has real, valid
+     `climate.turn_on`/`climate.turn_off` services (confirmed against
+     Home Assistant's own documentation) — meaning if a non-light/switch
+     entity ever reached the service-call construction step (a write-time
+     validation bug, direct config-file corruption, or a future code
+     change that weakens `write_config()`'s check), deriving `domain`
+     from `entity_id` and calling that domain's `turn_on`/`turn_off`
+     would not fail loudly by accident the way an obviously-wrong service
+     name might. `lock` entities (`lock.lock`/`lock.unlock`, not
+     `turn_on`/`turn_off`) happen to fail safely if this ever occurred;
+     `climate` does not. Relying on that asymmetry — safe for some
+     domains, not others, and never by design — is exactly the kind of
+     incidental, unverified safety property this project's own precedent
+     (RFC-0017's SSRF policy: "resolve before connecting," never trust a
+     one-time earlier check) already rejects. The independent re-check at
+     both stage 3 and inside the implementation closes this for real,
+     rather than relying on write-time validation never having a bug.
 
 ### `home_assistant.set_entity_state`
 
@@ -294,7 +324,10 @@ service-call endpoint at all:
   already-off light does not generate an unnecessary Home Assistant
   request, and the model gets an accurate, narratable answer ("already
   off") rather than a generic success that implies something happened.
-- **Current state differs:** calls
+- **Current state differs:** first re-derives `domain` from `entity_id`'s
+  own prefix and independently asserts it is `light` or `switch` — see
+  Domain Scope's third enforcement point above, not merely trusted from
+  the allowlist membership check — then calls
   `POST /api/services/<domain>/turn_on` or `.../turn_off` with
   `{"entity_id": entity_id}`, then verifies the response's changed-states
   list actually contains `entity_id` with the expected new state before
@@ -345,16 +378,38 @@ was about genuinely unrelated features):
   alongside RFC-0018's existing three fields, for the executor's
   stage-3 `policy_key` gate and this capability's own `policy_check` to
   read.
-- **`_policy_check` (extended, shared with RFC-0018's read-only pair
-  where applicable):** for `set_entity_state` specifically, checks
-  `home_assistant_configured` (unchanged from RFC-0018), then
-  `entity_id in home_assistant_controllable_entities` — rejected with a
-  distinct `ENTITY_NOT_CONTROLLABLE` (not RFC-0018's
-  `ENTITY_NOT_ALLOWLISTED`, even though the underlying shape of "not on
-  the right list" is similar — a household reading the audit log or a
-  denied-proposal narration should be able to tell "not readable" apart
-  from "readable but not controllable," since they imply different next
-  steps).
+- **A second, distinct `policy_check` function — not a literal reuse of
+  RFC-0018's `_policy_check`.** RFC-0018's own `_policy_check` validates
+  against `home_assistant_allowlist` and raises `ENTITY_NOT_ALLOWLISTED`;
+  this capability needs to validate against a *different* policy field
+  (`home_assistant_controllable_entities`) and raise a *different* code
+  (`ENTITY_NOT_CONTROLLABLE`), so it cannot literally be the same
+  function passed to both registrations the way `policy_key` mechanically
+  can be a shared default. The only piece genuinely shared between the
+  two is the `home_assistant_configured` check (the connection itself
+  being reachable/set up is a prerequisite for both reading and
+  controlling) — naturally factored into one small helper both
+  `policy_check` functions call, rather than duplicated, but that's an
+  implementation-level structuring choice, not an architectural one this
+  RFC needs to fix. Concretely, `set_entity_state`'s own `policy_check`:
+  1. Checks `home_assistant_configured` (shared helper, unchanged from
+     RFC-0018).
+  2. Checks `entity_id in home_assistant_controllable_entities` — rejects
+     with `ENTITY_NOT_CONTROLLABLE` (distinct from RFC-0018's
+     `ENTITY_NOT_ALLOWLISTED`, even though the underlying shape of "not on
+     the right list" is similar — a household reading the audit log or a
+     denied-proposal narration should be able to tell "not readable" apart
+     from "readable but not controllable," since they imply different
+     next steps).
+  3. **Defensively also checks `entity_id in home_assistant_allowlist`**
+     (RFC-0018's own read allowlist field) even though `write_config()`
+     already enforces `controllable_entities ⊆ allowlisted_entities` at
+     write time — a mutating, physical-effect capability's authorization
+     path re-verifying an invariant that's supposed to already hold,
+     rather than trusting it silently, is proportionate to what this
+     capability can actually do if the invariant is ever wrong.
+  4. Independently re-derives and checks the entity's domain is
+     `light`/`switch` — see Domain Scope's three-point enforcement above.
 
 ### Confirmation Disclosure and Receipt
 
@@ -397,9 +452,10 @@ Model proposes home_assistant.set_entity_state(
     {"entity_id": "light.kitchen", "state": "off"})    [RFC-0004 flow]
     -> RFC-0003 executor stage 2: validate arguments (state in {on, off})
     -> stage 3: check policy_key (home_assistant_control_enabled must be
-       true) -> policy_check (home_assistant_configured, then
-       entity_id in controllable_entities)
-    -> stage 3 fails at either check -> rejection appended to context
+       true) -> policy_check (home_assistant_configured, entity_id in
+       controllable_entities AND in allowlisted_entities, entity_id's own
+       domain independently re-derived and confirmed light/switch)
+    -> stage 3 fails at any check -> rejection appended to context
        (CAPABILITY_DISABLED or ENTITY_NOT_CONTROLLABLE), no confirmation
        ever generated
     -> stage 3 passes, confirmation required (structural, mutating +
@@ -412,9 +468,11 @@ Model proposes home_assistant.set_entity_state(
     -> confirmation_store.consume() -> invoke() proceeds through stage 5:
        GET /api/states/light.kitchen (current state) -> already "off"?
        return changed: false without contacting Home Assistant again |
-       differs -> POST /api/services/light/turn_off {"entity_id":
-       "light.kitchen"} -> verify light.kitchen appears in the response's
-       changed-states list with the expected state -> changed: true
+       differs -> re-derive and re-confirm domain is light/switch (third
+       independent check, see Domain Scope) -> POST /api/services/light/
+       turn_off {"entity_id": "light.kitchen"} -> verify light.kitchen
+       appears in the response's changed-states list with the expected
+       state -> changed: true
     -> result appended to context as a structured, narratable receipt
 ```
 
@@ -429,11 +487,17 @@ Model proposes home_assistant.set_entity_state(
   construction (`controllable_entities ⊆ allowlisted_entities`, enforced
   at write time, not by convention) — a household can never end up able
   to control an entity it hasn't already chosen to let the assistant see.
-- Domain restriction is enforced at write time, independent of whatever
-  UI or API path submitted the config — a raw, hand-crafted API call
-  attempting to add a `lock.*` or `climate.*` entity to
-  `controllable_entities` is rejected identically to a UI that simply
-  never offers the option.
+- Domain restriction is enforced independently at three points (write
+  time, policy check, and immediately before the service call itself —
+  Domain Scope), not derived once and trusted downstream. This matters
+  concretely, not just defensively: `climate.turn_on`/`climate.turn_off`
+  are real Home Assistant services, so a `climate.*` entity that ever
+  reached service-call construction would not fail safely by accident —
+  unlike, say, `lock.*`, which happens to use different service names
+  entirely. A raw, hand-crafted API call attempting to add a `lock.*` or
+  `climate.*` entity to `controllable_entities` is rejected at write
+  time; even a hypothetical bypass of that check is still caught before
+  any request reaches Home Assistant.
 - The two independent policy toggles (`home_assistant_enabled` for
   reading, `home_assistant_control_enabled` for acting) mean a household
   that wants Sovereign to answer "what's the temperature" without ever
@@ -523,6 +587,16 @@ redesigning the allowlist/policy-toggle relationship this RFC establishes.
   domain isn't `light`/`switch` even if it *is* in `allowlisted_entities`
   (proving the domain check isn't merely a consequence of the subset
   check); accepts a valid light/switch subset.
+- Domain-bypass test, adversarial by design (the concrete finding from
+  this RFC's own review): construct a `policy` dict directly (bypassing
+  `write_config()` entirely, the same way RFC-0017's own SSRF tests mock
+  DNS resolution to bypass the normal request path) with a `climate.*`
+  or `lock.*` entity present in `home_assistant_controllable_entities` —
+  both `policy_check` and the implementation itself must independently
+  reject it, proving domain enforcement does not depend on
+  `write_config()` having done its job correctly. Directly verifies the
+  `climate.turn_on`/`climate.turn_off` finding above can't reach a real
+  service call even if the allowlist itself is somehow wrong.
 - Policy-gate tests: `home_assistant_control_enabled: false` (the real
   default) rejects the capability before confirmation, independent of
   `home_assistant_enabled`'s own value — directly verifying enabling
@@ -656,6 +730,13 @@ above:
 - A proposal for an entity outside `controllable_entities` is rejected
   with `ENTITY_NOT_CONTROLLABLE` before any confirmation is generated and
   before any Home Assistant request is attempted.
+- A `controllable_entities` entry whose domain is not `light`/`switch` is
+  rejected at both `policy_check` and inside the implementation itself,
+  even when constructed to bypass `write_config()`'s own check entirely
+  — verified directly against a `climate.*` entity specifically (this
+  RFC's own review finding: `climate.turn_on`/`climate.turn_off` are
+  real Home Assistant services, so this domain cannot be assumed to fail
+  safely by accident the way an invalid service name might).
 - A proposal matching the entity's current state resolves as
   `changed: false` without any request to Home Assistant's service-call
   endpoint — verified directly.
@@ -694,5 +775,35 @@ from build-out:
 
 ## Decision
 
-Leave blank until review. Record approval, rejection, or requested
-changes with date and owner.
+**Accepted (2026-08-21, project creator, reviewed by Claude at the
+project creator's direction).** The `home_assistant.set_entity_state`
+mapping, its `light`/`switch`-only domain scope, the two-allowlist/
+two-toggle authorization design, and the idempotent-no-op behavior are
+accepted as this milestone's platform contract for its first mutating
+capability.
+
+This review found one substantive, safety-relevant gap and fixed it
+before acceptance rather than after: the original draft claimed domain
+scope was "enforced at three independent points" but only actually
+specified one (config write) — the other two were asserted, not
+designed. Checking whether that mattered in practice (not just in
+principle) found that it does: Home Assistant's `climate` domain has
+real `climate.turn_on`/`climate.turn_off` services, so a non-light/switch
+entity that ever reached this capability's service-call construction
+step — through a write-time validation bug, direct config-file
+corruption, or a future code change — would not have failed safely by
+accident the way an invalid service name might have. The design now
+requires two additional, independent domain re-checks (at the executor's
+`policy_check` stage and immediately before the service-call URL is
+built), a defensive `entity_id in allowlisted_entities` re-check
+alongside the `controllable_entities` check, and a corrected internal
+cross-reference (Idempotent No-Ops pointed at Domain Scope with the wrong
+direction — "below" where it needed "above"). None of this changes the
+capability's external contract; all of it is now spelled out precisely
+enough that Testing Strategy and Acceptance Criteria can actually hold
+the implementation to it, rather than trusting a single validation layer
+to never have a bug.
+
+The Unresolved Questions above are accepted as non-blocking follow-ups,
+matching this project's standing precedent for RFC Unresolved Questions
+sections.
