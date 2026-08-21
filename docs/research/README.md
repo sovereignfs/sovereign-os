@@ -25,5 +25,6 @@ Research documents establish evidence before the project commits to an implement
 ## Deferred Platform Research
 
 - [Pi-hole API assessment](pihole-api-assessment.md)
+- [SearXNG deployment assessment](searxng-deployment-assessment.md) - Concluded (desk research); recommends embedding shape, port, and settings.yml overrides for a future web.search/web.fetch RFC; hardware qualification (digest pin, real footprint, real JSON schema) still pending
 
 Use the [research-note template](../templates/research-note.md). Conclusions should identify which RFC or decision they inform.

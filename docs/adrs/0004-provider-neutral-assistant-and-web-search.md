@@ -77,8 +77,18 @@ configured upstream engines and result pages remain external content.
   implemented and hardware-qualified
   (`sovereign_capabilities.py`, `sovereign_pihole.py`,
   `sovereign_system.py`).
-- ⚪ Document SearXNG deployment, upstream configuration, retention, and
-  failure behavior — not started.
+- 🟡 Document SearXNG deployment, upstream configuration, retention, and
+  failure behavior — desk research concluded, see
+  [searxng-deployment-assessment.md](../research/searxng-deployment-assessment.md)
+  (embedding shape, local port, and the three `settings.yml` defaults that
+  need overriding for a private single-user instance).
+  [RFC-0017](../rfcs/0017-web-search-and-fetch-capability-mapping.md)
+  (Draft, 2026-08-21) proposes the capability mapping itself — schemas,
+  the confirmation pause/resume wire format, the `external_enabled`
+  policy-state design, and the SSRF-safe `web.fetch` policy — awaiting
+  project-owner review. Still not started: a real pinned ARM64 image
+  digest, real resource-footprint measurement on this project's own
+  device, and the real JSON response schema.
 - ⚪ Update the data inventory and threat model before processing real
   conversations or external content — not started.
 - ✅ Record the selected runner and initial model in a later ADR —

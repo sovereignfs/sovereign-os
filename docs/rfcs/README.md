@@ -13,6 +13,7 @@ RFCs are proposals, not decisions. Start with the [RFC template](../templates/rf
 - [RFC-0014: Appliance update system](0014-appliance-update-system.md) - Implemented
 - [RFC-0015: Update discovery - channel metadata and device-side checking](0015-update-discovery.md) - Accepted
 - [RFC-0016: Full base-OS updates (A/B root filesystem)](0016-full-base-os-updates.md) - Accepted
+- [RFC-0017: web.search and web.fetch capability mapping](0017-web-search-and-fetch-capability-mapping.md) - Draft
 
 RFC-0001 refers to earlier platform work and remains unwritten; create it
 only when its problem and evidence are mature enough for a concrete
@@ -28,3 +29,9 @@ empirical investigation against the real pinned Pi-hole version,
 RFC-0006's remaining prerequisite, concluded 2026-08-09 with a real,
 live-verified authenticated round trip on the qualification device.
 Implementation begins next.
+
+RFC-0017 is the milestone's remaining required document (`web.search`
+privacy design), drafted 2026-08-21 against
+[docs/research/searxng-deployment-assessment.md](../research/searxng-deployment-assessment.md)
+and the confirmation-flow/policy-state gaps already visible in
+`sovereign_conversation.py`. Awaiting project-owner review.
