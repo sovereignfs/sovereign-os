@@ -204,40 +204,90 @@
       <section id="page-home" class="console-page" hidden aria-labelledby="home-title">
         <div class="preview-banner">
           <strong>Preview</strong>
-          <span>Home Assistant control is part of a later milestone and isn't available on this device yet. This page shows the planned design, including how a refused action would be recorded.</span>
+          <span>Home Assistant <em>control</em> (turning things on or off) is part of a later milestone and isn't available on this device yet — the recent-operations and capability-scope sections below show that planned design. Reading allowlisted entities and their history is real today; connect it below.</span>
         </div>
         <div class="hero">
           <div>
-            <p class="eyebrow">Installed service</p>
+            <p class="eyebrow">Read-only integration</p>
             <h1 id="home-title">Home Assistant</h1>
-            <p class="lede">What the assistant did in your home, and what it's allowed to do.</p>
+            <p class="lede">What the assistant may read in your home, and the history it can answer questions about.</p>
           </div>
           <div class="status-panel">
-            <span class="pill ok"><span aria-hidden="true">✓</span> Connected</span>
-            <span class="checked machine-fact">homeassistant.local:8123</span>
+            <span id="ha-status-pill" class="pill neutral">Not connected</span>
+            <span id="ha-status-detail" class="checked machine-fact">Sign in to configure</span>
           </div>
+        </div>
+
+        <div class="panel" aria-labelledby="ha-settings-title">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">RFC-0018</p>
+              <h2 id="ha-settings-title">Connection</h2>
+            </div>
+          </div>
+          <div id="ha-policy-row" class="policy-row" hidden>
+            <label class="switch">
+              <input type="checkbox" id="ha-enabled-toggle" disabled>
+              <span>Allow Home Assistant</span>
+            </label>
+            <span class="policy-detail">Reads only the entities you allow below. Leaves your device only when you approve a specific request.</span>
+          </div>
+          <div class="field grow">
+            <label for="ha-base-url-host">Base URL</label>
+            <div style="display:flex; gap:8px;">
+              <select id="ha-base-url-scheme" disabled style="width:auto;">
+                <option value="http">http</option>
+                <option value="https">https</option>
+              </select>
+              <input id="ha-base-url-host" type="text" placeholder="homeassistant.local:8123" autocomplete="off" disabled style="flex:1;">
+            </div>
+          </div>
+          <div class="field grow" style="margin-top:var(--sv-space-3);">
+            <label for="ha-access-token">Access token</label>
+            <input id="ha-access-token" type="password" placeholder="Leave blank to keep the current token" autocomplete="off" disabled>
+          </div>
+          <p id="ha-token-status" class="policy-detail" style="margin-top:4px;"></p>
+          <div style="display:flex; gap:8px; margin-top:var(--sv-space-3); flex-wrap:wrap;">
+            <button id="ha-save-connection" type="button" class="btn primary sm" disabled>Save connection</button>
+            <button id="ha-load-entities" type="button" class="btn secondary sm" disabled>Load entities</button>
+          </div>
+          <p id="ha-settings-message" role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="panel" aria-labelledby="ha-entities-title">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Allowlist</p>
+              <h2 id="ha-entities-title">Entities the assistant may read</h2>
+            </div>
+            <button id="ha-save-allowlist" type="button" class="btn primary sm" hidden>Save allowlist</button>
+          </div>
+          <div id="ha-entities-list" aria-live="polite">
+            <p class="placeholder">Sign in, save a connection, then load entities to choose which ones the assistant may read.</p>
+          </div>
+          <p id="ha-entities-message" role="status" aria-live="polite"></p>
         </div>
 
         <div class="metrics">
           <div class="metric-card">
             <div class="label">Entities</div>
-            <div class="value">42</div>
-            <div class="detail">across 6 domains</div>
+            <div class="value" id="ha-entity-count">0</div>
+            <div class="detail">allowlisted for the assistant</div>
           </div>
           <div class="metric-card">
             <div class="label">Automations</div>
             <div class="value">12</div>
-            <div class="detail">managed in Home Assistant</div>
+            <div class="detail">managed in Home Assistant &middot; preview</div>
           </div>
           <div class="metric-card">
             <div class="label">Last operation</div>
             <div class="value">2 min ago</div>
-            <div class="detail">via Chat</div>
+            <div class="detail">via Chat &middot; preview</div>
           </div>
         </div>
 
         <div class="panel">
-          <div class="panel-heading"><h2>Recent operations</h2></div>
+          <div class="panel-heading"><h2>Recent operations <span class="policy-detail">(preview)</span></h2></div>
           <div class="check-row">
             <div>
               <div class="name">Turned off the living room lights</div>
@@ -268,7 +318,7 @@
           <div class="panel-heading">
             <div>
               <p class="eyebrow">Capability scope</p>
-              <h2>What the assistant may control</h2>
+              <h2>What the assistant may control <span class="policy-detail">(preview)</span></h2>
             </div>
           </div>
           <div class="check-row">

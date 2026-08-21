@@ -191,6 +191,9 @@ function showSignedIn() {
   chatPolicyRow.hidden = false;
   chatWebSearchToggle.disabled = false;
   loadWebSearchPolicy();
+  haPolicyRow.hidden = false;
+  setHaFieldsEnabled(true);
+  loadHomeAssistantConfig();
 }
 
 function showSignedOut() {
@@ -210,6 +213,9 @@ function showSignedOut() {
   chatWebSearchToggle.disabled = true;
   chatWebSearchToggle.checked = false;
   setChatPolicyMessage("");
+  haPolicyRow.hidden = true;
+  setHaFieldsEnabled(false);
+  resetHomeAssistantSettingsUI();
 }
 
 async function loadSession() {
@@ -588,13 +594,15 @@ let pendingConfirmation = null;
 // starting to fail every turn once that ceiling is crossed.
 const MAX_CHAT_HISTORY_MESSAGES = 20;
 
-// RFC-0017: web.search/web.fetch are the only capabilities that ever
-// leave the device today. capability_events itself doesn't carry
-// side_effect/network classification (RFC-0003 keeps audit/event
-// payloads minimal) -- this is a client-side approximation of that
-// classification for receipt phrasing, not the source of truth the
-// executor itself enforces.
-const EXTERNAL_CAPABILITY_NAMES = new Set(["web.search", "web.fetch"]);
+// RFC-0017/RFC-0018: web.search/web.fetch and Home Assistant's read-only
+// pair are the only capabilities that ever leave the device today.
+// capability_events itself doesn't carry side_effect/network
+// classification (RFC-0003 keeps audit/event payloads minimal) -- this is
+// a client-side approximation of that classification for receipt
+// phrasing, not the source of truth the executor itself enforces.
+const EXTERNAL_CAPABILITY_NAMES = new Set([
+  "web.search", "web.fetch", "home_assistant.list_entities", "home_assistant.get_history",
+]);
 
 const CHAT_CAPABILITY_OUTCOME_LABELS = {
   executed: "ran",
@@ -687,6 +695,278 @@ chatWebSearchToggle.addEventListener("change", async () => {
     setChatPolicyMessage("Could not reach the device.", true);
   } finally {
     chatWebSearchToggle.disabled = !isSignedIn;
+  }
+});
+
+// RFC-0018: Home Assistant's own connection settings and entity
+// allowlist, on the Home Assistant page. Unlike web.search's single
+// external_enabled flag, this is a distinct policy_key
+// (home_assistant_enabled) plus real connection config -- see
+// sovereign_homeassistant.py and bin/sovereign-conversation's
+// /home-assistant endpoints.
+const haPolicyRow = document.querySelector("#ha-policy-row");
+const haEnabledToggle = document.querySelector("#ha-enabled-toggle");
+const haBaseUrlScheme = document.querySelector("#ha-base-url-scheme");
+const haBaseUrlHost = document.querySelector("#ha-base-url-host");
+const haAccessTokenInput = document.querySelector("#ha-access-token");
+const haTokenStatus = document.querySelector("#ha-token-status");
+const haSaveConnectionButton = document.querySelector("#ha-save-connection");
+const haLoadEntitiesButton = document.querySelector("#ha-load-entities");
+const haSettingsMessage = document.querySelector("#ha-settings-message");
+const haEntitiesList = document.querySelector("#ha-entities-list");
+const haEntitiesMessage = document.querySelector("#ha-entities-message");
+const haSaveAllowlistButton = document.querySelector("#ha-save-allowlist");
+const haStatusPill = document.querySelector("#ha-status-pill");
+const haStatusDetail = document.querySelector("#ha-status-detail");
+const haEntityCount = document.querySelector("#ha-entity-count");
+const HA_ENTITIES_PLACEHOLDER = "Sign in, save a connection, then load entities to choose which ones the assistant may read.";
+
+// The live-editable allowlist, loaded from the real config and mutated by
+// the entity checklist below -- resent in full on every save, since
+// POST /home-assistant always replaces the whole allowlisted_entities
+// list (there is no partial-update endpoint).
+let haAllowlist = [];
+
+function setHaSettingsMessage(text, isError) {
+  haSettingsMessage.textContent = text;
+  haSettingsMessage.classList.toggle("error", Boolean(isError));
+}
+
+function setHaEntitiesMessage(text, isError) {
+  haEntitiesMessage.textContent = text;
+  haEntitiesMessage.classList.toggle("error", Boolean(isError));
+}
+
+function setHaFieldsEnabled(enabled) {
+  haEnabledToggle.disabled = !enabled;
+  haBaseUrlScheme.disabled = !enabled;
+  haBaseUrlHost.disabled = !enabled;
+  haAccessTokenInput.disabled = !enabled;
+  haSaveConnectionButton.disabled = !enabled;
+  haLoadEntitiesButton.disabled = !enabled;
+}
+
+// has_access_token is the only signal Console ever gets about the stored
+// credential -- the real value is never returned, matching the executor's
+// own audit log never recording sensitive content (RFC-0018).
+function renderHaTokenStatus(hasAccessToken) {
+  haTokenStatus.textContent = hasAccessToken
+    ? "A token is already saved. Leave the field blank to keep it."
+    : "No token saved yet.";
+}
+
+function renderHaStatus(data) {
+  const configured = Boolean(data.base_url) && Boolean(data.has_access_token);
+  if (!data.enabled) {
+    setPill(haStatusPill, "neutral", "Disabled", false);
+  } else if (!configured) {
+    setPill(haStatusPill, "warn", "Enabled, not configured", false);
+  } else {
+    setPill(haStatusPill, "ok", "Enabled", true);
+  }
+  haStatusDetail.textContent = data.base_url || "No base URL set";
+  haEntityCount.textContent = String(haAllowlist.length);
+}
+
+// Base URL is entered as a separate scheme <select> + host:port <input>
+// and only ever joined into one string at runtime -- never written as a
+// literal scheme-plus-colon-slash-slash in this file's own source text.
+// This project's own external-asset safety check
+// (test_console_assets_are_local_and_safe) scans this file for exactly
+// that substring, and a hardcoded example placeholder tripped the same
+// check once already (see sovereign_websearch.py's SVG-comment fix);
+// splitting the field avoids it structurally instead of by careful
+// wording.
+function buildHaBaseUrl() {
+  const host = haBaseUrlHost.value.trim();
+  if (!host) return "";
+  return `${haBaseUrlScheme.value}://${host}`;
+}
+
+function applyHaBaseUrl(baseUrl) {
+  const separatorIndex = (baseUrl || "").indexOf("://");
+  if (separatorIndex === -1) {
+    haBaseUrlScheme.value = "http";
+    haBaseUrlHost.value = "";
+    return;
+  }
+  haBaseUrlScheme.value = baseUrl.slice(0, separatorIndex);
+  haBaseUrlHost.value = baseUrl.slice(separatorIndex + 3);
+}
+
+function resetHomeAssistantSettingsUI() {
+  haEnabledToggle.checked = false;
+  haBaseUrlScheme.value = "http";
+  haBaseUrlHost.value = "";
+  haAccessTokenInput.value = "";
+  renderHaTokenStatus(false);
+  haAllowlist = [];
+  haEntitiesList.replaceChildren();
+  const placeholder = document.createElement("p");
+  placeholder.className = "placeholder";
+  placeholder.textContent = HA_ENTITIES_PLACEHOLDER;
+  haEntitiesList.append(placeholder);
+  haSaveAllowlistButton.hidden = true;
+  setHaSettingsMessage("");
+  setHaEntitiesMessage("");
+  setPill(haStatusPill, "neutral", "Not connected", false);
+  haStatusDetail.textContent = "Sign in to configure";
+  haEntityCount.textContent = "0";
+}
+
+async function loadHomeAssistantConfig() {
+  try {
+    const response = await fetch("/api/v1/conversation/home-assistant", {
+      cache: "no-store",
+      credentials: "same-origin",
+      // Same reasoning as loadWebSearchPolicy's own GET: this is
+      // administrative configuration, gated (and CSRF-checked) the same
+      // way the POST that changes it is.
+      headers: csrfToken ? {"X-CSRF-Token": csrfToken} : {},
+    });
+    if (!response.ok) {
+      setHaSettingsMessage("Could not read this setting.", true);
+      return;
+    }
+    const data = await response.json();
+    haEnabledToggle.checked = Boolean(data.enabled);
+    applyHaBaseUrl(data.base_url);
+    haAccessTokenInput.value = "";
+    renderHaTokenStatus(Boolean(data.has_access_token));
+    haAllowlist = Array.isArray(data.allowlisted_entities) ? data.allowlisted_entities.slice() : [];
+    renderHaStatus(data);
+  } catch (error) {
+    setHaSettingsMessage("Could not reach the device.", true);
+  }
+}
+
+async function saveHomeAssistantConfig(reportTo) {
+  const payload = {
+    enabled: haEnabledToggle.checked,
+    base_url: buildHaBaseUrl(),
+    allowlisted_entities: haAllowlist,
+  };
+  // Omitted entirely (not even an empty string) means "leave the stored
+  // token unchanged" -- re-saving the allowlist must not require
+  // re-pasting the token every time.
+  if (haAccessTokenInput.value) {
+    payload.access_token = haAccessTokenInput.value;
+  }
+  try {
+    const response = await fetch("/api/v1/conversation/home-assistant", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+        ...(csrfToken ? {"X-CSRF-Token": csrfToken} : {}),
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (response.ok) {
+      haAccessTokenInput.value = "";
+      renderHaTokenStatus(Boolean(data.has_access_token));
+      haAllowlist = Array.isArray(data.allowlisted_entities) ? data.allowlisted_entities.slice() : [];
+      renderHaStatus(data);
+      reportTo("Saved.");
+      return;
+    }
+    if (response.status === 401 || response.status === 403) {
+      showSignedOut();
+      reportTo("Your session expired. Sign in again.", true);
+    } else {
+      reportTo((data.error && data.error.message) || "Could not save this setting.", true);
+    }
+  } catch (error) {
+    reportTo("Could not reach the device.", true);
+  }
+}
+
+haSaveConnectionButton.addEventListener("click", async () => {
+  haSaveConnectionButton.disabled = true;
+  setHaSettingsMessage("Saving…");
+  try {
+    await saveHomeAssistantConfig(setHaSettingsMessage);
+  } finally {
+    haSaveConnectionButton.disabled = !isSignedIn;
+  }
+});
+
+function renderHaEntities(entities) {
+  haEntitiesList.replaceChildren();
+  if (entities.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "placeholder";
+    empty.textContent = "Home Assistant reported no entities.";
+    haEntitiesList.append(empty);
+    haSaveAllowlistButton.hidden = true;
+    return;
+  }
+  const allowedSet = new Set(haAllowlist);
+  entities.forEach((entity) => {
+    const row = document.createElement("label");
+    row.className = "check-row";
+    const info = document.createElement("div");
+    const name = document.createElement("div");
+    name.className = "name";
+    name.textContent = entity.friendly_name || entity.entity_id;
+    const detail = document.createElement("div");
+    detail.className = "detail";
+    detail.textContent = `${entity.entity_id} · ${entity.state || "unknown"}`;
+    info.append(name, detail);
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = allowedSet.has(entity.entity_id);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) {
+        if (!haAllowlist.includes(entity.entity_id)) haAllowlist.push(entity.entity_id);
+      } else {
+        haAllowlist = haAllowlist.filter((id) => id !== entity.entity_id);
+      }
+      haEntityCount.textContent = String(haAllowlist.length);
+    });
+    row.append(info, checkbox);
+    haEntitiesList.append(row);
+  });
+  haSaveAllowlistButton.hidden = false;
+}
+
+haLoadEntitiesButton.addEventListener("click", async () => {
+  haLoadEntitiesButton.disabled = true;
+  setHaEntitiesMessage("Loading entities…");
+  try {
+    const response = await fetch("/api/v1/conversation/home-assistant/entities", {
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: csrfToken ? {"X-CSRF-Token": csrfToken} : {},
+    });
+    const data = await response.json();
+    if (response.ok) {
+      renderHaEntities(Array.isArray(data.entities) ? data.entities : []);
+      setHaEntitiesMessage("");
+    } else if (response.status === 409) {
+      setHaEntitiesMessage("Save a connection first.", true);
+    } else if (response.status === 401 || response.status === 403) {
+      showSignedOut();
+      setHaEntitiesMessage("Your session expired. Sign in again.", true);
+    } else {
+      setHaEntitiesMessage((data.error && data.error.message) || "Could not reach Home Assistant.", true);
+    }
+  } catch (error) {
+    setHaEntitiesMessage("Could not reach the device.", true);
+  } finally {
+    haLoadEntitiesButton.disabled = !isSignedIn;
+  }
+});
+
+haSaveAllowlistButton.addEventListener("click", async () => {
+  haSaveAllowlistButton.disabled = true;
+  setHaEntitiesMessage("Saving…");
+  try {
+    await saveHomeAssistantConfig(setHaEntitiesMessage);
+  } finally {
+    haSaveAllowlistButton.disabled = !isSignedIn;
   }
 });
 

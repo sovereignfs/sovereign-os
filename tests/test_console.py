@@ -518,6 +518,105 @@ class ConsoleTests(unittest.TestCase):
         # the UI claiming a change that was never actually persisted.
         self.assertIn("chatWebSearchToggle.checked = !desired", change_block)
 
+    def test_home_assistant_settings_start_hidden_and_disabled_in_markup(self):
+        html = HTML.read_text()
+        home_section = html[html.index('id="page-home"') : html.index('id="page-activity"')]
+
+        self.assertRegex(home_section, r'id="ha-policy-row"[^>]*hidden')
+        self.assertRegex(home_section, r'id="ha-enabled-toggle"[^>]*disabled')
+        self.assertRegex(home_section, r'id="ha-base-url-scheme"[^>]*disabled')
+        self.assertRegex(home_section, r'id="ha-base-url-host"[^>]*disabled')
+        self.assertRegex(home_section, r'id="ha-access-token"[^>]*disabled')
+        self.assertRegex(home_section, r'id="ha-save-connection"[^>]*disabled')
+        self.assertRegex(home_section, r'id="ha-load-entities"[^>]*disabled')
+        self.assertRegex(home_section, r'id="ha-save-allowlist"[^>]*hidden')
+        self.assertEqual(home_section.count('type="password"'), 1)
+
+    def test_home_assistant_settings_shown_and_loaded_on_sign_in_hidden_and_reset_on_sign_out(self):
+        javascript = JAVASCRIPT.read_text()
+
+        signed_in_start = javascript.index("function showSignedIn")
+        signed_in_block = javascript[signed_in_start : javascript.index("\n}", signed_in_start)]
+        self.assertIn("haPolicyRow.hidden = false", signed_in_block)
+        self.assertIn("setHaFieldsEnabled(true)", signed_in_block)
+        self.assertIn("loadHomeAssistantConfig()", signed_in_block)
+
+        signed_out_start = javascript.index("function showSignedOut")
+        signed_out_block = javascript[signed_out_start : javascript.index("\n}", signed_out_start)]
+        self.assertIn("haPolicyRow.hidden = true", signed_out_block)
+        self.assertIn("setHaFieldsEnabled(false)", signed_out_block)
+        self.assertIn("resetHomeAssistantSettingsUI()", signed_out_block)
+
+    def test_home_assistant_config_endpoint_reads_and_writes_authenticated(self):
+        javascript = JAVASCRIPT.read_text()
+
+        self.assertIn('fetch("/api/v1/conversation/home-assistant"', javascript)
+
+        load_start = javascript.index("async function loadHomeAssistantConfig")
+        load_block = javascript[load_start : javascript.index("\n}", load_start)]
+        self.assertIn('credentials: "same-origin"', load_block)
+        # Real hardware qualification already caught this exact omission
+        # once for /policy's own GET -- verify-mutating requires the CSRF
+        # header on every gated request, GET included.
+        self.assertIn("X-CSRF-Token", load_block)
+
+        save_start = javascript.index("async function saveHomeAssistantConfig")
+        save_block = javascript[save_start : javascript.index("\nhaSaveConnectionButton", save_start)]
+        self.assertIn('method: "POST"', save_block)
+        self.assertIn('credentials: "same-origin"', save_block)
+        self.assertIn("X-CSRF-Token", save_block)
+        self.assertIn("enabled: haEnabledToggle.checked", save_block)
+        self.assertIn("allowlisted_entities: haAllowlist", save_block)
+
+    def test_access_token_is_never_prefilled_and_omitted_from_the_payload_when_blank(self):
+        javascript = JAVASCRIPT.read_text()
+
+        load_start = javascript.index("async function loadHomeAssistantConfig")
+        load_block = javascript[load_start : javascript.index("\n}", load_start)]
+        # The real stored token value is never returned by the server
+        # (only has_access_token, a boolean) -- the field must never be
+        # pre-filled from a GET response.
+        self.assertIn('haAccessTokenInput.value = "";', load_block)
+
+        save_start = javascript.index("async function saveHomeAssistantConfig")
+        save_block = javascript[save_start : javascript.index("\nhaSaveConnectionButton", save_start)]
+        # Omitted (not even an empty string) means "leave the stored
+        # token unchanged" -- only included when the household actually
+        # typed something.
+        self.assertIn("if (haAccessTokenInput.value) {", save_block)
+        self.assertIn("payload.access_token = haAccessTokenInput.value;", save_block)
+
+    def test_base_url_is_split_so_no_literal_scheme_ever_appears_in_source(self):
+        # test_console_assets_are_local_and_safe already enforces the
+        # whole-file ban on a literal "http://"/"https://" substring; this
+        # documents *why* the base URL field is a separate scheme <select>
+        # plus host <input> joined only at runtime, so a future edit that
+        # reintroduces a hardcoded example placeholder fails obviously
+        # here too, not just via that broader safety check (which is
+        # exactly how a SearXNG-related comment tripped it once already).
+        javascript = JAVASCRIPT.read_text()
+        html = HTML.read_text()
+        self.assertIn("function buildHaBaseUrl", javascript)
+        self.assertIn("function applyHaBaseUrl", javascript)
+        self.assertIn('id="ha-base-url-scheme"', html)
+        self.assertIn('id="ha-base-url-host"', html)
+
+    def test_home_assistant_entities_proxy_is_authenticated_and_never_used_by_default(self):
+        javascript = JAVASCRIPT.read_text()
+        self.assertIn('fetch("/api/v1/conversation/home-assistant/entities"', javascript)
+
+        load_entities_start = javascript.index('haLoadEntitiesButton.addEventListener("click"')
+        load_entities_block = javascript[load_entities_start : javascript.index("\n});", load_entities_start)]
+        self.assertIn('credentials: "same-origin"', load_entities_block)
+        self.assertIn("X-CSRF-Token", load_entities_block)
+
+    def test_external_capability_names_include_home_assistant(self):
+        javascript = JAVASCRIPT.read_text()
+        external_start = javascript.index("const EXTERNAL_CAPABILITY_NAMES")
+        external_block = javascript[external_start : javascript.index(";", external_start)]
+        self.assertIn("home_assistant.list_entities", external_block)
+        self.assertIn("home_assistant.get_history", external_block)
+
     def test_receipt_locality_and_outcome_labels_are_accurate(self):
         # A real bug this session's own backend work would have caused:
         # every receipt previously read "stayed local" unconditionally.
