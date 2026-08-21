@@ -69,7 +69,7 @@ class ConversationTestCase(unittest.TestCase):
 
 
 class BuildRegistryTests(unittest.TestCase):
-    def test_includes_exactly_the_seven_real_capabilities(self):
+    def test_includes_exactly_the_eight_real_capabilities(self):
         registry = conversation.build_registry()
         names = {entry["name"] for entry in registry.catalog()}
         self.assertEqual(
@@ -77,6 +77,7 @@ class BuildRegistryTests(unittest.TestCase):
             {
                 "system.health", "pihole.status", "pihole.summary", "web.search", "web.fetch",
                 "home_assistant.list_entities", "home_assistant.get_history",
+                "home_assistant.set_entity_state",
             },
         )
 
@@ -548,13 +549,17 @@ class BuildPolicyTests(ConversationTestCase):
                 "home_assistant_enabled": False,
                 "home_assistant_allowlist": [],
                 "home_assistant_configured": False,
+                "home_assistant_control_enabled": False,
+                "home_assistant_controllable_entities": [],
             },
         )
 
     def test_reflects_both_independently_when_configured(self):
         conversation.write_policy(True, self.policy_path())
         homeassistant.write_config(
-            "http://homeassistant.local:8123", ["light.kitchen"], True, access_token="secret-1",
+            "http://homeassistant.local:8123", ["light.kitchen"], True,
+            control_enabled=True, controllable_entities=["light.kitchen"],
+            access_token="secret-1",
             path=self.home_assistant_config_path(), token_path=self.home_assistant_token_path(),
         )
         policy = conversation.build_policy(
@@ -567,6 +572,8 @@ class BuildPolicyTests(ConversationTestCase):
                 "home_assistant_enabled": True,
                 "home_assistant_allowlist": ["light.kitchen"],
                 "home_assistant_configured": True,
+                "home_assistant_control_enabled": True,
+                "home_assistant_controllable_entities": ["light.kitchen"],
             },
         )
 

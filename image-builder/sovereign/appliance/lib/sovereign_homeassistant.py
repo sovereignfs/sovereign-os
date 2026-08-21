@@ -42,6 +42,21 @@ PERIOD_DELTAS = {
     "week": datetime.timedelta(days=7),
 }
 
+# RFC-0019: the allowlisted-action slice's entire domain surface. Binary,
+# fully reversible, no numeric range or safety implication -- every other
+# domain (locks, climate, covers, cameras) is out of scope, enforced
+# independently at write_config(), _control_policy_check, and inside
+# make_set_entity_state_implementation itself (see that function's own
+# comment for why a single enforcement point isn't enough: Home
+# Assistant's climate domain has real turn_on/turn_off services, so a
+# bypassed check wouldn't fail safely by accident).
+CONTROLLABLE_DOMAINS = {"light", "switch"}
+SET_ENTITY_STATE_TIMEOUT_SECONDS = 10
+
+
+def _entity_domain(entity_id):
+    return entity_id.split(".", 1)[0] if isinstance(entity_id, str) and "." in entity_id else ""
+
 LIST_ENTITIES_ARGUMENT_SCHEMA = {
     "type": "object",
     "properties": {},
@@ -108,6 +123,29 @@ GET_HISTORY_RESULT_SCHEMA = {
     "additionalProperties": False,
 }
 
+SET_ENTITY_STATE_ARGUMENT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "entity_id": {"type": "string"},
+        "state": {"type": "string", "enum": ["on", "off"]},
+    },
+    "required": ["entity_id", "state"],
+    "additionalProperties": False,
+}
+SET_ENTITY_STATE_RESULT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "entity_id": {"type": "string"},
+        "domain": {"type": "string", "enum": ["light", "switch"]},
+        "previous_state": {"type": "string"},
+        "new_state": {"type": "string"},
+        "changed": {"type": "boolean"},
+        "applied_at": {"type": "string"},
+    },
+    "required": ["entity_id", "domain", "previous_state", "new_state", "changed", "applied_at"],
+    "additionalProperties": False,
+}
+
 
 # --- Configuration and credential storage ---------------------------------
 #
@@ -138,10 +176,18 @@ def read_config(path=None):
     if not isinstance(parsed, dict):
         parsed = {}
     allowlist = parsed.get("allowlisted_entities")
+    controllable = parsed.get("controllable_entities")
     return {
         "enabled": bool(parsed.get("enabled", False)),
         "base_url": (parsed.get("base_url") or "").strip(),
         "allowlisted_entities": [entry for entry in allowlist if isinstance(entry, str)] if isinstance(allowlist, list) else [],
+        # RFC-0019: a second, independent permission dimension -- default
+        # false/empty matches allowlisted_entities' own fail-safe default,
+        # and a device with only RFC-0018's three-field config (written
+        # before this RFC existed) reads these as their safe defaults via
+        # this same missing-key path, not a schema migration.
+        "control_enabled": bool(parsed.get("control_enabled", False)),
+        "controllable_entities": [entry for entry in controllable if isinstance(entry, str)] if isinstance(controllable, list) else [],
     }
 
 
@@ -154,11 +200,33 @@ def read_token(path=None):
         return ""
 
 
-def write_config(base_url, allowlisted_entities, enabled, access_token=None, path=None, token_path=None):
+def write_config(
+    base_url, allowlisted_entities, enabled,
+    control_enabled=False, controllable_entities=None,
+    access_token=None, path=None, token_path=None,
+):
     if path is None:
         path = CONFIG_PATH
     if token_path is None:
         token_path = TOKEN_PATH
+    controllable_entities = list(controllable_entities or [])
+    allowlisted_set = set(allowlisted_entities)
+    # RFC-0019: both invariants enforced here, independent of whichever
+    # caller submitted the write (raw API call, a future Console picker,
+    # or a direct write_config() call from a test) -- see that RFC's own
+    # Domain Scope section for why relying on a UI to simply not offer
+    # the option isn't enough.
+    for entity_id in controllable_entities:
+        fail_if = None
+        if entity_id not in allowlisted_set:
+            fail_if = f"'{entity_id}' cannot be controllable without also being allowlisted for reading"
+        elif _entity_domain(entity_id) not in CONTROLLABLE_DOMAINS:
+            fail_if = (
+                f"'{entity_id}' has domain '{_entity_domain(entity_id)}', which cannot be made "
+                f"controllable (only {sorted(CONTROLLABLE_DOMAINS)} are supported)"
+            )
+        if fail_if:
+            raise ValueError(fail_if)
     path = pathlib.Path(path)
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     payload = json.dumps(
@@ -166,6 +234,8 @@ def write_config(base_url, allowlisted_entities, enabled, access_token=None, pat
             "enabled": bool(enabled),
             "base_url": base_url,
             "allowlisted_entities": list(allowlisted_entities),
+            "control_enabled": bool(control_enabled),
+            "controllable_entities": controllable_entities,
         },
         sort_keys=True,
     )
@@ -195,14 +265,24 @@ def has_access_token(path=None):
 def policy_fields(path=None, token_path=None):
     # Merged into the turn's policy dict (sovereign_conversation.build_policy)
     # so the executor's stage-3 policy_key/policy_check can see it -- see
-    # this module's own _policy_check below.
+    # this module's own _policy_check/_control_policy_check below.
     config = read_config(path)
     configured = bool(config["base_url"]) and has_access_token(token_path)
     return {
         "home_assistant_enabled": config["enabled"],
         "home_assistant_allowlist": config["allowlisted_entities"],
         "home_assistant_configured": configured,
+        "home_assistant_control_enabled": config["control_enabled"],
+        "home_assistant_controllable_entities": config["controllable_entities"],
     }
+
+
+def _check_configured(policy):
+    capabilities.fail(
+        bool(policy.get("home_assistant_configured", False)),
+        "CAPABILITY_NOT_CONFIGURED",
+        "Home Assistant is enabled but not yet configured (base URL or access token missing)",
+    )
 
 
 def _policy_check(arguments, policy):
@@ -210,11 +290,7 @@ def _policy_check(arguments, policy):
     # (RFC-0018): both a "not configured yet" and a "not allowlisted"
     # rejection must happen before the model ever discloses a query about
     # a specific entity in a confirmation prompt.
-    capabilities.fail(
-        bool(policy.get("home_assistant_configured", False)),
-        "CAPABILITY_NOT_CONFIGURED",
-        "Home Assistant is enabled but not yet configured (base URL or access token missing)",
-    )
+    _check_configured(policy)
     entity_id = arguments.get("entity_id")
     if entity_id is not None:
         allowlist = policy.get("home_assistant_allowlist") or []
@@ -223,6 +299,48 @@ def _policy_check(arguments, policy):
             "ENTITY_NOT_ALLOWLISTED",
             f"'{entity_id}' is not in the Home Assistant entity allowlist",
         )
+
+
+def _control_policy_check(arguments, policy):
+    # RFC-0019: distinct from _policy_check above, not a literal reuse --
+    # this checks a different policy field (controllable_entities, not
+    # allowlist) and raises a different code, so a household reading the
+    # audit log or a denied-proposal narration can tell "not readable"
+    # apart from "readable but not controllable." Only the "is Home
+    # Assistant even configured" prerequisite is genuinely shared.
+    _check_configured(policy)
+    entity_id = arguments.get("entity_id")
+    controllable = policy.get("home_assistant_controllable_entities") or []
+    capabilities.fail(
+        entity_id in controllable,
+        "ENTITY_NOT_CONTROLLABLE",
+        f"'{entity_id}' is not in the Home Assistant controllable-entity allowlist",
+    )
+    # Defensive re-check: write_config() already enforces
+    # controllable_entities is a subset of allowlisted_entities, but a
+    # mutating, physical-effect capability's authorization path
+    # re-verifying an invariant that's supposed to already hold -- rather
+    # than trusting it silently -- is proportionate to what this
+    # capability can actually do if that invariant is ever wrong.
+    allowlist = policy.get("home_assistant_allowlist") or []
+    capabilities.fail(
+        entity_id in allowlist,
+        "ENTITY_NOT_ALLOWLISTED",
+        f"'{entity_id}' is not in the Home Assistant entity allowlist",
+    )
+    # Independent domain re-check, the second of three independent
+    # enforcement points (write_config() is the first; the implementation
+    # itself, immediately before the service call, is the third) -- see
+    # CONTROLLABLE_DOMAINS' own comment for why a single point isn't
+    # enough (Home Assistant's climate domain has real turn_on/turn_off
+    # services, so a bypassed check here wouldn't fail safely by
+    # accident).
+    domain = _entity_domain(entity_id)
+    capabilities.fail(
+        domain in CONTROLLABLE_DOMAINS,
+        "ENTITY_DOMAIN_NOT_CONTROLLABLE",
+        f"'{entity_id}' has domain '{domain}', which this capability does not control",
+    )
 
 
 # --- Home Assistant REST client --------------------------------------------
@@ -268,6 +386,37 @@ def fetch_all_states(base_url, token, timeout=LIST_ENTITIES_TIMEOUT_SECONDS):
     # must be able to see the full set once, to build the allowlist from
     # it -- the model never sees this unfiltered response).
     return _get(base_url, token, "/api/states", timeout=timeout) or []
+
+
+def fetch_state(base_url, token, entity_id, timeout=SET_ENTITY_STATE_TIMEOUT_SECONDS):
+    # A single entity's current state -- RFC-0019: read before acting, so
+    # a proposal matching current state is a no-op that never contacts
+    # Home Assistant's service-call endpoint at all.
+    return _get(base_url, token, f"/api/states/{urllib.parse.quote(entity_id, safe='')}", timeout=timeout)
+
+
+def _post(base_url, token, path, body, timeout=SET_ENTITY_STATE_TIMEOUT_SECONDS):
+    url = f"{base_url.rstrip('/')}{path}"
+    data = json.dumps(body).encode("utf-8")
+    request = urllib.request.Request(
+        url, data=data, method="POST",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+            return json.loads(response.read(RESPONSE_READ_BYTES + 1))
+    except urllib.error.HTTPError as error:
+        if error.code == 401:
+            raise capabilities.CapabilityError(
+                "HOME_ASSISTANT_AUTH_FAILED", "Home Assistant rejected the stored access token"
+            ) from error
+        raise capabilities.CapabilityError(
+            "HOME_ASSISTANT_REQUEST_FAILED", f"Home Assistant returned HTTP {error.code}"
+        ) from error
+    except (urllib.error.URLError, OSError, ValueError) as error:
+        raise capabilities.CapabilityError(
+            "HOME_ASSISTANT_UNREACHABLE", "Could not reach Home Assistant"
+        ) from error
 
 
 def make_list_entities_implementation(config_path=None, token_path=None):
@@ -341,6 +490,82 @@ def make_get_history_implementation(config_path=None, token_path=None):
     return implementation
 
 
+def make_set_entity_state_implementation(config_path=None, token_path=None):
+    # RFC-0019: this project's first mutating capability. Every check
+    # here that _control_policy_check already performed at stage 3 is
+    # re-checked here too, at stage 5 -- the same "don't just trust an
+    # earlier stage" posture make_list_entities_implementation and
+    # make_get_history_implementation already take toward stage 3's own
+    # checks, elevated here because a bypassed check has a real physical
+    # effect, not just an unwanted read.
+    def implementation(arguments):
+        entity_id = arguments["entity_id"]
+        requested_state = arguments["state"]
+        config = read_config(config_path)
+        token = read_token(token_path)
+        capabilities.fail(
+            bool(config["base_url"]) and bool(token), "HOME_ASSISTANT_NOT_CONFIGURED",
+            "Home Assistant is not configured",
+        )
+        capabilities.fail(
+            entity_id in config["controllable_entities"], "ENTITY_NOT_CONTROLLABLE",
+            f"'{entity_id}' is not in the Home Assistant controllable-entity allowlist",
+        )
+        # Third independent domain check (write_config() is the first,
+        # _control_policy_check the second) -- see CONTROLLABLE_DOMAINS'
+        # own comment for why this can't be skipped as redundant: Home
+        # Assistant's climate domain has real turn_on/turn_off services,
+        # so a bypassed check here would not fail safely by accident.
+        domain = _entity_domain(entity_id)
+        capabilities.fail(
+            domain in CONTROLLABLE_DOMAINS, "ENTITY_DOMAIN_NOT_CONTROLLABLE",
+            f"'{entity_id}' has domain '{domain}', which this capability does not control",
+        )
+
+        current = fetch_state(config["base_url"], token, entity_id, timeout=SET_ENTITY_STATE_TIMEOUT_SECONDS)
+        previous_state = (current or {}).get("state") or ""
+        if previous_state == requested_state:
+            # Idempotent no-op (RFC-0019): a proposal matching current
+            # state never reaches Home Assistant's service-call endpoint
+            # at all -- a real, narratable success, not an error.
+            return {
+                "entity_id": entity_id,
+                "domain": domain,
+                "previous_state": previous_state,
+                "new_state": previous_state,
+                "changed": False,
+                "applied_at": capabilities.timestamp(),
+            }
+
+        service = "turn_on" if requested_state == "on" else "turn_off"
+        changed_states = _post(
+            config["base_url"], token, f"/api/services/{domain}/{service}",
+            {"entity_id": entity_id}, timeout=SET_ENTITY_STATE_TIMEOUT_SECONDS,
+        )
+        # Never trust a 200 response alone -- verify the target entity
+        # actually appears in the changed-states list with the state
+        # that was requested. Reporting "done" without this would be a
+        # household trusting a receipt that might not be true.
+        confirmed = any(
+            isinstance(item, dict) and item.get("entity_id") == entity_id and item.get("state") == requested_state
+            for item in (changed_states or [])
+        )
+        capabilities.fail(
+            confirmed, "HOME_ASSISTANT_ACTION_NOT_CONFIRMED",
+            f"Home Assistant did not confirm '{entity_id}' changed to '{requested_state}'",
+        )
+        return {
+            "entity_id": entity_id,
+            "domain": domain,
+            "previous_state": previous_state,
+            "new_state": requested_state,
+            "changed": True,
+            "applied_at": capabilities.timestamp(),
+        }
+
+    return implementation
+
+
 def register(registry, config_path=None, token_path=None):
     # config_path/token_path default to None, which read_config/read_token
     # resolve fresh from this module's own CONFIG_PATH/TOKEN_PATH globals
@@ -379,6 +604,20 @@ def register(registry, config_path=None, token_path=None):
             timeout_seconds=GET_HISTORY_TIMEOUT_SECONDS + 2,
             policy_key="home_assistant_enabled",
             policy_check=_policy_check,
+        )
+    )
+    registry.register(
+        capabilities.Capability(
+            name="home_assistant.set_entity_state",
+            version=1,
+            argument_schema=SET_ENTITY_STATE_ARGUMENT_SCHEMA,
+            result_schema=SET_ENTITY_STATE_RESULT_SCHEMA,
+            side_effect="mutating",
+            network="external",
+            implementation=make_set_entity_state_implementation(config_path, token_path),
+            timeout_seconds=SET_ENTITY_STATE_TIMEOUT_SECONDS + 2,
+            policy_key="home_assistant_control_enabled",
+            policy_check=_control_policy_check,
         )
     )
     return registry
