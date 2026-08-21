@@ -256,6 +256,75 @@ class InvokeRejectionPathTests(CapabilitiesTestCase):
             )
         self.assertEqual(caught.exception.code, "CAPABILITY_DISABLED")
 
+    def test_custom_policy_key_is_checked_instead_of_the_default(self):
+        # RFC-0018: a capability can declare its own distinct policy flag
+        # (e.g. home_assistant_enabled) rather than sharing the generic
+        # external_enabled default -- enabling one must not silently
+        # enable the other.
+        capability = self.make_capability(
+            side_effect="read_only", network="external", policy_key="custom_enabled",
+        )
+        registry = self.registry_with(capability)
+        with self.assertRaises(capabilities.CapabilityError) as caught:
+            capabilities.invoke(
+                registry, capability.name, capability.version, {},
+                {"external_enabled": True, "custom_enabled": False}, capabilities.ConfirmationStore(),
+                audit_log_path=self.audit_path,
+            )
+        self.assertEqual(caught.exception.code, "CAPABILITY_DISABLED")
+
+    def test_custom_policy_key_enabled_passes_the_policy_stage(self):
+        capability = self.make_capability(
+            side_effect="read_only", network="external", policy_key="custom_enabled",
+        )
+        registry = self.registry_with(capability)
+        with self.assertRaises(capabilities.CapabilityError) as caught:
+            capabilities.invoke(
+                registry, capability.name, capability.version, {},
+                {"external_enabled": False, "custom_enabled": True}, capabilities.ConfirmationStore(),
+                audit_log_path=self.audit_path,
+            )
+        # Passes the policy stage (the custom flag is true) and reaches
+        # the next stage instead -- read_only/external is still
+        # confirmation: required, structurally, so it stops there next.
+        self.assertEqual(caught.exception.code, "CONFIRMATION_REQUIRED")
+
+    def test_policy_check_runs_after_the_policy_key_gate_and_can_reject(self):
+        calls = []
+
+        def reject_everything(arguments, policy):
+            calls.append((arguments, policy))
+            capabilities.fail(False, "CUSTOM_REJECTED", "rejected by policy_check")
+
+        capability = self.make_capability(
+            side_effect="read_only", network="external", policy_check=reject_everything,
+        )
+        registry = self.registry_with(capability)
+        with self.assertRaises(capabilities.CapabilityError) as caught:
+            capabilities.invoke(
+                registry, capability.name, capability.version, {},
+                {"external_enabled": True}, capabilities.ConfirmationStore(),
+                audit_log_path=self.audit_path,
+            )
+        self.assertEqual(caught.exception.code, "CUSTOM_REJECTED")
+        self.assertEqual(calls, [({}, {"external_enabled": True})])
+
+    def test_policy_check_never_runs_when_the_policy_key_gate_already_failed(self):
+        calls = []
+        capability = self.make_capability(
+            side_effect="read_only", network="external",
+            policy_check=lambda arguments, policy: calls.append(True),
+        )
+        registry = self.registry_with(capability)
+        with self.assertRaises(capabilities.CapabilityError) as caught:
+            capabilities.invoke(
+                registry, capability.name, capability.version, {},
+                {"external_enabled": False}, capabilities.ConfirmationStore(),
+                audit_log_path=self.audit_path,
+            )
+        self.assertEqual(caught.exception.code, "CAPABILITY_DISABLED")
+        self.assertEqual(calls, [])
+
     def test_required_confirmation_rejected_without_token(self):
         capability = self.make_capability(side_effect="mutating", network="local")
         registry = self.registry_with(capability)

@@ -12,6 +12,7 @@ if str(LIB) not in sys.path:
 
 import sovereign_capabilities as capabilities  # noqa: E402
 import sovereign_conversation as conversation  # noqa: E402
+import sovereign_homeassistant as homeassistant  # noqa: E402
 import sovereign_inference as inference  # noqa: E402
 
 
@@ -68,12 +69,15 @@ class ConversationTestCase(unittest.TestCase):
 
 
 class BuildRegistryTests(unittest.TestCase):
-    def test_includes_exactly_the_five_real_capabilities(self):
+    def test_includes_exactly_the_seven_real_capabilities(self):
         registry = conversation.build_registry()
         names = {entry["name"] for entry in registry.catalog()}
         self.assertEqual(
             names,
-            {"system.health", "pihole.status", "pihole.summary", "web.search", "web.fetch"},
+            {
+                "system.health", "pihole.status", "pihole.summary", "web.search", "web.fetch",
+                "home_assistant.list_entities", "home_assistant.get_history",
+            },
         )
 
 
@@ -521,6 +525,58 @@ class PolicyStateTests(ConversationTestCase):
 
     def test_write_returns_the_new_state(self):
         self.assertEqual(conversation.write_policy(True, self.policy_path()), {"external_enabled": True})
+
+
+class BuildPolicyTests(ConversationTestCase):
+    def policy_path(self):
+        return Path(self.tempdir.name) / "capabilities" / "policy.json"
+
+    def home_assistant_config_path(self):
+        return Path(self.tempdir.name) / "capabilities" / "home-assistant.json"
+
+    def home_assistant_token_path(self):
+        return Path(self.tempdir.name) / "secrets" / "home-assistant" / "access-token"
+
+    def test_merges_web_search_and_home_assistant_policy_on_a_fresh_device(self):
+        policy = conversation.build_policy(
+            self.policy_path(), self.home_assistant_config_path(), self.home_assistant_token_path(),
+        )
+        self.assertEqual(
+            policy,
+            {
+                "external_enabled": False,
+                "home_assistant_enabled": False,
+                "home_assistant_allowlist": [],
+                "home_assistant_configured": False,
+            },
+        )
+
+    def test_reflects_both_independently_when_configured(self):
+        conversation.write_policy(True, self.policy_path())
+        homeassistant.write_config(
+            "http://homeassistant.local:8123", ["light.kitchen"], True, access_token="secret-1",
+            path=self.home_assistant_config_path(), token_path=self.home_assistant_token_path(),
+        )
+        policy = conversation.build_policy(
+            self.policy_path(), self.home_assistant_config_path(), self.home_assistant_token_path(),
+        )
+        self.assertEqual(
+            policy,
+            {
+                "external_enabled": True,
+                "home_assistant_enabled": True,
+                "home_assistant_allowlist": ["light.kitchen"],
+                "home_assistant_configured": True,
+            },
+        )
+
+    def test_web_search_and_home_assistant_toggle_independently(self):
+        conversation.write_policy(True, self.policy_path())
+        policy = conversation.build_policy(
+            self.policy_path(), self.home_assistant_config_path(), self.home_assistant_token_path(),
+        )
+        self.assertTrue(policy["external_enabled"])
+        self.assertFalse(policy["home_assistant_enabled"])
 
 
 if __name__ == "__main__":

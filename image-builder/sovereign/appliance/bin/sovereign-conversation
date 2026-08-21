@@ -13,6 +13,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "lib"))
 
 import sovereign_capabilities as capabilities  # noqa: E402
 import sovereign_conversation as conversation  # noqa: E402
+import sovereign_homeassistant as homeassistant  # noqa: E402
 import sovereign_inference as inference  # noqa: E402
 
 
@@ -55,8 +56,33 @@ POLICY_PATH = pathlib.Path(
     os.environ.get("SOVEREIGN_CONVERSATION_POLICY_PATH", str(conversation.DEFAULT_POLICY_PATH))
 )
 
+# RFC-0018: Home Assistant's own config (enabled/base_url/allowlist) and
+# credential (access token), read fresh per request for the same reason
+# POLICY_PATH is -- a household's change takes effect on the next message
+# without a service restart.
+HOME_ASSISTANT_CONFIG_PATH = pathlib.Path(
+    os.environ.get("SOVEREIGN_HOME_ASSISTANT_CONFIG_PATH", str(homeassistant.CONFIG_PATH))
+)
+HOME_ASSISTANT_TOKEN_PATH = pathlib.Path(
+    os.environ.get("SOVEREIGN_HOME_ASSISTANT_TOKEN_PATH", str(homeassistant.TOKEN_PATH))
+)
+# Bounded independent of MAX_REQUEST_BODY_BYTES: an access token is short,
+# but this project's own precedent (SearXNG's SEARCH_RESPONSE_READ_BYTES)
+# is to size a read bound to what the specific field genuinely needs, not
+# reuse an unrelated general request-body limit.
+MAX_ACCESS_TOKEN_BYTES = 4096
+MAX_ALLOWLISTED_ENTITIES = 100
+ENTITIES_PROXY_TIMEOUT_SECONDS = 10
 
-_registry = conversation.build_registry()
+
+def _build_policy():
+    return conversation.build_policy(POLICY_PATH, HOME_ASSISTANT_CONFIG_PATH, HOME_ASSISTANT_TOKEN_PATH)
+
+
+_registry = conversation.build_registry(
+    home_assistant_config_path=HOME_ASSISTANT_CONFIG_PATH,
+    home_assistant_token_path=HOME_ASSISTANT_TOKEN_PATH,
+)
 _provider = inference.LlamaCppProvider(base_url=PROVIDER_BASE_URL)
 _confirmation_store = capabilities.ConfirmationStore()
 _pending_turn_store = conversation.PendingTurnStore()
@@ -98,6 +124,10 @@ class ConversationHandler(BaseHTTPRequestHandler):
             self._send_json(200, _provider.health())
         elif self.path == "/api/v1/conversation/policy":
             self._handle_get_policy()
+        elif self.path == "/api/v1/conversation/home-assistant":
+            self._handle_get_home_assistant()
+        elif self.path == "/api/v1/conversation/home-assistant/entities":
+            self._handle_get_home_assistant_entities()
         else:
             self.send_error(404)
 
@@ -106,6 +136,8 @@ class ConversationHandler(BaseHTTPRequestHandler):
             self._handle_message()
         elif self.path == "/api/v1/conversation/policy":
             self._handle_set_policy()
+        elif self.path == "/api/v1/conversation/home-assistant":
+            self._handle_set_home_assistant()
         else:
             self.send_error(404)
 
@@ -164,7 +196,7 @@ class ConversationHandler(BaseHTTPRequestHandler):
         try:
             result = conversation.process_turn(
                 _provider, _registry, history, body["message"],
-                policy=conversation.read_policy(POLICY_PATH),
+                policy=_build_policy(),
                 confirmation_store=_confirmation_store,
                 pending_turn_store=_pending_turn_store,
                 audit_log_path=AUDIT_LOG_PATH,
@@ -194,7 +226,7 @@ class ConversationHandler(BaseHTTPRequestHandler):
             result = conversation.resume_turn(
                 _provider, _registry, _pending_turn_store, _confirmation_store,
                 confirmation["token"], confirmation["approve"],
-                policy=conversation.read_policy(POLICY_PATH),
+                policy=_build_policy(),
                 audit_log_path=AUDIT_LOG_PATH,
             )
         except conversation.TurnError as error:
@@ -240,6 +272,115 @@ class ConversationHandler(BaseHTTPRequestHandler):
             self._send_json(502, {"error": {"code": "POLICY_WRITE_FAILED", "message": f"could not persist the policy change: {error}"}})
             return
         self._send_json(200, {"web_search_enabled": policy["external_enabled"]})
+
+    def _home_assistant_config_response(self):
+        config = homeassistant.read_config(HOME_ASSISTANT_CONFIG_PATH)
+        return {
+            "enabled": config["enabled"],
+            "base_url": config["base_url"],
+            "has_access_token": homeassistant.has_access_token(HOME_ASSISTANT_TOKEN_PATH),
+            "allowlisted_entities": config["allowlisted_entities"],
+        }
+
+    def _handle_get_home_assistant(self):
+        # Authenticated like /policy: administrative device configuration,
+        # never rendered outside the already-signed-in Chat experience.
+        if not self._check_authentication():
+            return
+        self._send_json(200, self._home_assistant_config_response())
+
+    def _handle_set_home_assistant(self):
+        if not self._check_authentication():
+            return
+        body = self._read_json_body()
+        if not isinstance(body, dict):
+            self._send_json(400, {"error": {"code": "INVALID_REQUEST", "message": "a JSON object body is required"}})
+            return
+        if not isinstance(body.get("enabled"), bool):
+            self._send_json(400, {"error": {"code": "INVALID_REQUEST", "message": "'enabled' must be a boolean"}})
+            return
+        base_url = body.get("base_url")
+        if not isinstance(base_url, str) or not (base_url.startswith("http://") or base_url.startswith("https://")):
+            self._send_json(400, {
+                "error": {"code": "INVALID_REQUEST", "message": "'base_url' must be an http:// or https:// URL"},
+            })
+            return
+        allowlisted_entities = body.get("allowlisted_entities")
+        if (
+            not isinstance(allowlisted_entities, list)
+            or len(allowlisted_entities) > MAX_ALLOWLISTED_ENTITIES
+            or not all(isinstance(entry, str) and entry for entry in allowlisted_entities)
+        ):
+            self._send_json(400, {
+                "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": f"'allowlisted_entities' must be a list of up to {MAX_ALLOWLISTED_ENTITIES} non-empty strings",
+                },
+            })
+            return
+        # None (the field omitted) means "leave the stored token
+        # unchanged" -- re-saving the allowlist must not require
+        # re-pasting the token every time (RFC-0018). An explicit empty
+        # string is a real, different request: clear the stored token.
+        access_token = body.get("access_token")
+        if access_token is not None and (
+            not isinstance(access_token, str) or len(access_token.encode("utf-8")) > MAX_ACCESS_TOKEN_BYTES
+        ):
+            self._send_json(400, {
+                "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": f"'access_token' must be a string up to {MAX_ACCESS_TOKEN_BYTES} bytes",
+                },
+            })
+            return
+        try:
+            homeassistant.write_config(
+                base_url, allowlisted_entities, body["enabled"],
+                access_token=access_token,
+                path=HOME_ASSISTANT_CONFIG_PATH, token_path=HOME_ASSISTANT_TOKEN_PATH,
+            )
+        except OSError as error:
+            self._send_json(502, {
+                "error": {
+                    "code": "HOME_ASSISTANT_CONFIG_WRITE_FAILED",
+                    "message": f"could not persist the configuration change: {error}",
+                },
+            })
+            return
+        self._send_json(200, self._home_assistant_config_response())
+
+    def _handle_get_home_assistant_entities(self):
+        # A separate, settings-page-only proxy: the *unfiltered* entity
+        # list, so a household can build the allowlist from it. Never
+        # reachable by the model -- only home_assistant.list_entities
+        # (allowlist-filtered) is a registered capability.
+        if not self._check_authentication():
+            return
+        config = homeassistant.read_config(HOME_ASSISTANT_CONFIG_PATH)
+        token = homeassistant.read_token(HOME_ASSISTANT_TOKEN_PATH)
+        if not config["base_url"] or not token:
+            self._send_json(409, {
+                "error": {"code": "HOME_ASSISTANT_NOT_CONFIGURED", "message": "Home Assistant is not configured"},
+            })
+            return
+        try:
+            states = homeassistant.fetch_all_states(
+                config["base_url"], token, timeout=ENTITIES_PROXY_TIMEOUT_SECONDS
+            )
+        except capabilities.CapabilityError as error:
+            self._send_json(502, {"error": {"code": error.code, "message": str(error)}})
+            return
+        entities = [
+            {
+                "entity_id": item.get("entity_id"),
+                "friendly_name": (item.get("attributes") or {}).get("friendly_name") or item.get("entity_id"),
+                "domain": (item.get("entity_id") or "").split(".", 1)[0],
+                "state": item.get("state") or "",
+            }
+            for item in states
+            if item.get("entity_id")
+        ]
+        self._send_json(200, {"entities": entities})
 
     def log_message(self, format_string, *arguments):
         return

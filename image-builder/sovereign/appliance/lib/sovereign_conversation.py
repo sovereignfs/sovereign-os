@@ -2,6 +2,7 @@ import json
 import pathlib
 
 import sovereign_capabilities as capabilities
+import sovereign_homeassistant as homeassistant
 import sovereign_inference as inference
 import sovereign_pihole as pihole
 import sovereign_system as system
@@ -65,18 +66,25 @@ class PendingTurnStore:
         return self._pending.pop(token, None)
 
 
-def build_registry():
+def build_registry(home_assistant_config_path=None, home_assistant_token_path=None):
     # The real, production registry -- system.health, both Pi-hole
-    # capabilities, and (RFC-0017) web.search/web.fetch. Registration is
+    # capabilities, (RFC-0017) web.search/web.fetch, and (RFC-0018)
+    # Home Assistant's read-only entity/history pair. Registration is
     # unconditional per RFC-0003 ("a static list compiled into
-    # Sovereign... not installable by a user or a model"); whether
-    # web.search/web.fetch can actually run is a runtime policy check
-    # (external_enabled) at invocation time, not a registration-time
-    # decision.
+    # Sovereign... not installable by a user or a model"); whether any
+    # external capability can actually run is a runtime policy check
+    # at invocation time, not a registration-time decision.
+    #
+    # home_assistant_config_path/token_path are threaded straight through
+    # to homeassistant.register() -- see that function's own comment for
+    # why a caller with its own resolved paths (bin/sovereign-conversation)
+    # should bind them explicitly here rather than relying on
+    # sovereign_homeassistant's own module-global defaults.
     registry = capabilities.Registry()
     system.register(registry)
     pihole.register(registry)
     websearch.register(registry)
+    homeassistant.register(registry, config_path=home_assistant_config_path, token_path=home_assistant_token_path)
     return registry
 
 
@@ -120,6 +128,21 @@ def write_policy(web_search_enabled, path=DEFAULT_POLICY_PATH):
     temporary.chmod(0o600)
     temporary.replace(path)
     return {"external_enabled": bool(web_search_enabled)}
+
+
+def build_policy(policy_path=DEFAULT_POLICY_PATH, home_assistant_config_path=None, home_assistant_token_path=None):
+    # RFC-0018: merges RFC-0017's own external_enabled flag with Home
+    # Assistant's distinct policy_key/allowlist/configured-ness -- one
+    # call site for process_turn()/resume_turn()'s policy argument,
+    # rather than each endpoint handler assembling this by hand.
+    policy = read_policy(policy_path)
+    kwargs = {}
+    if home_assistant_config_path is not None:
+        kwargs["path"] = home_assistant_config_path
+    if home_assistant_token_path is not None:
+        kwargs["token_path"] = home_assistant_token_path
+    policy.update(homeassistant.policy_fields(**kwargs))
+    return policy
 
 
 def _tool_call_id(round_number, index):
