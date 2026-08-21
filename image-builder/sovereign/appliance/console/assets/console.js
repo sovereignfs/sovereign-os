@@ -727,6 +727,16 @@ const HA_ENTITIES_PLACEHOLDER = "Sign in, save a connection, then load entities 
 // list (there is no partial-update endpoint).
 let haAllowlist = [];
 
+// RFC-0019: control_enabled/controllable_entities -- loaded and resent
+// unchanged on every save the same way haAllowlist is, even though this
+// pass builds no UI to edit them yet (that's Console's own follow-up
+// per RFC-0019's Non-Goals). Without this, "Save connection" would
+// silently wipe out control settings a household configured through
+// some other path (a future settings page, or a direct API call),
+// since POST /home-assistant always replaces the whole config object.
+let haControlEnabled = false;
+let haControllableEntities = [];
+
 function setHaSettingsMessage(text, isError) {
   haSettingsMessage.textContent = text;
   haSettingsMessage.classList.toggle("error", Boolean(isError));
@@ -801,6 +811,8 @@ function resetHomeAssistantSettingsUI() {
   haAccessTokenInput.value = "";
   renderHaTokenStatus(false);
   haAllowlist = [];
+  haControlEnabled = false;
+  haControllableEntities = [];
   haEntitiesList.replaceChildren();
   const placeholder = document.createElement("p");
   placeholder.className = "placeholder";
@@ -834,6 +846,8 @@ async function loadHomeAssistantConfig() {
     haAccessTokenInput.value = "";
     renderHaTokenStatus(Boolean(data.has_access_token));
     haAllowlist = Array.isArray(data.allowlisted_entities) ? data.allowlisted_entities.slice() : [];
+    haControlEnabled = Boolean(data.control_enabled);
+    haControllableEntities = Array.isArray(data.controllable_entities) ? data.controllable_entities.slice() : [];
     renderHaStatus(data);
   } catch (error) {
     setHaSettingsMessage("Could not reach the device.", true);
@@ -845,6 +859,8 @@ async function saveHomeAssistantConfig(reportTo) {
     enabled: haEnabledToggle.checked,
     base_url: buildHaBaseUrl(),
     allowlisted_entities: haAllowlist,
+    control_enabled: haControlEnabled,
+    controllable_entities: haControllableEntities,
   };
   // Omitted entirely (not even an empty string) means "leave the stored
   // token unchanged" -- re-saving the allowlist must not require
@@ -868,6 +884,8 @@ async function saveHomeAssistantConfig(reportTo) {
       haAccessTokenInput.value = "";
       renderHaTokenStatus(Boolean(data.has_access_token));
       haAllowlist = Array.isArray(data.allowlisted_entities) ? data.allowlisted_entities.slice() : [];
+      haControlEnabled = Boolean(data.control_enabled);
+      haControllableEntities = Array.isArray(data.controllable_entities) ? data.controllable_entities.slice() : [];
       renderHaStatus(data);
       reportTo("Saved.");
       return;

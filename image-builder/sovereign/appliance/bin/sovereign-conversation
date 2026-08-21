@@ -280,6 +280,8 @@ class ConversationHandler(BaseHTTPRequestHandler):
             "base_url": config["base_url"],
             "has_access_token": homeassistant.has_access_token(HOME_ASSISTANT_TOKEN_PATH),
             "allowlisted_entities": config["allowlisted_entities"],
+            "control_enabled": config["control_enabled"],
+            "controllable_entities": config["controllable_entities"],
         }
 
     def _handle_get_home_assistant(self):
@@ -318,6 +320,29 @@ class ConversationHandler(BaseHTTPRequestHandler):
                 },
             })
             return
+        # RFC-0019: a second, independent permission dimension -- required
+        # in every write, same as 'enabled'/'allowlisted_entities' above,
+        # not optional-with-a-default the way access_token is (that one
+        # is a credential-specific "leave unchanged" convenience, not the
+        # pattern for ordinary config fields in this endpoint).
+        if not isinstance(body.get("control_enabled"), bool):
+            self._send_json(400, {
+                "error": {"code": "INVALID_REQUEST", "message": "'control_enabled' must be a boolean"},
+            })
+            return
+        controllable_entities = body.get("controllable_entities")
+        if (
+            not isinstance(controllable_entities, list)
+            or len(controllable_entities) > MAX_ALLOWLISTED_ENTITIES
+            or not all(isinstance(entry, str) and entry for entry in controllable_entities)
+        ):
+            self._send_json(400, {
+                "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": f"'controllable_entities' must be a list of up to {MAX_ALLOWLISTED_ENTITIES} non-empty strings",
+                },
+            })
+            return
         # None (the field omitted) means "leave the stored token
         # unchanged" -- re-saving the allowlist must not require
         # re-pasting the token every time (RFC-0018). An explicit empty
@@ -336,9 +361,18 @@ class ConversationHandler(BaseHTTPRequestHandler):
         try:
             homeassistant.write_config(
                 base_url, allowlisted_entities, body["enabled"],
+                control_enabled=body["control_enabled"], controllable_entities=controllable_entities,
                 access_token=access_token,
                 path=HOME_ASSISTANT_CONFIG_PATH, token_path=HOME_ASSISTANT_TOKEN_PATH,
             )
+        except ValueError as error:
+            # RFC-0019: write_config() itself enforces controllable_entities
+            # is a subset of allowlisted_entities and light/switch-only --
+            # this is that invariant being violated, not a malformed
+            # request shape, so it's reported distinctly from the
+            # INVALID_REQUEST checks above even though it's still a 400.
+            self._send_json(400, {"error": {"code": "INVALID_CONTROL_CONFIGURATION", "message": str(error)}})
+            return
         except OSError as error:
             self._send_json(502, {
                 "error": {

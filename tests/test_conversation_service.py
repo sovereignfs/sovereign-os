@@ -631,7 +631,10 @@ class HomeAssistantConfigEndpointTests(unittest.TestCase):
         self.assertEqual(200, response.status)
         self.assertEqual(
             body,
-            {"enabled": False, "base_url": "", "has_access_token": False, "allowlisted_entities": []},
+            {
+                "enabled": False, "base_url": "", "has_access_token": False, "allowlisted_entities": [],
+                "control_enabled": False, "controllable_entities": [],
+            },
         )
 
     def test_post_requires_authentication(self):
@@ -641,7 +644,10 @@ class HomeAssistantConfigEndpointTests(unittest.TestCase):
             )
             response, body = self._post(
                 "/api/v1/conversation/home-assistant",
-                {"enabled": True, "base_url": "http://homeassistant.local:8123", "allowlisted_entities": []},
+                {
+                    "enabled": True, "base_url": "http://homeassistant.local:8123",
+                    "allowlisted_entities": [], "control_enabled": False, "controllable_entities": [],
+                },
             )
         self.assertEqual(403, response.status)
         self.assertEqual("CSRF_MISMATCH", body["error"]["code"])
@@ -655,6 +661,8 @@ class HomeAssistantConfigEndpointTests(unittest.TestCase):
                     "enabled": True,
                     "base_url": "http://homeassistant.local:8123",
                     "allowlisted_entities": ["light.kitchen"],
+                    "control_enabled": True,
+                    "controllable_entities": ["light.kitchen"],
                     "access_token": "secret-1",
                 },
             )
@@ -666,6 +674,8 @@ class HomeAssistantConfigEndpointTests(unittest.TestCase):
                 "base_url": "http://homeassistant.local:8123",
                 "has_access_token": True,
                 "allowlisted_entities": ["light.kitchen"],
+                "control_enabled": True,
+                "controllable_entities": ["light.kitchen"],
             },
         )
         self.assertNotIn("secret-1", json.dumps(body))
@@ -674,6 +684,7 @@ class HomeAssistantConfigEndpointTests(unittest.TestCase):
             urlopen.side_effect = dispatch_urlopen([auth_ok()])
             response, body = self._get("/api/v1/conversation/home-assistant")
         self.assertEqual(body["allowlisted_entities"], ["light.kitchen"])
+        self.assertEqual(body["controllable_entities"], ["light.kitchen"])
         self.assertEqual(homeassistant.read_token(self.token_path), "secret-1")
 
     def test_omitted_access_token_leaves_the_stored_token_unchanged(self):
@@ -683,14 +694,18 @@ class HomeAssistantConfigEndpointTests(unittest.TestCase):
                 "/api/v1/conversation/home-assistant",
                 {
                     "enabled": True, "base_url": "http://x:8123",
-                    "allowlisted_entities": [], "access_token": "secret-1",
+                    "allowlisted_entities": [], "control_enabled": False, "controllable_entities": [],
+                    "access_token": "secret-1",
                 },
             )
         with mock.patch("urllib.request.urlopen") as urlopen:
             urlopen.side_effect = dispatch_urlopen([auth_ok()])
             response, body = self._post(
                 "/api/v1/conversation/home-assistant",
-                {"enabled": True, "base_url": "http://x:8123", "allowlisted_entities": ["light.kitchen"]},
+                {
+                    "enabled": True, "base_url": "http://x:8123", "allowlisted_entities": ["light.kitchen"],
+                    "control_enabled": False, "controllable_entities": [],
+                },
             )
         self.assertTrue(body["has_access_token"])
         self.assertEqual(homeassistant.read_token(self.token_path), "secret-1")
@@ -700,7 +715,10 @@ class HomeAssistantConfigEndpointTests(unittest.TestCase):
             urlopen.side_effect = dispatch_urlopen([auth_ok()])
             response, body = self._post(
                 "/api/v1/conversation/home-assistant",
-                {"enabled": "yes", "base_url": "http://x:8123", "allowlisted_entities": []},
+                {
+                    "enabled": "yes", "base_url": "http://x:8123", "allowlisted_entities": [],
+                    "control_enabled": False, "controllable_entities": [],
+                },
             )
         self.assertEqual(400, response.status)
         self.assertEqual("INVALID_REQUEST", body["error"]["code"])
@@ -710,7 +728,10 @@ class HomeAssistantConfigEndpointTests(unittest.TestCase):
             urlopen.side_effect = dispatch_urlopen([auth_ok()])
             response, body = self._post(
                 "/api/v1/conversation/home-assistant",
-                {"enabled": True, "base_url": "ftp://x", "allowlisted_entities": []},
+                {
+                    "enabled": True, "base_url": "ftp://x", "allowlisted_entities": [],
+                    "control_enabled": False, "controllable_entities": [],
+                },
             )
         self.assertEqual(400, response.status)
         self.assertEqual("INVALID_REQUEST", body["error"]["code"])
@@ -720,10 +741,76 @@ class HomeAssistantConfigEndpointTests(unittest.TestCase):
             urlopen.side_effect = dispatch_urlopen([auth_ok()])
             response, body = self._post(
                 "/api/v1/conversation/home-assistant",
-                {"enabled": True, "base_url": "http://x:8123", "allowlisted_entities": "light.kitchen"},
+                {
+                    "enabled": True, "base_url": "http://x:8123", "allowlisted_entities": "light.kitchen",
+                    "control_enabled": False, "controllable_entities": [],
+                },
             )
         self.assertEqual(400, response.status)
         self.assertEqual("INVALID_REQUEST", body["error"]["code"])
+
+    def test_post_rejects_a_non_boolean_control_enabled(self):
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            response, body = self._post(
+                "/api/v1/conversation/home-assistant",
+                {
+                    "enabled": True, "base_url": "http://x:8123", "allowlisted_entities": [],
+                    "control_enabled": "yes", "controllable_entities": [],
+                },
+            )
+        self.assertEqual(400, response.status)
+        self.assertEqual("INVALID_REQUEST", body["error"]["code"])
+
+    def test_post_rejects_a_non_list_controllable_entities(self):
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            response, body = self._post(
+                "/api/v1/conversation/home-assistant",
+                {
+                    "enabled": True, "base_url": "http://x:8123", "allowlisted_entities": [],
+                    "control_enabled": True, "controllable_entities": "light.kitchen",
+                },
+            )
+        self.assertEqual(400, response.status)
+        self.assertEqual("INVALID_REQUEST", body["error"]["code"])
+
+    def test_post_rejects_a_controllable_entity_not_allowlisted(self):
+        # RFC-0019: write_config()'s own invariant (controllable is a
+        # subset of allowlisted) is enforced here, reported distinctly
+        # from a malformed-request shape.
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            response, body = self._post(
+                "/api/v1/conversation/home-assistant",
+                {
+                    "enabled": True, "base_url": "http://x:8123", "allowlisted_entities": ["light.kitchen"],
+                    "control_enabled": True, "controllable_entities": ["light.hallway"],
+                },
+            )
+        self.assertEqual(400, response.status)
+        self.assertEqual("INVALID_CONTROL_CONFIGURATION", body["error"]["code"])
+
+    def test_post_rejects_a_non_light_switch_controllable_domain(self):
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            response, body = self._post(
+                "/api/v1/conversation/home-assistant",
+                {
+                    "enabled": True, "base_url": "http://x:8123", "allowlisted_entities": ["lock.front_door"],
+                    "control_enabled": True, "controllable_entities": ["lock.front_door"],
+                },
+            )
+        self.assertEqual(400, response.status)
+        self.assertEqual("INVALID_CONTROL_CONFIGURATION", body["error"]["code"])
+        # The whole write must be rejected -- no partial persistence.
+        self.assertEqual(
+            homeassistant.read_config(self.config_path),
+            {
+                "enabled": False, "base_url": "", "allowlisted_entities": [],
+                "control_enabled": False, "controllable_entities": [],
+            },
+        )
 
 
 class HomeAssistantEntitiesProxyEndpointTests(unittest.TestCase):
@@ -796,6 +883,14 @@ class HomeAssistantConfirmationWireFormatTests(unittest.TestCase):
     def configure_and_enable(self, allowlist=("light.kitchen",)):
         homeassistant.write_config(
             "http://homeassistant.local:8123", list(allowlist), True, access_token="secret-1",
+            path=self.config_path, token_path=self.token_path,
+        )
+
+    def configure_and_enable_control(self, allowlist=("light.kitchen",), controllable=("light.kitchen",)):
+        homeassistant.write_config(
+            "http://homeassistant.local:8123", list(allowlist), True,
+            control_enabled=True, controllable_entities=list(controllable),
+            access_token="secret-1",
             path=self.config_path, token_path=self.token_path,
         )
 
@@ -910,6 +1005,95 @@ class HomeAssistantConfirmationWireFormatTests(unittest.TestCase):
             response, body = self._post({"message": "what lights are on"})
         self.assertEqual(
             [{"name": "home_assistant.list_entities", "outcome": "rejected", "code": "CAPABILITY_DISABLED"}],
+            body["capability_events"],
+        )
+
+    def test_set_entity_state_disabled_by_default_rejects_without_ever_prompting(self):
+        # RFC-0019: control has its own default-off toggle, independent
+        # of read's own.
+        self.configure_and_enable()
+        self.start_server()
+        proposal = chat_completion(
+            tool_calls=[tool_call("call_1_0", "home_assistant.set_entity_state", {"entity_id": "light.kitchen", "state": "off"})]
+        )
+        narration = chat_completion(content="Home Assistant control is disabled.")
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen(
+                [auth_ok(), ("/v1/chat/completions", proposal), ("/v1/chat/completions", narration)]
+            )
+            response, body = self._post({"message": "turn off the kitchen light"})
+        self.assertEqual(200, response.status)
+        self.assertNotIn("pending_confirmation", body)
+        self.assertEqual(
+            [{"name": "home_assistant.set_entity_state", "outcome": "rejected", "code": "CAPABILITY_DISABLED"}],
+            body["capability_events"],
+        )
+
+    def test_set_entity_state_enabled_pauses_for_confirmation_and_approving_executes(self):
+        self.configure_and_enable_control()
+        self.start_server()
+        proposal = chat_completion(
+            tool_calls=[tool_call("call_1_0", "home_assistant.set_entity_state", {"entity_id": "light.kitchen", "state": "off"})]
+        )
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok(), ("/v1/chat/completions", proposal)])
+            response, paused = self._post({"message": "turn off the kitchen light"})
+        self.assertEqual(200, response.status)
+        self.assertEqual("home_assistant.set_entity_state", paused["pending_confirmation"]["capability"])
+        self.assertEqual({"entity_id": "light.kitchen", "state": "off"}, paused["pending_confirmation"]["arguments"])
+        token = paused["pending_confirmation"]["token"]
+
+        state_response = json_response({"entity_id": "light.kitchen", "state": "on", "attributes": {}})
+        service_response = json_response([{"entity_id": "light.kitchen", "state": "off", "attributes": {}}])
+        narration = chat_completion(content="Turned off the kitchen light.")
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen(
+                [auth_ok(), ("/api/states/light.kitchen", state_response),
+                 ("/api/services/light/turn_off", service_response), ("/v1/chat/completions", narration)]
+            )
+            response, body = self._post({"confirmation": {"token": token, "approve": True}})
+        self.assertEqual(200, response.status)
+        self.assertEqual("Turned off the kitchen light.", body["text"])
+        self.assertEqual(
+            [{"name": "home_assistant.set_entity_state", "outcome": "executed"}], body["capability_events"],
+        )
+
+    def test_set_entity_state_denying_never_calls_home_assistant(self):
+        self.configure_and_enable_control()
+        self.start_server()
+        proposal = chat_completion(
+            tool_calls=[tool_call("call_1_0", "home_assistant.set_entity_state", {"entity_id": "light.kitchen", "state": "off"})]
+        )
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok(), ("/v1/chat/completions", proposal)])
+            _, paused = self._post({"message": "turn off the kitchen light"})
+        token = paused["pending_confirmation"]["token"]
+
+        narration = chat_completion(content="Okay, leaving it as is.")
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            # No /api/states or /api/services rule registered -- proves
+            # denial never contacts Home Assistant at all.
+            urlopen.side_effect = dispatch_urlopen([auth_ok(), ("/v1/chat/completions", narration)])
+            response, body = self._post({"confirmation": {"token": token, "approve": False}})
+        self.assertEqual(200, response.status)
+        self.assertEqual(
+            [{"name": "home_assistant.set_entity_state", "outcome": "denied"}], body["capability_events"],
+        )
+
+    def test_enabling_read_alone_does_not_enable_control_at_the_http_layer(self):
+        self.configure_and_enable()  # read-only, control_enabled stays False
+        self.start_server()
+        proposal = chat_completion(
+            tool_calls=[tool_call("call_1_0", "home_assistant.set_entity_state", {"entity_id": "light.kitchen", "state": "off"})]
+        )
+        narration = chat_completion(content="Control is disabled.")
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen(
+                [auth_ok(), ("/v1/chat/completions", proposal), ("/v1/chat/completions", narration)]
+            )
+            response, body = self._post({"message": "turn off the kitchen light"})
+        self.assertEqual(
+            [{"name": "home_assistant.set_entity_state", "outcome": "rejected", "code": "CAPABILITY_DISABLED"}],
             body["capability_events"],
         )
 
