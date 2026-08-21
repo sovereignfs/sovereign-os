@@ -14,6 +14,7 @@ RFCs are proposals, not decisions. Start with the [RFC template](../templates/rf
 - [RFC-0015: Update discovery - channel metadata and device-side checking](0015-update-discovery.md) - Accepted
 - [RFC-0016: Full base-OS updates (A/B root filesystem)](0016-full-base-os-updates.md) - Accepted
 - [RFC-0017: web.search and web.fetch capability mapping](0017-web-search-and-fetch-capability-mapping.md) - Draft
+- [RFC-0018: Home Assistant read-only capability mapping](0018-home-assistant-read-only-capability-mapping.md) - Draft
 
 RFC-0001 refers to earlier platform work and remains unwritten; create it
 only when its problem and evidence are mature enough for a concrete
@@ -35,3 +36,8 @@ privacy design), drafted 2026-08-21 against
 [docs/research/searxng-deployment-assessment.md](../research/searxng-deployment-assessment.md)
 and the confirmation-flow/policy-state gaps already visible in
 `sovereign_conversation.py`. Awaiting project-owner review.
+
+RFC-0018 is Milestone 5's first document (Home Assistant read-only entity/
+history capability mapping), drafted 2026-08-21 against RFC-0017's
+already-shipped confirmation wire format and Home Assistant's own REST API
+documentation. Awaiting project-owner review.

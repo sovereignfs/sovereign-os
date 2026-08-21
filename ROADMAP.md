@@ -642,9 +642,11 @@ Milestone 01.2 will deliver:
 
 ### 5. Home Automation Integration
 
-**Status:** ⚪ Planned
+**Status:** 🟡 In progress — RFC drafted, not yet reviewed
 
-**Depends on:** Qualified capability executor
+**Depends on:** Qualified capability executor (satisfied — see Milestone 4's
+real-hardware qualification of the confirmation/policy/audit machinery via
+`web.search`/`web.fetch`)
 
 **User outcome:** Ask about and safely control allowlisted home entities through
 the same Sovereign conversation boundary.
@@ -654,6 +656,23 @@ history. Later slices may propose allowlisted actions, but deterministic policy
 outside the model must authorize them and require confirmation according to
 risk. The model never receives unrestricted Home Assistant, shell, Docker, or
 network access.
+
+[RFC-0018](docs/rfcs/0018-home-assistant-read-only-capability-mapping.md)
+(Draft) maps the first slice's two capabilities
+(`home_assistant.list_entities`, `home_assistant.get_history`) against
+RFC-0003's contract, reusing RFC-0017's confirmation wire format
+unchanged. It classifies Home Assistant traffic as `external` (a separate
+household-owned host, not device-local) — a disclosed, deliberately
+conservative reading of RFC-0003's existing `local`/`external` axis rather
+than a unilateral amendment to it — fixes the entity allowlist mechanism
+(checked before confirmation, not merely before execution), and fixes
+where the connection's long-lived access token is stored, mirroring
+`pihole-admin-password`'s existing precedent. Unlike Pi-hole/SearXNG/
+llama.cpp, Sovereign does not deploy or manage Home Assistant itself —
+real-hardware qualification depends on a real instance already existing on
+the household network, a genuine, disclosed schedule risk this milestone
+hasn't faced before. Awaiting project-owner review; implementation not yet
+started.
 
 ### 6. Full Base-OS Updates
 
@@ -754,7 +773,8 @@ This milestone closes the remaining “flash once” gap.
   smoke-tested end-to-end on real Raspberry Pi 5 hardware (RFC-0017,
   Draft); a real signed-release qualification (artifact/import systemd
   paths, the real hardened sandbox) remains
-- ⚪ Home Assistant capability integration
+- 🟡 Home Assistant capability integration — read-only entity/history
+  mapping drafted (RFC-0018, Draft); not yet reviewed or implemented
 - ✅ A/B full base-OS updates (RFC-0016): every Acceptance Criteria item
   hardware-qualified, including a second base-OS update with no
   reflash, the Console panel against a live transaction, and a genuine
