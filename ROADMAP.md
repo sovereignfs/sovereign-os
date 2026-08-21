@@ -643,11 +643,10 @@ Milestone 01.2 will deliver:
 
 ### 5. Home Automation Integration
 
-**Status:** 🟡 In progress — both slices implemented and unit-tested
-(read-only slice also manually verified in Console); real-hardware
-qualification of either slice blocked on an external dependency (see
-below); Console UI for the second (allowlisted-action) slice's control
-toggle/picker not yet built
+**Status:** 🟡 In progress — both slices implemented, unit-tested, and
+manually verified in Console (including the second slice's control
+toggle/picker); real-hardware qualification of either slice blocked on
+an external dependency (see below)
 
 **Depends on:** Qualified capability executor (satisfied — see Milestone 4's
 real-hardware qualification of the confirmation/policy/audit machinery via
@@ -715,11 +714,22 @@ never contacts Home Assistant), and success verified against the real
 service-call response rather than trusting a 200 status alone. Extending
 the config endpoint's required fields would have silently broken
 Console's already-shipped read-only "Save connection" button — fixed by
-having it load, retain, and resend the two new control fields unchanged
-even though this pass builds no UI to edit them yet. Console's own
-settings UI for the control toggle/picker remains unbuilt, and
-real-hardware qualification depends on the same unresolved external
-dependency (no Home Assistant instance yet) named above.
+having it load, retain, and resend the two new control fields even
+before any UI existed to edit them.
+
+**Console-wired**: an "Allow control" toggle independent of the
+existing "Allow Home Assistant" toggle, and a per-entity "Control"
+checkbox next to each allowlisted entity's existing "Read" checkbox —
+offered only for `light`/`switch`-domain entities, disabled until Read
+is checked for that entity, and cascaded off if Read is later
+unchecked (client-side mirror of the same subset invariant
+`write_config()` enforces server-side). Manually verified end-to-end in
+a browser against a stub backend: sign in, save a connection, enable
+both toggles, load entities, confirm Control is offered only for
+light/switch domains, check Read+Control on two entities, save, reload,
+and confirm both the toggle and per-entity grants persisted. Real-hardware
+qualification depends on the same unresolved external dependency (no
+Home Assistant instance yet) named above.
 
 ### 6. Full Base-OS Updates
 
@@ -821,10 +831,10 @@ This milestone closes the remaining “flash once” gap.
   Accepted); a real signed-release qualification (artifact/import systemd
   paths, the real hardened sandbox) remains
 - 🟡 Home Assistant capability integration — read-only entity/history
-  mapping (RFC-0018) implemented and Console-wired; allowlisted-action
-  mapping (RFC-0019, `light`/`switch` only) implemented, Console UI for
-  it still unbuilt; real-hardware qualification of either blocked on no
-  Home Assistant instance existing on the household network yet
+  mapping (RFC-0018) and allowlisted-action mapping (RFC-0019,
+  `light`/`switch` only) both implemented and Console-wired; real-hardware
+  qualification of either blocked on no Home Assistant instance existing
+  on the household network yet
 - ✅ A/B full base-OS updates (RFC-0016): every Acceptance Criteria item
   hardware-qualified, including a second base-OS update with no
   reflash, the Console panel against a live transaction, and a genuine

@@ -192,6 +192,8 @@ function showSignedIn() {
   chatWebSearchToggle.disabled = false;
   loadWebSearchPolicy();
   haPolicyRow.hidden = false;
+  haControlPolicyRow.hidden = false;
+  haEntitiesHint.hidden = false;
   setHaFieldsEnabled(true);
   loadHomeAssistantConfig();
 }
@@ -214,6 +216,8 @@ function showSignedOut() {
   chatWebSearchToggle.checked = false;
   setChatPolicyMessage("");
   haPolicyRow.hidden = true;
+  haControlPolicyRow.hidden = true;
+  haEntitiesHint.hidden = true;
   setHaFieldsEnabled(false);
   resetHomeAssistantSettingsUI();
 }
@@ -706,6 +710,9 @@ chatWebSearchToggle.addEventListener("change", async () => {
 // /home-assistant endpoints.
 const haPolicyRow = document.querySelector("#ha-policy-row");
 const haEnabledToggle = document.querySelector("#ha-enabled-toggle");
+const haControlPolicyRow = document.querySelector("#ha-control-policy-row");
+const haControlEnabledToggle = document.querySelector("#ha-control-enabled-toggle");
+const haEntitiesHint = document.querySelector("#ha-entities-hint");
 const haBaseUrlScheme = document.querySelector("#ha-base-url-scheme");
 const haBaseUrlHost = document.querySelector("#ha-base-url-host");
 const haAccessTokenInput = document.querySelector("#ha-access-token");
@@ -719,7 +726,16 @@ const haSaveAllowlistButton = document.querySelector("#ha-save-allowlist");
 const haStatusPill = document.querySelector("#ha-status-pill");
 const haStatusDetail = document.querySelector("#ha-status-detail");
 const haEntityCount = document.querySelector("#ha-entity-count");
-const HA_ENTITIES_PLACEHOLDER = "Sign in, save a connection, then load entities to choose which ones the assistant may read.";
+const HA_ENTITIES_PLACEHOLDER = "Sign in, save a connection, then load entities to choose which ones the assistant may read and control.";
+
+// RFC-0019: the same light/switch restriction the backend enforces
+// (write_config(), _control_policy_check, and the implementation itself
+// all independently check this) -- mirrored here only to decide whether
+// to offer a Control checkbox at all. This is a UI convenience, not a
+// security boundary: the real enforcement is server-side, so offering
+// (or not) a checkbox here changes nothing about what a bypassed request
+// could do.
+const HA_CONTROLLABLE_DOMAINS = new Set(["light", "switch"]);
 
 // The live-editable allowlist, loaded from the real config and mutated by
 // the entity checklist below -- resent in full on every save, since
@@ -727,14 +743,11 @@ const HA_ENTITIES_PLACEHOLDER = "Sign in, save a connection, then load entities 
 // list (there is no partial-update endpoint).
 let haAllowlist = [];
 
-// RFC-0019: control_enabled/controllable_entities -- loaded and resent
-// unchanged on every save the same way haAllowlist is, even though this
-// pass builds no UI to edit them yet (that's Console's own follow-up
-// per RFC-0019's Non-Goals). Without this, "Save connection" would
-// silently wipe out control settings a household configured through
-// some other path (a future settings page, or a direct API call),
-// since POST /home-assistant always replaces the whole config object.
-let haControlEnabled = false;
+// RFC-0019: the live-editable controllable-entities list, same pattern
+// as haAllowlist above. control_enabled itself is read directly from
+// haControlEnabledToggle.checked at save time, the same way enabled
+// already reads from haEnabledToggle.checked -- no separate variable
+// needed for a single checkbox's own state.
 let haControllableEntities = [];
 
 function setHaSettingsMessage(text, isError) {
@@ -749,6 +762,7 @@ function setHaEntitiesMessage(text, isError) {
 
 function setHaFieldsEnabled(enabled) {
   haEnabledToggle.disabled = !enabled;
+  haControlEnabledToggle.disabled = !enabled;
   haBaseUrlScheme.disabled = !enabled;
   haBaseUrlHost.disabled = !enabled;
   haAccessTokenInput.disabled = !enabled;
@@ -806,12 +820,12 @@ function applyHaBaseUrl(baseUrl) {
 
 function resetHomeAssistantSettingsUI() {
   haEnabledToggle.checked = false;
+  haControlEnabledToggle.checked = false;
   haBaseUrlScheme.value = "http";
   haBaseUrlHost.value = "";
   haAccessTokenInput.value = "";
   renderHaTokenStatus(false);
   haAllowlist = [];
-  haControlEnabled = false;
   haControllableEntities = [];
   haEntitiesList.replaceChildren();
   const placeholder = document.createElement("p");
@@ -846,7 +860,7 @@ async function loadHomeAssistantConfig() {
     haAccessTokenInput.value = "";
     renderHaTokenStatus(Boolean(data.has_access_token));
     haAllowlist = Array.isArray(data.allowlisted_entities) ? data.allowlisted_entities.slice() : [];
-    haControlEnabled = Boolean(data.control_enabled);
+    haControlEnabledToggle.checked = Boolean(data.control_enabled);
     haControllableEntities = Array.isArray(data.controllable_entities) ? data.controllable_entities.slice() : [];
     renderHaStatus(data);
   } catch (error) {
@@ -859,7 +873,7 @@ async function saveHomeAssistantConfig(reportTo) {
     enabled: haEnabledToggle.checked,
     base_url: buildHaBaseUrl(),
     allowlisted_entities: haAllowlist,
-    control_enabled: haControlEnabled,
+    control_enabled: haControlEnabledToggle.checked,
     controllable_entities: haControllableEntities,
   };
   // Omitted entirely (not even an empty string) means "leave the stored
@@ -884,7 +898,7 @@ async function saveHomeAssistantConfig(reportTo) {
       haAccessTokenInput.value = "";
       renderHaTokenStatus(Boolean(data.has_access_token));
       haAllowlist = Array.isArray(data.allowlisted_entities) ? data.allowlisted_entities.slice() : [];
-      haControlEnabled = Boolean(data.control_enabled);
+      haControlEnabledToggle.checked = Boolean(data.control_enabled);
       haControllableEntities = Array.isArray(data.controllable_entities) ? data.controllable_entities.slice() : [];
       renderHaStatus(data);
       reportTo("Saved.");
@@ -922,8 +936,9 @@ function renderHaEntities(entities) {
     return;
   }
   const allowedSet = new Set(haAllowlist);
+  const controllableSet = new Set(haControllableEntities);
   entities.forEach((entity) => {
-    const row = document.createElement("label");
+    const row = document.createElement("div");
     row.className = "check-row";
     const info = document.createElement("div");
     const name = document.createElement("div");
@@ -933,18 +948,74 @@ function renderHaEntities(entities) {
     detail.className = "detail";
     detail.textContent = `${entity.entity_id} · ${entity.state || "unknown"}`;
     info.append(name, detail);
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.checked = allowedSet.has(entity.entity_id);
-    checkbox.addEventListener("change", () => {
-      if (checkbox.checked) {
+
+    const toggles = document.createElement("div");
+    toggles.style.display = "flex";
+    toggles.style.gap = "16px";
+    toggles.style.alignItems = "center";
+
+    const readLabel = document.createElement("label");
+    readLabel.style.display = "inline-flex";
+    readLabel.style.gap = "4px";
+    readLabel.style.alignItems = "center";
+    const readCheckbox = document.createElement("input");
+    readCheckbox.type = "checkbox";
+    readCheckbox.checked = allowedSet.has(entity.entity_id);
+    const readText = document.createElement("span");
+    readText.className = "detail";
+    readText.textContent = "Read";
+    readLabel.append(readCheckbox, readText);
+    toggles.append(readLabel);
+
+    // RFC-0019: control is only ever offered for light/switch entities,
+    // and only once Read is checked -- you cannot control something you
+    // haven't also chosen to let the assistant see (the same subset
+    // invariant write_config() enforces server-side).
+    const controllable = HA_CONTROLLABLE_DOMAINS.has(entity.domain);
+    let controlCheckbox = null;
+    if (controllable) {
+      const controlLabel = document.createElement("label");
+      controlLabel.style.display = "inline-flex";
+      controlLabel.style.gap = "4px";
+      controlLabel.style.alignItems = "center";
+      controlCheckbox = document.createElement("input");
+      controlCheckbox.type = "checkbox";
+      controlCheckbox.checked = controllableSet.has(entity.entity_id) && readCheckbox.checked;
+      controlCheckbox.disabled = !readCheckbox.checked;
+      const controlText = document.createElement("span");
+      controlText.className = "detail";
+      controlText.textContent = "Control";
+      controlLabel.append(controlCheckbox, controlText);
+      toggles.append(controlLabel);
+
+      controlCheckbox.addEventListener("change", () => {
+        if (controlCheckbox.checked) {
+          if (!haControllableEntities.includes(entity.entity_id)) haControllableEntities.push(entity.entity_id);
+        } else {
+          haControllableEntities = haControllableEntities.filter((id) => id !== entity.entity_id);
+        }
+      });
+    }
+
+    readCheckbox.addEventListener("change", () => {
+      if (readCheckbox.checked) {
         if (!haAllowlist.includes(entity.entity_id)) haAllowlist.push(entity.entity_id);
       } else {
         haAllowlist = haAllowlist.filter((id) => id !== entity.entity_id);
+        // Unchecking Read must also drop Control -- the backend rejects
+        // a controllable entity that isn't also allowlisted, so the UI
+        // enforces the same subset invariant rather than letting a save
+        // fail with an error the household didn't expect.
+        if (controlCheckbox) {
+          controlCheckbox.checked = false;
+          haControllableEntities = haControllableEntities.filter((id) => id !== entity.entity_id);
+        }
       }
+      if (controlCheckbox) controlCheckbox.disabled = !readCheckbox.checked;
       haEntityCount.textContent = String(haAllowlist.length);
     });
-    row.append(info, checkbox);
+
+    row.append(info, toggles);
     haEntitiesList.append(row);
   });
   haSaveAllowlistButton.hidden = false;
