@@ -642,7 +642,8 @@ Milestone 01.2 will deliver:
 
 ### 5. Home Automation Integration
 
-**Status:** 🟡 In progress — RFC drafted, not yet reviewed
+**Status:** 🟡 In progress — RFC-0018 accepted, implementation not yet
+started
 
 **Depends on:** Qualified capability executor (satisfied — see Milestone 4's
 real-hardware qualification of the confirmation/policy/audit machinery via
@@ -658,7 +659,7 @@ risk. The model never receives unrestricted Home Assistant, shell, Docker, or
 network access.
 
 [RFC-0018](docs/rfcs/0018-home-assistant-read-only-capability-mapping.md)
-(Draft) maps the first slice's two capabilities
+(Accepted 2026-08-21) maps the first slice's two capabilities
 (`home_assistant.list_entities`, `home_assistant.get_history`) against
 RFC-0003's contract, reusing RFC-0017's confirmation wire format
 unchanged. It classifies Home Assistant traffic as `external` (a separate
@@ -671,8 +672,7 @@ where the connection's long-lived access token is stored, mirroring
 llama.cpp, Sovereign does not deploy or manage Home Assistant itself —
 real-hardware qualification depends on a real instance already existing on
 the household network, a genuine, disclosed schedule risk this milestone
-hasn't faced before. Awaiting project-owner review; implementation not yet
-started.
+hasn't faced before.
 
 ### 6. Full Base-OS Updates
 
@@ -774,7 +774,7 @@ This milestone closes the remaining “flash once” gap.
   Draft); a real signed-release qualification (artifact/import systemd
   paths, the real hardened sandbox) remains
 - 🟡 Home Assistant capability integration — read-only entity/history
-  mapping drafted (RFC-0018, Draft); not yet reviewed or implemented
+  mapping accepted (RFC-0018); not yet implemented
 - ✅ A/B full base-OS updates (RFC-0016): every Acceptance Criteria item
   hardware-qualified, including a second base-OS update with no
   reflash, the Console panel against a live transaction, and a genuine

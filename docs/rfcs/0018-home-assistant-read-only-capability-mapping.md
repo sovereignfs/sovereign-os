@@ -1,6 +1,6 @@
 # RFC-0018: Home Assistant Read-Only Capability Mapping
 
-**Status:** Draft
+**Status:** Accepted (2026-08-21, project creator)
 **Author:** Project creator and Claude
 **Created:** 2026-08-21
 **Reviewers:** Project creator
@@ -276,6 +276,11 @@ directly rather than resolving it by quietly stretching RFC-0003's
   A free-form range would need its own parsing/validation surface and
   could request an unbounded amount of history from Home Assistant's own
   database for no scope benefit this milestone's actual questions need.
+  (`period` maps to `/api/history/period/<timestamp>`'s required
+  timestamp by computing "now minus one hour/day/week" at invocation
+  time — an implementation detail, not an architectural one, the same
+  class of deferral RFC-0017 already made for its own extraction-method
+  specifics.)
 - **Result:** `{ "entity_id": string, "period": string, "changes": [ {
   "state": string, "changed_at": timestamp } ], "retrieved_at": timestamp
   }`. `changes` is capped at 50 entries — plenty for a conversational
@@ -396,7 +401,9 @@ Model proposes home_assistant.list_entities({})       [RFC-0004 flow]
        result_schema -> appended to context
 
 home_assistant.get_history({"entity_id": "...", "period": "day"}):
-    -> stage 2 additionally validates entity_id against the allowlist
+    -> stage 2 validates entity_id/period against their argument schema
+       (shape only, no allowlist knowledge)
+    -> stage 3 additionally checks entity_id against the allowlist
        (ENTITY_NOT_ALLOWLISTED if absent) -- before stage 4's confirmation
        gate is ever reached, so an out-of-allowlist request never
        generates a prompt
@@ -616,6 +623,22 @@ above:
   revoked by the household from their own Home Assistant UI — expected to
   surface as a normal bounded-execution authentication failure, but
   unverified against a real instance.
+- **TLS certificate verification for `base_url`, found during review and
+  not addressed in the Proposal above.** A household running Home
+  Assistant with `https://` (its own self-signed certificate, or a
+  LAN-internal CA — both common for local installs, unlike `web.fetch`'s
+  targets, which are public and hold ordinary publicly-trusted certs) may
+  fail to connect under ordinary certificate verification, or — if the
+  implementation instead disables verification to route around that —
+  quietly lose any protection against a spoofed on-LAN response. Neither
+  half of that tradeoff is decided here. This is implementation-level,
+  not a change to this RFC's classification, allowlist, or credential
+  design, so it does not block acceptance, but it must be resolved
+  (most likely: support a plain `http://` default matching Home
+  Assistant's own common local-network configuration, and require normal
+  certificate verification if a household opts into `https://`, never a
+  blanket bypass) before `POST /api/v1/conversation/home-assistant`
+  ships.
 
 ## Acceptance Criteria
 
@@ -670,5 +693,21 @@ from build-out:
 
 ## Decision
 
-Leave blank until review. Record approval, rejection, or requested
-changes with date and owner.
+**Accepted (2026-08-21, project creator, reviewed by Claude at the
+project creator's direction).** The `home_assistant.list_entities`/
+`home_assistant.get_history` mapping, the `external` classification of
+Home Assistant traffic, the entity allowlist mechanism (checked at
+stage 3, before confirmation), and the credential-storage design are
+accepted as this milestone's platform contract. Review before acceptance
+found and fixed one real internal inconsistency (the Interfaces and Data
+Flow diagram misstated the allowlist check as stage 2 instead of stage 3,
+contradicting the Entity Allowlist section's own prose) and one genuine
+gap not previously addressed (TLS certificate verification behavior for
+`base_url`, now recorded as a named, non-blocking Unresolved Question with
+a concrete direction: support plain `http://` for the common local
+case, and real certificate verification — never a blanket bypass — if a
+household opts into `https://`). Both are fixed in this revision. The
+Unresolved Questions above, including whether RFC-0003's `network` axis
+should eventually grow a distinct local-network tier, are accepted as
+non-blocking follow-ups, not gating conditions, matching RFC-0003's own
+precedent for its Unresolved Questions.
