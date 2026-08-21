@@ -642,8 +642,9 @@ Milestone 01.2 will deliver:
 
 ### 5. Home Automation Integration
 
-**Status:** 🟡 In progress — RFC-0018 accepted, implementation not yet
-started
+**Status:** 🟡 In progress — first (read-only) slice implemented, unit-tested,
+and manually verified in Console; real-hardware qualification blocked on an
+external dependency (see below)
 
 **Depends on:** Qualified capability executor (satisfied — see Milestone 4's
 real-hardware qualification of the confirmation/policy/audit machinery via
@@ -668,11 +669,20 @@ conservative reading of RFC-0003's existing `local`/`external` axis rather
 than a unilateral amendment to it — fixes the entity allowlist mechanism
 (checked before confirmation, not merely before execution), and fixes
 where the connection's long-lived access token is stored, mirroring
-`pihole-admin-password`'s existing precedent. Unlike Pi-hole/SearXNG/
-llama.cpp, Sovereign does not deploy or manage Home Assistant itself —
-real-hardware qualification depends on a real instance already existing on
-the household network, a genuine, disclosed schedule risk this milestone
-hasn't faced before.
+`pihole-admin-password`'s existing precedent.
+
+**Implemented and Console-wired** (`sovereign_homeassistant.py`,
+`bin/sovereign-conversation`'s three new endpoints, and Console's Home
+Assistant page): the capability executor generalization
+(`policy_key`/`policy_check`, so enabling web search no longer silently
+enables Home Assistant too), config/credential storage, and a real
+settings UI (connection fields, entity-allowlist picker) — manually
+verified end-to-end in a browser against a stub backend. Unlike
+Pi-hole/SearXNG/llama.cpp, Sovereign does not deploy or manage Home
+Assistant itself — **real-hardware qualification is blocked**, not merely
+pending: confirmed with the project owner that no Home Assistant instance
+currently exists on the household network, so this milestone has no
+target to qualify against yet. This stays an open item until one does.
 
 ### 6. Full Base-OS Updates
 
@@ -774,7 +784,9 @@ This milestone closes the remaining “flash once” gap.
   Draft); a real signed-release qualification (artifact/import systemd
   paths, the real hardened sandbox) remains
 - 🟡 Home Assistant capability integration — read-only entity/history
-  mapping accepted (RFC-0018); not yet implemented
+  mapping (RFC-0018) implemented and Console-wired; real-hardware
+  qualification blocked on no Home Assistant instance existing on the
+  household network yet
 - ✅ A/B full base-OS updates (RFC-0016): every Acceptance Criteria item
   hardware-qualified, including a second base-OS update with no
   reflash, the Console panel against a live transaction, and a genuine
