@@ -271,9 +271,11 @@ h1, h2, p { margin-top: 0; }
 
 .machine-fact { font-family: var(--sv-font-family-mono); }
 
-/* ---- preview pages (Chat / Home Assistant / Activity) ----
+/* ---- preview pages (Home Assistant / Activity) ----
    These pages show the assistant-vision design direction, not a shipped
-   capability. Non-interactive: no fetch, no listeners on their controls. */
+   capability. Non-interactive: no fetch, no listeners on their controls.
+   Chat has since been wired to the real Conversation Service and reuses
+   the .chat-thread/.bubble/.receipt/.composer rules below, live. */
 
 .preview-banner {
   display: flex;
@@ -300,9 +302,52 @@ h1, h2, p { margin-top: 0; }
 .trust-strip .bar-inner { gap: 6px; max-width: 760px; padding: 0 var(--sv-space-6); margin: 0 auto; }
 .trust-strip .machine-fact { font-size: 11px; }
 
+.policy-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sv-space-2) var(--sv-space-3);
+  padding: var(--sv-space-3) 0;
+  margin-bottom: var(--sv-space-3);
+  border-bottom: 1px solid var(--sv-color-border);
+  font-size: var(--sv-font-size-sm);
+}
+.policy-row .policy-detail { font-size: 11px; color: var(--sv-color-text-muted); }
+
+.switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.switch input {
+  appearance: none;
+  width: 34px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: var(--sv-radius-full);
+  background: var(--sv-color-surface-sunken);
+  border: 1px solid var(--sv-color-border-strong);
+  position: relative;
+  cursor: pointer;
+}
+.switch input::before {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--sv-color-surface-raised);
+  transition: transform .15s;
+}
+.switch input:checked { background: var(--sv-color-accent); border-color: transparent; }
+.switch input:checked::before { transform: translateX(14px); background: var(--sv-color-text-on-accent); }
+.switch input:disabled { opacity: .5; cursor: not-allowed; }
+
+#chat-policy-message { margin: 0 0 var(--sv-space-3); min-height: 1em; font-size: 11px; color: var(--sv-color-text-muted); }
+#chat-policy-message.error { color: var(--sv-color-error-text); }
+
 .chat-thread { display: flex; flex-direction: column; gap: var(--sv-space-3); }
 .bubble { max-width: 72%; padding: var(--sv-space-3) var(--sv-space-4); border-radius: var(--sv-radius-2xl); font-size: var(--sv-font-size-sm); line-height: 1.5; }
 .bubble.assistant { align-self: flex-start; background: var(--sv-color-surface-sunken); border-bottom-left-radius: var(--sv-radius-sm); }
+.bubble.assistant.pending { color: var(--sv-color-text-subtle); font-style: italic; }
 .bubble.user { align-self: flex-end; background: var(--sv-color-accent); color: var(--sv-color-text-on-accent); border-bottom-right-radius: var(--sv-radius-sm); display: flex; align-items: baseline; gap: 7px; }
 
 .receipt { display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; margin: -6px 0 0 10px; font-size: 11px; color: var(--sv-color-text-subtle); }
@@ -310,11 +355,34 @@ h1, h2, p { margin-top: 0; }
 .receipt .machine-fact { font-size: 10px; }
 .receipt.from-user { align-self: flex-end; margin: -6px 10px 0 0; }
 
+.confirmation-card {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sv-space-3);
+  padding: var(--sv-space-4);
+  border: 1px solid var(--sv-color-warning-border);
+  border-radius: var(--sv-radius-xl);
+  background: var(--sv-color-warning-surface);
+}
+.confirmation-heading { margin: 0; font-size: var(--sv-font-size-sm); color: var(--sv-color-warning-text); }
+.confirmation-heading strong { font-family: var(--sv-font-family-mono); }
+.confirmation-arguments { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.confirmation-arguments dt { font-family: var(--sv-font-family-mono); font-size: 11px; color: var(--sv-color-warning-text); opacity: .8; }
+.confirmation-arguments dd { margin: 2px 0 0; font-family: var(--sv-font-family-mono); font-size: var(--sv-font-size-caption); color: var(--sv-color-warning-text); word-break: break-word; }
+.confirmation-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
 .composer { border-top: 1px solid var(--sv-color-border); padding: var(--sv-space-4) 0 0; margin-top: var(--sv-space-5); }
 .composer-inner { display: flex; align-items: flex-end; gap: 8px; }
-.send-btn, .mic-btn { width: var(--sv-touch-target-min); height: var(--sv-touch-target-min); border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; cursor: default; }
+.send-btn, .mic-btn { width: var(--sv-touch-target-min); height: var(--sv-touch-target-min); border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; padding: 0; font-family: inherit; cursor: pointer; }
+.send-btn:disabled, .mic-btn:disabled { opacity: .5; cursor: not-allowed; }
 .send-btn { background: var(--sv-color-accent); color: var(--sv-color-text-on-accent); border: none; }
 .mic-btn { background: transparent; color: var(--sv-color-text-muted); border: 1px solid var(--sv-color-border-strong); }
+
+#chat-message { margin: var(--sv-space-2) 0 0; min-height: 1em; font-size: 11px; color: var(--sv-color-text-muted); }
+#chat-message.error { color: var(--sv-color-error-text); }
+
+.field input:disabled, .field textarea:disabled { opacity: .6; cursor: not-allowed; }
 
 .filter-chip { display: inline-flex; align-items: center; padding: 4px 11px; border-radius: var(--sv-radius-full); border: 1px solid var(--sv-color-border-strong); background: var(--sv-color-surface-raised); color: var(--sv-color-text-muted); font-family: var(--sv-font-family-body); font-size: var(--sv-font-size-xs); font-weight: var(--sv-font-weight-medium); cursor: default; white-space: nowrap; }
 .filter-chip.active { background: var(--sv-color-accent); border-color: transparent; color: var(--sv-color-text-on-accent); }
