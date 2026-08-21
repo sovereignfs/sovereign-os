@@ -39,6 +39,11 @@ APPLIANCE_FILES = {
     "llama/model.env": 0o644,
     "nginx/sovereign.conf": 0o644,
     "pihole/compose.yaml.in": 0o644,
+    "searxng/compose.yaml.in": 0o644,
+    "searxng/settings.yml": 0o644,
+    "bin/start-searxng": 0o755,
+    "bin/stop-searxng": 0o755,
+    "lib/sovereign_websearch.py": 0o644,
 }
 
 
@@ -117,6 +122,14 @@ def create(args):
     llama_oci = pathlib.Path(args.llama_oci).resolve()
     if not llama_oci.is_file():
         raise ValueError("llama.cpp OCI archive is missing")
+    searxng_env = pathlib.Path(args.searxng_env).resolve()
+    searxng = parse_env(searxng_env)
+    searxng_digest = searxng.get("SEARXNG_IMAGE_DIGEST", "")
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", searxng_digest):
+        raise ValueError("invalid SearXNG digest")
+    searxng_oci = pathlib.Path(args.searxng_oci).resolve()
+    if not searxng_oci.is_file():
+        raise ValueError("SearXNG OCI archive is missing")
     with tempfile.TemporaryDirectory() as temporary_directory:
         release = pathlib.Path(temporary_directory) / "release"
         release.mkdir()
@@ -134,6 +147,8 @@ def create(args):
         shutil.copyfile(oci, release / "pihole-arm64.oci.tar")
         shutil.copyfile(llama_env, release / "llama-image.env")
         shutil.copyfile(llama_oci, release / "llama-arm64.oci.tar")
+        shutil.copyfile(searxng_env, release / "searxng-image.env")
+        shutil.copyfile(searxng_oci, release / "searxng-arm64.oci.tar")
         (release / "sovereign-release").write_text(
             'NAME="Sovereign OS"\n'
             'VARIANT="Raspberry Pi 5"\n'
@@ -200,6 +215,11 @@ def create(args):
                 "repository": llama["LLAMA_IMAGE_REPOSITORY"],
                 "digest": llama_digest,
             },
+            "searxng": {
+                "version": searxng["SEARXNG_IMAGE_TAG"],
+                "repository": searxng["SEARXNG_IMAGE_REPOSITORY"],
+                "digest": searxng_digest,
+            },
         },
         "requirements": {"free_bytes": args.free_bytes, "reboot": False},
         "migrations": [],
@@ -226,6 +246,8 @@ def main():
     parser.add_argument("--oci", type=pathlib.Path, required=True)
     parser.add_argument("--llama-env", type=pathlib.Path, required=True)
     parser.add_argument("--llama-oci", type=pathlib.Path, required=True)
+    parser.add_argument("--searxng-env", type=pathlib.Path, required=True)
+    parser.add_argument("--searxng-oci", type=pathlib.Path, required=True)
     parser.add_argument(
         "--appliance-dir",
         type=pathlib.Path,

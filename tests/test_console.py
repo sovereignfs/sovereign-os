@@ -370,6 +370,172 @@ class ConsoleTests(unittest.TestCase):
         self.assertIn('next.startsWith("//")', block)
         self.assertIn("NEXT_REDIRECT_PREFIXES.some", block)
 
+    def test_chat_page_is_wired_to_the_real_conversation_service(self):
+        html = HTML.read_text()
+        javascript = JAVASCRIPT.read_text()
+
+        chat_section = html[html.index('id="page-chat"') : html.index('id="page-home"')]
+        # Chat itself is no longer a design-only preview; Home Assistant and
+        # Activity still are.
+        self.assertNotIn("preview-banner", chat_section)
+        home_and_activity = html[html.index('id="page-home"') :]
+        self.assertIn("preview-banner", home_and_activity)
+
+        self.assertIn('id="chat-thread"', chat_section)
+        self.assertIn('id="chat-composer"', chat_section)
+        self.assertIn('id="chat-input"', chat_section)
+        self.assertIn('id="chat-send"', chat_section)
+        # Voice input stays out of scope for this milestone even though
+        # Chat itself is now live -- the mic control must stay disabled in
+        # markup, and JS must never be the one to remove that.
+        self.assertRegex(chat_section, r'id="chat-mic"[^>]*disabled')
+        self.assertNotIn("chatMic.disabled = false", javascript)
+
+        self.assertIn('fetch("/api/v1/conversation/health"', javascript)
+        self.assertIn('fetch("/api/v1/conversation/message"', javascript)
+
+        send_start = javascript.index("async function sendChatMessage")
+        send_block = javascript[send_start : javascript.index("\nchatComposer.addEventListener", send_start)]
+        self.assertIn('credentials: "same-origin"', send_block)
+        self.assertIn("X-CSRF-Token", send_block)
+        self.assertIn("chatHistory", send_block)
+
+        self.assertIn('addEventListener("submit"', javascript[javascript.index("chatComposer"):])
+        self.assertIn("event.preventDefault()", javascript[javascript.index("chatComposer.addEventListener"):])
+
+    def test_chat_composer_is_gated_on_a_signed_in_session(self):
+        javascript = JAVASCRIPT.read_text()
+
+        refresh_start = javascript.index("function refreshComposerState")
+        refresh_block = javascript[refresh_start : javascript.index("\n}", refresh_start)]
+        self.assertIn("isSignedIn", refresh_block)
+        self.assertIn("chatInput.disabled", refresh_block)
+        self.assertIn("chatSend.disabled", refresh_block)
+
+        # Both sign-in and sign-out must re-evaluate composer state, or a
+        # session change while Chat is open would leave a stale enabled/
+        # disabled composer.
+        signed_in_start = javascript.index("function showSignedIn")
+        signed_in_block = javascript[signed_in_start : javascript.index("\n}", signed_in_start)]
+        self.assertIn("refreshComposerState()", signed_in_block)
+        signed_out_start = javascript.index("function showSignedOut")
+        signed_out_block = javascript[signed_out_start : javascript.index("\n}", signed_out_start)]
+        self.assertIn("refreshComposerState()", signed_out_block)
+
+    def test_chat_history_sent_to_the_server_is_bounded(self):
+        javascript = JAVASCRIPT.read_text()
+
+        self.assertIn("MAX_CHAT_HISTORY_MESSAGES", javascript)
+        self.assertIn("chatHistory.slice(-MAX_CHAT_HISTORY_MESSAGES)", javascript)
+
+    def test_pending_confirmation_discloses_capability_and_literal_arguments(self):
+        javascript = JAVASCRIPT.read_text()
+
+        self.assertIn("function buildConfirmationCard", javascript)
+        build_start = javascript.index("function buildConfirmationCard")
+        build_block = javascript[build_start : javascript.index("\nfunction showConfirmationPrompt", build_start)]
+        # Must render the literal capability name and arguments the
+        # server disclosed, not a paraphrase or just the capability name
+        # -- RFC-0004's exact-disclosure requirement.
+        self.assertIn("pending.capability", build_block)
+        self.assertIn("pending.arguments", build_block)
+        self.assertIn("this leaves your device", build_block)
+        self.assertIn('"Deny"', build_block)
+        self.assertIn('"Approve"', build_block)
+
+    def test_resolving_a_confirmation_posts_the_token_and_approve_flag(self):
+        javascript = JAVASCRIPT.read_text()
+
+        resolve_start = javascript.index("async function resolveConfirmation")
+        resolve_block = javascript[resolve_start : javascript.index("\nfunction applyTurnResult", resolve_start)]
+        self.assertIn('fetch("/api/v1/conversation/message"', resolve_block)
+        self.assertIn('credentials: "same-origin"', resolve_block)
+        self.assertIn("X-CSRF-Token", resolve_block)
+        self.assertIn("confirmation: {token: state.token, approve}", resolve_block)
+
+    def test_composer_is_locked_while_a_confirmation_is_pending(self):
+        javascript = JAVASCRIPT.read_text()
+
+        refresh_start = javascript.index("function refreshComposerState")
+        refresh_block = javascript[refresh_start : javascript.index("\n}", refresh_start)]
+        self.assertIn("!pendingConfirmation", refresh_block)
+
+        submit_start = javascript.index("chatComposer.addEventListener(\"submit\"")
+        submit_block = javascript[submit_start : javascript.index("\n});", submit_start)]
+        self.assertIn("pendingConfirmation", submit_block)
+
+    def test_signing_out_clears_a_pending_confirmation(self):
+        javascript = JAVASCRIPT.read_text()
+
+        signed_out_start = javascript.index("function showSignedOut")
+        signed_out_block = javascript[signed_out_start : javascript.index("\n}", signed_out_start)]
+        self.assertIn("clearPendingConfirmation()", signed_out_block)
+
+    def test_web_search_toggle_starts_hidden_and_disabled_in_markup(self):
+        html = HTML.read_text()
+        chat_section = html[html.index('id="page-chat"') : html.index('id="page-home"')]
+
+        self.assertRegex(chat_section, r'id="chat-policy-row"[^>]*hidden')
+        self.assertRegex(chat_section, r'id="chat-web-search-toggle"[^>]*disabled')
+        self.assertIn("leaves your device only when you approve", chat_section.lower())
+
+    def test_toggle_shown_and_loaded_on_sign_in_hidden_and_reset_on_sign_out(self):
+        javascript = JAVASCRIPT.read_text()
+
+        signed_in_start = javascript.index("function showSignedIn")
+        signed_in_block = javascript[signed_in_start : javascript.index("\n}", signed_in_start)]
+        self.assertIn("chatPolicyRow.hidden = false", signed_in_block)
+        self.assertIn("chatWebSearchToggle.disabled = false", signed_in_block)
+        self.assertIn("loadWebSearchPolicy()", signed_in_block)
+
+        signed_out_start = javascript.index("function showSignedOut")
+        signed_out_block = javascript[signed_out_start : javascript.index("\n}", signed_out_start)]
+        self.assertIn("chatPolicyRow.hidden = true", signed_out_block)
+        self.assertIn("chatWebSearchToggle.disabled = true", signed_out_block)
+        self.assertIn("chatWebSearchToggle.checked = false", signed_out_block)
+
+    def test_toggle_reads_and_writes_the_real_policy_endpoint(self):
+        javascript = JAVASCRIPT.read_text()
+
+        self.assertIn('fetch("/api/v1/conversation/policy"', javascript)
+
+        load_start = javascript.index("async function loadWebSearchPolicy")
+        load_block = javascript[load_start : javascript.index("\n}", load_start)]
+        self.assertIn('credentials: "same-origin"', load_block)
+        # Real hardware qualification caught this omission live: the
+        # server's verify-mutating check requires the CSRF header on
+        # every request it gates, including this GET -- omitting it here
+        # made every real page load fail with CSRF_MISMATCH.
+        self.assertIn("X-CSRF-Token", load_block)
+
+        change_start = javascript.index('chatWebSearchToggle.addEventListener("change"')
+        change_block = javascript[change_start : javascript.index("\n});", change_start)]
+        self.assertIn('method: "POST"', change_block)
+        self.assertIn('credentials: "same-origin"', change_block)
+        self.assertIn("X-CSRF-Token", change_block)
+        self.assertIn("web_search_enabled: desired", change_block)
+        # A failed write must revert the visible toggle state, not leave
+        # the UI claiming a change that was never actually persisted.
+        self.assertIn("chatWebSearchToggle.checked = !desired", change_block)
+
+    def test_receipt_locality_and_outcome_labels_are_accurate(self):
+        # A real bug this session's own backend work would have caused:
+        # every receipt previously read "stayed local" unconditionally.
+        # web.search/web.fetch genuinely leave the device when they
+        # execute, and a denied proposal never ran at all either way.
+        javascript = JAVASCRIPT.read_text()
+
+        self.assertIn("EXTERNAL_CAPABILITY_NAMES", javascript)
+        receipts_start = javascript.index("function appendReceipts")
+        receipts_block = javascript[receipts_start : javascript.index("\n}", receipts_start)]
+        self.assertIn('event.outcome === "executed" && EXTERNAL_CAPABILITY_NAMES.has(event.name)', receipts_block)
+        self.assertIn('"left the network"', receipts_block)
+        self.assertIn('"stayed local"', receipts_block)
+        self.assertIn('denied: "declined"', javascript)
+        # confirmation_unsupported is dead now that confirmation is
+        # actually implemented -- must not linger as a stale mapping.
+        self.assertNotIn("confirmation_unsupported", javascript)
+
     def test_successful_login_redirects_to_the_pending_next_path(self):
         javascript = JAVASCRIPT.read_text()
 

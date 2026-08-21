@@ -29,6 +29,7 @@ SYSUSERS = (
 
 import sovereign_capabilities as capabilities  # noqa: E402
 import sovereign_system as system  # noqa: E402
+import sovereign_websearch as websearch  # noqa: E402
 
 
 def json_response(payload):
@@ -105,8 +106,10 @@ def auth_ok():
 
 
 class LiveConversationServer:
-    def __init__(self, audit_log_path):
+    def __init__(self, audit_log_path, policy_path=None):
         environment = {"SOVEREIGN_CONVERSATION_AUDIT_LOG_PATH": str(audit_log_path)}
+        if policy_path is not None:
+            environment["SOVEREIGN_CONVERSATION_POLICY_PATH"] = str(policy_path)
         with mock.patch.dict(__import__("os").environ, environment):
             self.module = runpy.run_path(str(CONVERSATION_SERVICE))
         from http.server import ThreadingHTTPServer
@@ -284,6 +287,291 @@ class ConversationServiceTests(unittest.TestCase):
             )
         self.assertEqual("sovereign_console_session=abc123", captured["cookie"])
         self.assertEqual("the-real-token", captured["csrf"])
+
+
+class ConfirmationWireFormatTests(unittest.TestCase):
+    # RFC-0017: the confirmation pause/resume wire format --
+    # pending_confirmation on the way out, {"confirmation": {"token",
+    # "approve"}} on the way back in -- and the external_enabled policy
+    # gate that runs before it.
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.audit_path = Path(self.temporary.name) / "audit.jsonl"
+        self.policy_path = Path(self.temporary.name) / "policy.json"
+
+    def enable_web_search(self):
+        self.policy_path.write_text(json.dumps({"web_search_enabled": True}))
+
+    def start_server(self):
+        self.live = LiveConversationServer(self.audit_path, policy_path=self.policy_path)
+        self.addCleanup(self.live.stop)
+
+    def _post(self, payload, headers=None):
+        connection = self.live.connection()
+        connection.request(
+            "POST", "/api/v1/conversation/message",
+            body=json.dumps(payload),
+            headers=headers or {"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        parsed = json.loads(response.read())
+        connection.close()
+        return response, parsed
+
+    def test_disabled_by_default_rejects_without_ever_prompting(self):
+        # No policy file at all -- must fail safe to disabled, not to
+        # some other default.
+        self.start_server()
+        proposal = chat_completion(tool_calls=[tool_call("call_1_0", "web.search", {"query": "raspberry pi"})])
+        narration = chat_completion(content="Web search is disabled.")
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen(
+                [auth_ok(), ("/v1/chat/completions", proposal), ("/v1/chat/completions", narration)]
+            )
+            response, body = self._post({"message": "search for raspberry pi"})
+        self.assertEqual(200, response.status)
+        self.assertNotIn("pending_confirmation", body)
+        self.assertEqual(
+            [{"name": "web.search", "outcome": "rejected", "code": "CAPABILITY_DISABLED"}],
+            body["capability_events"],
+        )
+
+    def test_enabled_proposal_pauses_for_confirmation_disclosing_the_query(self):
+        self.enable_web_search()
+        self.start_server()
+        proposal = chat_completion(tool_calls=[tool_call("call_1_0", "web.search", {"query": "raspberry pi"})])
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok(), ("/v1/chat/completions", proposal)])
+            response, body = self._post({"message": "search for raspberry pi"})
+        self.assertEqual(200, response.status)
+        self.assertEqual([], body["capability_events"])
+        self.assertEqual("web.search", body["pending_confirmation"]["capability"])
+        self.assertEqual({"query": "raspberry pi"}, body["pending_confirmation"]["arguments"])
+        self.assertIn("token", body["pending_confirmation"])
+
+    def test_approving_executes_the_real_capability_and_narrates(self):
+        self.enable_web_search()
+        self.start_server()
+        proposal = chat_completion(tool_calls=[tool_call("call_1_0", "web.search", {"query": "raspberry pi"})])
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok(), ("/v1/chat/completions", proposal)])
+            _, paused = self._post({"message": "search for raspberry pi"})
+        token = paused["pending_confirmation"]["token"]
+
+        searxng_payload = {
+            "query": "raspberry pi",
+            "results": [{"title": "Raspberry Pi", "url": "https://www.raspberrypi.com/", "content": "official site"}],
+        }
+        narration = chat_completion(content="Here's what I found.")
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen(
+                [
+                    auth_ok(),
+                    (websearch.SEARXNG_BASE_URL, json_response(searxng_payload)),
+                    ("/v1/chat/completions", narration),
+                ]
+            )
+            response, body = self._post({"confirmation": {"token": token, "approve": True}})
+        self.assertEqual(200, response.status)
+        self.assertEqual("Here's what I found.", body["text"])
+        self.assertEqual([{"name": "web.search", "outcome": "executed"}], body["capability_events"])
+        self.assertNotIn("pending_confirmation", body)
+
+    def test_denying_records_a_denial_without_calling_searxng(self):
+        self.enable_web_search()
+        self.start_server()
+        proposal = chat_completion(tool_calls=[tool_call("call_1_0", "web.search", {"query": "raspberry pi"})])
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok(), ("/v1/chat/completions", proposal)])
+            _, paused = self._post({"message": "search for raspberry pi"})
+        token = paused["pending_confirmation"]["token"]
+
+        narration = chat_completion(content="Okay, not searching.")
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            # No SearXNG rule registered at all -- dispatch_urlopen raises
+            # AssertionError on any unexpected call, so this also proves
+            # SearXNG is never contacted on a denial.
+            urlopen.side_effect = dispatch_urlopen([auth_ok(), ("/v1/chat/completions", narration)])
+            response, body = self._post({"confirmation": {"token": token, "approve": False}})
+        self.assertEqual(200, response.status)
+        self.assertEqual([{"name": "web.search", "outcome": "denied"}], body["capability_events"])
+
+    def test_resuming_with_an_unknown_token_is_a_400(self):
+        self.start_server()
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            response, body = self._post({"confirmation": {"token": "not-a-real-token", "approve": True}})
+        self.assertEqual(400, response.status)
+        self.assertEqual("INVALID_CONFIRMATION", body["error"]["code"])
+
+    def test_resuming_the_same_token_twice_is_rejected_the_second_time(self):
+        self.enable_web_search()
+        self.start_server()
+        proposal = chat_completion(tool_calls=[tool_call("call_1_0", "web.search", {"query": "x"})])
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok(), ("/v1/chat/completions", proposal)])
+            _, paused = self._post({"message": "x"})
+        token = paused["pending_confirmation"]["token"]
+
+        narration = chat_completion(content="done")
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok(), ("/v1/chat/completions", narration)])
+            self._post({"confirmation": {"token": token, "approve": False}})
+
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            response, body = self._post({"confirmation": {"token": token, "approve": True}})
+        self.assertEqual(400, response.status)
+        self.assertEqual("INVALID_CONFIRMATION", body["error"]["code"])
+
+    def test_confirmation_missing_approve_field_is_rejected(self):
+        self.start_server()
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            response, body = self._post({"confirmation": {"token": "x"}})
+        self.assertEqual(400, response.status)
+        self.assertEqual("INVALID_REQUEST", body["error"]["code"])
+
+    def test_policy_change_takes_effect_without_a_restart(self):
+        # Read fresh per request, not cached at process start.
+        self.start_server()
+        proposal = chat_completion(tool_calls=[tool_call("call_1_0", "web.search", {"query": "x"})])
+        narration = chat_completion(content="disabled")
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen(
+                [auth_ok(), ("/v1/chat/completions", proposal), ("/v1/chat/completions", narration)]
+            )
+            _, before = self._post({"message": "x"})
+        self.assertNotIn("pending_confirmation", before)
+
+        self.enable_web_search()
+        proposal2 = chat_completion(tool_calls=[tool_call("call_1_0", "web.search", {"query": "x"})])
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok(), ("/v1/chat/completions", proposal2)])
+            _, after = self._post({"message": "x"})
+        self.assertIn("pending_confirmation", after)
+
+
+class PolicyEndpointTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.audit_path = Path(self.temporary.name) / "audit.jsonl"
+        self.policy_path = Path(self.temporary.name) / "capabilities" / "policy.json"
+        self.live = LiveConversationServer(self.audit_path, policy_path=self.policy_path)
+        self.addCleanup(self.live.stop)
+
+    def _get(self, path, headers=None):
+        connection = self.live.connection()
+        connection.request("GET", path, headers=headers or {})
+        response = connection.getresponse()
+        parsed = json.loads(response.read())
+        connection.close()
+        return response, parsed
+
+    def _post(self, path, payload, headers=None):
+        connection = self.live.connection()
+        connection.request(
+            "POST", path, body=json.dumps(payload),
+            headers=headers or {"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        parsed = json.loads(response.read())
+        connection.close()
+        return response, parsed
+
+    def test_get_requires_authentication(self):
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen(
+                [("/api/v1/auth/verify-mutating", urllib.error.HTTPError("url", 401, "unauthorized", {}, None))]
+            )
+            response, body = self._get("/api/v1/conversation/policy")
+        self.assertEqual(401, response.status)
+        self.assertEqual("NOT_AUTHENTICATED", body["error"]["code"])
+
+    def test_get_reflects_the_real_default_disabled(self):
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            response, body = self._get("/api/v1/conversation/policy")
+        self.assertEqual(200, response.status)
+        self.assertEqual(False, body["web_search_enabled"])
+
+    def test_post_requires_authentication(self):
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen(
+                [("/api/v1/auth/verify-mutating", urllib.error.HTTPError("url", 403, "forbidden", {}, None))]
+            )
+            response, body = self._post("/api/v1/conversation/policy", {"web_search_enabled": True})
+        self.assertEqual(403, response.status)
+        self.assertEqual("CSRF_MISMATCH", body["error"]["code"])
+
+    def test_post_persists_and_get_reflects_it(self):
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            response, body = self._post("/api/v1/conversation/policy", {"web_search_enabled": True})
+        self.assertEqual(200, response.status)
+        self.assertEqual(True, body["web_search_enabled"])
+
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            response, body = self._get("/api/v1/conversation/policy")
+        self.assertEqual(True, body["web_search_enabled"])
+
+        self.assertEqual(
+            json.loads(self.policy_path.read_text()), {"web_search_enabled": True}
+        )
+
+    def test_post_rejects_a_non_boolean_value(self):
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            response, body = self._post("/api/v1/conversation/policy", {"web_search_enabled": "yes"})
+        self.assertEqual(400, response.status)
+        self.assertEqual("INVALID_REQUEST", body["error"]["code"])
+
+    def test_disabling_after_enabling_takes_effect_on_the_next_message(self):
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            self._post("/api/v1/conversation/policy", {"web_search_enabled": True})
+
+        proposal = chat_completion(tool_calls=[tool_call("call_1_0", "web.search", {"query": "x"})])
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok(), ("/v1/chat/completions", proposal)])
+            connection = self.live.connection()
+            connection.request(
+                "POST", "/api/v1/conversation/message",
+                body=json.dumps({"message": "x"}),
+                headers={"Content-Type": "application/json"},
+            )
+            response = connection.getresponse()
+            body = json.loads(response.read())
+            connection.close()
+        self.assertIn("pending_confirmation", body)
+
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen([auth_ok()])
+            self._post("/api/v1/conversation/policy", {"web_search_enabled": False})
+
+        proposal2 = chat_completion(tool_calls=[tool_call("call_1_0", "web.search", {"query": "x"})])
+        narration = chat_completion(content="disabled now")
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.side_effect = dispatch_urlopen(
+                [auth_ok(), ("/v1/chat/completions", proposal2), ("/v1/chat/completions", narration)]
+            )
+            connection = self.live.connection()
+            connection.request(
+                "POST", "/api/v1/conversation/message",
+                body=json.dumps({"message": "x"}),
+                headers={"Content-Type": "application/json"},
+            )
+            response = connection.getresponse()
+            body = json.loads(response.read())
+            connection.close()
+        self.assertNotIn("pending_confirmation", body)
+        self.assertEqual(
+            [{"name": "web.search", "outcome": "rejected", "code": "CAPABILITY_DISABLED"}],
+            body["capability_events"],
+        )
 
 
 class ConversationProvisioningTests(unittest.TestCase):

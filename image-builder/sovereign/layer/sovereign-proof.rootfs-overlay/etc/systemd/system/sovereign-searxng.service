@@ -1,0 +1,18 @@
+[Unit]
+Description=Configure and start the Sovereign SearXNG search proxy
+Requires=sovereign-searxng-import.service docker.service
+After=sovereign-imager-provision.service sovereign-searxng-import.service sovereign-update-recovery.service docker.service network-online.target
+Wants=sovereign-imager-provision.service network-online.target
+RequiresMountsFor=/data
+ConditionPathIsMountPoint=/data
+
+[Service]
+Type=oneshot
+ExecStart=/opt/sovereign/current/appliance/bin/start-searxng
+ExecStop=/opt/sovereign/current/appliance/bin/stop-searxng
+RemainAfterExit=yes
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target

@@ -108,6 +108,7 @@ def create_bundle(args):
     builder = parse_env(repo_root / "image-builder/rpi-image-gen.version")
     pihole = parse_env(repo_root / "image-builder/sovereign/pihole-image.env")
     llama = parse_env(repo_root / "image-builder/sovereign/llama-image.env")
+    searxng = parse_env(repo_root / "image-builder/sovereign/searxng-image.env")
     installed_release = parse_env(
         repo_root / "build/sovereign-image/evidence/sovereign-release"
     )
@@ -119,6 +120,8 @@ def create_bundle(args):
         raise ValueError("Pi-hole image digest is not a complete SHA-256 digest")
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", llama["LLAMA_IMAGE_DIGEST"]):
         raise ValueError("llama.cpp image digest is not a complete SHA-256 digest")
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", searxng["SEARXNG_IMAGE_DIGEST"]):
+        raise ValueError("SearXNG image digest is not a complete SHA-256 digest")
     package_versions = read_package_versions(deploy_dir / "manifest.zst")
     sbom_paths = list(deploy_dir.glob("filesystem-*.sbom.zst"))
     if len(sbom_paths) != 1:
@@ -178,6 +181,12 @@ def create_bundle(args):
                 "repository": llama["LLAMA_IMAGE_REPOSITORY"],
                 "version": llama["LLAMA_IMAGE_TAG"],
                 "digest": llama["LLAMA_IMAGE_DIGEST"],
+                "platform": "linux/arm64",
+            },
+            "searxng": {
+                "repository": searxng["SEARXNG_IMAGE_REPOSITORY"],
+                "version": searxng["SEARXNG_IMAGE_TAG"],
+                "digest": searxng["SEARXNG_IMAGE_DIGEST"],
                 "platform": "linux/arm64",
             },
         },

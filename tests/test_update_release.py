@@ -40,6 +40,15 @@ class UpdateReleaseTests(unittest.TestCase):
             )
             llama_oci = temporary / "llama.oci.tar"
             llama_oci.write_bytes(b"llama OCI fixture\n")
+            searxng_env = temporary / "searxng-image.env"
+            searxng_env.write_text(
+                "SEARXNG_IMAGE_REPOSITORY='ghcr.io/searxng/searxng'\n"
+                "SEARXNG_IMAGE_TAG='latest'\n"
+                f"SEARXNG_IMAGE_DIGEST='sha256:{'c' * 64}'\n"
+                "SEARXNG_IMAGE_PLATFORM='linux/arm64'\n"
+            )
+            searxng_oci = temporary / "searxng.oci.tar"
+            searxng_oci.write_bytes(b"searxng OCI fixture\n")
             output = temporary / "release"
             subprocess.run(
                 [
@@ -48,6 +57,7 @@ class UpdateReleaseTests(unittest.TestCase):
                     "--source-maximum-exclusive", "0.2.0",
                     "--pihole-env", str(pihole), "--oci", str(oci),
                     "--llama-env", str(llama_env), "--llama-oci", str(llama_oci),
+                    "--searxng-env", str(searxng_env), "--searxng-oci", str(searxng_oci),
                     "--output-dir", str(output), "--key-id", "preview-test",
                     "--artifact-base-url", "https://example.invalid/release",
                     "--notes-url", "https://example.invalid/notes",
@@ -60,6 +70,9 @@ class UpdateReleaseTests(unittest.TestCase):
             self.assertEqual("0.1.0-preview.7", manifest["release"]["version"])
             self.assertEqual(
                 f"sha256:{'b' * 64}", manifest["components"]["llama"]["digest"]
+            )
+            self.assertEqual(
+                f"sha256:{'c' * 64}", manifest["components"]["searxng"]["digest"]
             )
             bundle = output / "sovereign-update-0.1.0-preview.7-rpi5-arm64.tar.zst"
             self.assertEqual(bundle.stat().st_size, manifest["artifacts"][0]["size"])
@@ -85,6 +98,18 @@ class UpdateReleaseTests(unittest.TestCase):
                 )
                 self.assertIn(
                     "sovereign-update-v1/release/llama-arm64.oci.tar",
+                    names,
+                )
+                self.assertIn(
+                    "sovereign-update-v1/release/searxng-image.env",
+                    names,
+                )
+                self.assertIn(
+                    "sovereign-update-v1/release/searxng-arm64.oci.tar",
+                    names,
+                )
+                self.assertIn(
+                    "sovereign-update-v1/release/appliance/bin/start-searxng",
                     names,
                 )
                 bundle_manifest = json.load(
@@ -162,6 +187,15 @@ class UpdateReleaseTests(unittest.TestCase):
             )
             llama_oci = temporary / "llama.oci.tar"
             llama_oci.write_bytes(b"llama OCI fixture\n")
+            searxng_env = temporary / "searxng-image.env"
+            searxng_env.write_text(
+                "SEARXNG_IMAGE_REPOSITORY='ghcr.io/searxng/searxng'\n"
+                "SEARXNG_IMAGE_TAG='latest'\n"
+                f"SEARXNG_IMAGE_DIGEST='sha256:{'c' * 64}'\n"
+                "SEARXNG_IMAGE_PLATFORM='linux/arm64'\n"
+            )
+            searxng_oci = temporary / "searxng.oci.tar"
+            searxng_oci.write_bytes(b"searxng OCI fixture\n")
             output = temporary / "release"
             subprocess.run(
                 [
@@ -170,6 +204,7 @@ class UpdateReleaseTests(unittest.TestCase):
                     "--source-maximum-exclusive", "0.2.0",
                     "--pihole-env", str(pihole), "--oci", str(oci),
                     "--llama-env", str(llama_env), "--llama-oci", str(llama_oci),
+                    "--searxng-env", str(searxng_env), "--searxng-oci", str(searxng_oci),
                     "--appliance-dir", str(copied_appliance),
                     "--output-dir", str(output), "--key-id", "preview-test",
                     "--artifact-base-url", "https://example.invalid/release",

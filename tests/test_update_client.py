@@ -242,6 +242,20 @@ class UpdateClientTests(unittest.TestCase):
             "PIHOLE_IMAGE_PLATFORM='linux/arm64'\n"
         )
         (release / "pihole-arm64.oci.tar").write_bytes(b"OCI fixture\n")
+        (release / "llama-image.env").write_text(
+            "LLAMA_IMAGE_REPOSITORY='ghcr.io/ggml-org/llama.cpp'\n"
+            "LLAMA_IMAGE_TAG='server'\n"
+            f"LLAMA_IMAGE_DIGEST='{self.manifest['components']['llama']['digest']}'\n"
+            "LLAMA_IMAGE_PLATFORM='linux/arm64'\n"
+        )
+        (release / "llama-arm64.oci.tar").write_bytes(b"llama OCI fixture\n")
+        (release / "searxng-image.env").write_text(
+            "SEARXNG_IMAGE_REPOSITORY='ghcr.io/searxng/searxng'\n"
+            "SEARXNG_IMAGE_TAG='latest'\n"
+            f"SEARXNG_IMAGE_DIGEST='{self.manifest['components']['searxng']['digest']}'\n"
+            "SEARXNG_IMAGE_PLATFORM='linux/arm64'\n"
+        )
+        (release / "searxng-arm64.oci.tar").write_bytes(b"searxng OCI fixture\n")
         if mutate is not None:
             mutate(release)
         self.artifact = self.directory / "update-bundle.tar.zst"

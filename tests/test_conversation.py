@@ -37,12 +37,17 @@ class FakeProvider:
         yield from self._responses.pop(0)
 
 
-def make_test_capability(name="test.capability", side_effect="read_only", network="local", implementation=None, max_invocations_per_turn=1):
+def make_test_capability(
+    name="test.capability", side_effect="read_only", network="local", implementation=None,
+    max_invocations_per_turn=1, argument_schema=None,
+):
     if implementation is None:
         implementation = lambda arguments: {"ok": True}
+    if argument_schema is None:
+        argument_schema = {"type": "object", "properties": {}, "required": [], "additionalProperties": False}
     return capabilities.Capability(
         name=name, version=1,
-        argument_schema={"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+        argument_schema=argument_schema,
         result_schema={"type": "object", "properties": {"ok": {"type": "boolean"}}, "required": ["ok"], "additionalProperties": False},
         side_effect=side_effect, network=network, implementation=implementation,
         max_invocations_per_turn=max_invocations_per_turn,
@@ -63,10 +68,13 @@ class ConversationTestCase(unittest.TestCase):
 
 
 class BuildRegistryTests(unittest.TestCase):
-    def test_includes_exactly_the_three_real_capabilities(self):
+    def test_includes_exactly_the_five_real_capabilities(self):
         registry = conversation.build_registry()
         names = {entry["name"] for entry in registry.catalog()}
-        self.assertEqual(names, {"system.health", "pihole.status", "pihole.summary"})
+        self.assertEqual(
+            names,
+            {"system.health", "pihole.status", "pihole.summary", "web.search", "web.fetch"},
+        )
 
 
 class PlainChatTests(ConversationTestCase):
@@ -168,20 +176,228 @@ class CapabilityProposalTests(ConversationTestCase):
 
 
 class ConfirmationRequiredTests(ConversationTestCase):
-    def test_required_confirmation_is_refused_not_executed(self):
+    # RFC-0017: a required-confirmation proposal (read_only+external, per
+    # RFC-0003's structural table -- the same classification web.search/
+    # web.fetch carry) now halts the round for a real pause/resume flow,
+    # rather than being refused outright the way it was before this RFC.
+
+    def make_confirmation_store(self):
+        return capabilities.ConfirmationStore()
+
+    def make_pending_store(self):
+        return conversation.PendingTurnStore()
+
+    def test_required_confirmation_halts_the_round_without_executing(self):
         calls = []
         cap = make_test_capability(
-            name="mutating.thing", side_effect="mutating", network="local",
+            name="web.search", side_effect="read_only", network="external",
             implementation=lambda arguments: calls.append(1) or {"ok": True},
         )
         provider = FakeProvider(responses=[
-            [{"kind": "capability_proposal", "name": "mutating.thing", "arguments": {}}, {"kind": "done"}],
-            [{"kind": "token", "text": "can't do that yet"}, {"kind": "done"}],
+            [{"kind": "capability_proposal", "name": "web.search", "arguments": {}}, {"kind": "done"}],
         ])
         registry = self.registry_with(cap)
-        result = conversation.process_turn(provider, registry, [], "hi", audit_log_path=self.audit_path)
+        result = conversation.process_turn(
+            provider, registry, [], "hi",
+            policy={"external_enabled": True},
+            confirmation_store=self.make_confirmation_store(),
+            pending_turn_store=self.make_pending_store(),
+            audit_log_path=self.audit_path,
+        )
         self.assertEqual(calls, [])
-        self.assertEqual(result["capability_events"], [{"name": "mutating.thing", "outcome": "confirmation_unsupported"}])
+        self.assertEqual(result["capability_events"], [])
+        self.assertIn("pending_confirmation", result)
+        self.assertEqual(result["pending_confirmation"]["capability"], "web.search")
+
+    def test_pending_confirmation_discloses_the_literal_arguments(self):
+        cap = make_test_capability(
+            name="web.search", side_effect="read_only", network="external",
+            argument_schema={"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"], "additionalProperties": False},
+        )
+        provider = FakeProvider(responses=[
+            [{"kind": "capability_proposal", "name": "web.search", "arguments": {"query": "raspberry pi"}}, {"kind": "done"}],
+        ])
+        registry = self.registry_with(cap)
+        result = conversation.process_turn(
+            provider, registry, [], "hi",
+            policy={"external_enabled": True},
+            confirmation_store=self.make_confirmation_store(),
+            pending_turn_store=self.make_pending_store(),
+            audit_log_path=self.audit_path,
+        )
+        self.assertEqual(result["pending_confirmation"]["arguments"], {"query": "raspberry pi"})
+
+    def test_disabled_by_policy_is_rejected_before_any_confirmation_is_offered(self):
+        # Stage 3 (policy) runs before stage 4 (confirmation) in RFC-0003's
+        # pipeline -- a household that never opted in must see a
+        # structural rejection, not a confirmation prompt for a capability
+        # that could never run anyway.
+        cap = make_test_capability(name="web.search", side_effect="read_only", network="external")
+        provider = FakeProvider(responses=[
+            [{"kind": "capability_proposal", "name": "web.search", "arguments": {}}, {"kind": "done"}],
+            [{"kind": "token", "text": "web search is disabled"}, {"kind": "done"}],
+        ])
+        registry = self.registry_with(cap)
+        result = conversation.process_turn(
+            provider, registry, [], "hi",
+            policy={"external_enabled": False},
+            confirmation_store=self.make_confirmation_store(),
+            pending_turn_store=self.make_pending_store(),
+            audit_log_path=self.audit_path,
+        )
+        self.assertNotIn("pending_confirmation", result)
+        self.assertEqual(
+            result["capability_events"], [{"name": "web.search", "outcome": "rejected", "code": "CAPABILITY_DISABLED"}]
+        )
+
+    def test_approving_executes_exactly_once_and_the_turn_continues(self):
+        calls = []
+        cap = make_test_capability(
+            name="web.search", side_effect="read_only", network="external",
+            implementation=lambda arguments: calls.append(1) or {"ok": True},
+        )
+        confirmation_store = self.make_confirmation_store()
+        pending_store = self.make_pending_store()
+        registry = self.registry_with(cap)
+        provider = FakeProvider(responses=[
+            [{"kind": "capability_proposal", "name": "web.search", "arguments": {}}, {"kind": "done"}],
+            [{"kind": "token", "text": "here are your results"}, {"kind": "done"}],
+        ])
+        paused = conversation.process_turn(
+            provider, registry, [], "hi",
+            policy={"external_enabled": True},
+            confirmation_store=confirmation_store,
+            pending_turn_store=pending_store,
+            audit_log_path=self.audit_path,
+        )
+        token = paused["pending_confirmation"]["token"]
+
+        result = conversation.resume_turn(
+            provider, registry, pending_store, confirmation_store, token, approve=True,
+            policy={"external_enabled": True}, audit_log_path=self.audit_path,
+        )
+        self.assertEqual(calls, [1])
+        self.assertEqual(result["text"], "here are your results")
+        self.assertEqual(result["capability_events"], [{"name": "web.search", "outcome": "executed"}])
+        self.assertNotIn("pending_confirmation", result)
+
+    def test_denying_never_calls_the_implementation(self):
+        calls = []
+        cap = make_test_capability(
+            name="web.search", side_effect="read_only", network="external",
+            implementation=lambda arguments: calls.append(1) or {"ok": True},
+        )
+        confirmation_store = self.make_confirmation_store()
+        pending_store = self.make_pending_store()
+        registry = self.registry_with(cap)
+        provider = FakeProvider(responses=[
+            [{"kind": "capability_proposal", "name": "web.search", "arguments": {}}, {"kind": "done"}],
+            [{"kind": "token", "text": "okay, not searching"}, {"kind": "done"}],
+        ])
+        paused = conversation.process_turn(
+            provider, registry, [], "hi",
+            policy={"external_enabled": True},
+            confirmation_store=confirmation_store,
+            pending_turn_store=pending_store,
+            audit_log_path=self.audit_path,
+        )
+        token = paused["pending_confirmation"]["token"]
+
+        result = conversation.resume_turn(
+            provider, registry, pending_store, confirmation_store, token, approve=False,
+            policy={"external_enabled": True}, audit_log_path=self.audit_path,
+        )
+        self.assertEqual(calls, [])
+        self.assertEqual(result["capability_events"], [{"name": "web.search", "outcome": "denied"}])
+
+    def test_the_model_never_sees_the_token(self):
+        # RFC-0004: the model never receives, generates, or influences the
+        # confirmation token -- it is minted by the executor and returned
+        # only in the pending_confirmation response object.
+        cap = make_test_capability(name="web.search", side_effect="read_only", network="external")
+        provider = FakeProvider(responses=[
+            [{"kind": "capability_proposal", "name": "web.search", "arguments": {}}, {"kind": "done"}],
+        ])
+        registry = self.registry_with(cap)
+        result = conversation.process_turn(
+            provider, registry, [], "hi",
+            policy={"external_enabled": True},
+            confirmation_store=self.make_confirmation_store(),
+            pending_turn_store=self.make_pending_store(),
+            audit_log_path=self.audit_path,
+        )
+        token = result["pending_confirmation"]["token"]
+        serialized_messages = str(result["messages"])
+        self.assertNotIn(token, serialized_messages)
+
+    def test_token_is_single_use_a_second_resume_is_rejected(self):
+        cap = make_test_capability(name="web.search", side_effect="read_only", network="external")
+        confirmation_store = self.make_confirmation_store()
+        pending_store = self.make_pending_store()
+        registry = self.registry_with(cap)
+        provider = FakeProvider(responses=[
+            [{"kind": "capability_proposal", "name": "web.search", "arguments": {}}, {"kind": "done"}],
+            [{"kind": "token", "text": "done"}, {"kind": "done"}],
+        ])
+        paused = conversation.process_turn(
+            provider, registry, [], "hi",
+            policy={"external_enabled": True},
+            confirmation_store=confirmation_store,
+            pending_turn_store=pending_store,
+            audit_log_path=self.audit_path,
+        )
+        token = paused["pending_confirmation"]["token"]
+        conversation.resume_turn(
+            provider, registry, pending_store, confirmation_store, token, approve=True,
+            policy={"external_enabled": True}, audit_log_path=self.audit_path,
+        )
+        with self.assertRaises(conversation.TurnError) as caught:
+            conversation.resume_turn(
+                provider, registry, pending_store, confirmation_store, token, approve=True,
+                policy={"external_enabled": True}, audit_log_path=self.audit_path,
+            )
+        self.assertEqual(caught.exception.code, "INVALID_CONFIRMATION")
+
+    def test_automatic_proposals_before_a_pending_one_execute_and_later_ones_are_dropped(self):
+        auto_calls = []
+        never_reached_calls = []
+        auto_cap = make_test_capability(name="auto.thing", implementation=lambda arguments: auto_calls.append(1) or {"ok": True})
+        pending_cap = make_test_capability(name="web.search", side_effect="read_only", network="external")
+        dropped_cap = make_test_capability(name="never.reached", implementation=lambda arguments: never_reached_calls.append(1) or {"ok": True})
+        provider = FakeProvider(responses=[
+            [
+                {"kind": "capability_proposal", "name": "auto.thing", "arguments": {}},
+                {"kind": "capability_proposal", "name": "web.search", "arguments": {}},
+                {"kind": "capability_proposal", "name": "never.reached", "arguments": {}},
+                {"kind": "done"},
+            ],
+        ])
+        registry = self.registry_with(auto_cap, pending_cap, dropped_cap)
+        result = conversation.process_turn(
+            provider, registry, [], "hi",
+            policy={"external_enabled": True},
+            confirmation_store=self.make_confirmation_store(),
+            pending_turn_store=self.make_pending_store(),
+            audit_log_path=self.audit_path,
+        )
+        # The automatic proposal before the pending one already ran...
+        self.assertEqual(auto_calls, [1])
+        self.assertEqual(result["capability_events"], [{"name": "auto.thing", "outcome": "executed"}])
+        # ...the pending one halted the round...
+        self.assertEqual(result["pending_confirmation"]["capability"], "web.search")
+        # ...and the proposal after it was dropped entirely, not merely
+        # deferred silently -- it never ran and has no event at all.
+        self.assertEqual(never_reached_calls, [])
+
+    def test_unknown_token_is_rejected(self):
+        registry = self.registry_with()
+        provider = FakeProvider(responses=[])
+        with self.assertRaises(conversation.TurnError) as caught:
+            conversation.resume_turn(
+                provider, registry, self.make_pending_store(), self.make_confirmation_store(),
+                "not-a-real-token", approve=True, audit_log_path=self.audit_path,
+            )
+        self.assertEqual(caught.exception.code, "INVALID_CONFIRMATION")
 
 
 class TurnBudgetTests(ConversationTestCase):
@@ -262,6 +478,49 @@ class UntrustedForeverTests(ConversationTestCase):
         result = conversation.process_turn(provider, registry, [], "hi", audit_log_path=self.audit_path)
         outcomes = [event["outcome"] for event in result["capability_events"]]
         self.assertEqual(outcomes, ["executed", "unknown_capability"])
+
+
+class PolicyStateTests(ConversationTestCase):
+    def policy_path(self):
+        return Path(self.tempdir.name) / "capabilities" / "policy.json"
+
+    def test_missing_file_fails_safe_to_disabled(self):
+        self.assertEqual(
+            conversation.read_policy(self.policy_path()), {"external_enabled": False}
+        )
+
+    def test_malformed_json_fails_safe_to_disabled(self):
+        path = self.policy_path()
+        path.parent.mkdir(parents=True)
+        path.write_text("not valid json")
+        self.assertEqual(conversation.read_policy(path), {"external_enabled": False})
+
+    def test_non_object_json_fails_safe_to_disabled(self):
+        path = self.policy_path()
+        path.parent.mkdir(parents=True)
+        path.write_text("[1, 2, 3]")
+        self.assertEqual(conversation.read_policy(path), {"external_enabled": False})
+
+    def test_write_then_read_round_trips(self):
+        path = self.policy_path()
+        conversation.write_policy(True, path)
+        self.assertEqual(conversation.read_policy(path), {"external_enabled": True})
+        conversation.write_policy(False, path)
+        self.assertEqual(conversation.read_policy(path), {"external_enabled": False})
+
+    def test_write_creates_the_parent_directory(self):
+        path = self.policy_path()
+        self.assertFalse(path.parent.exists())
+        conversation.write_policy(True, path)
+        self.assertTrue(path.exists())
+
+    def test_write_is_atomic_no_partial_file_left_behind(self):
+        path = self.policy_path()
+        conversation.write_policy(True, path)
+        self.assertFalse(Path(f"{path}.tmp").exists())
+
+    def test_write_returns_the_new_state(self):
+        self.assertEqual(conversation.write_policy(True, self.policy_path()), {"external_enabled": True})
 
 
 if __name__ == "__main__":

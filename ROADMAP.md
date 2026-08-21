@@ -359,8 +359,124 @@ precedent).
 `sovereign_system.py`) and smoke-tested against the real device — see
 the [pihole](docs/research/pihole-capabilities-smoke-test-report.md)
 and [system.health](docs/research/system-health-capability-smoke-test-report.md)
-reports. `web.search`/`web.fetch` remain blocked on a SearXNG
-deployment decision, not yet made.
+reports. `web.search` and `web.fetch` are now implemented too
+(`sovereign_websearch.py`), against
+[RFC-0017](docs/rfcs/0017-web-search-and-fetch-capability-mapping.md)
+(Draft, awaiting project-owner review — implemented ahead of formal
+acceptance, matching this project's own precedent, e.g. the Conversation
+Service itself shipped against RFC-0002/0003/0004 before those RFCs'
+Decision sections were filled in). Both are backed by the now-embedded
+SearXNG service: `image-builder/sovereign/searxng-image.env` (real
+pinned ARM64 digest, `ghcr.io/searxng/searxng`) and `appliance/searxng/`
+(compose template, `settings.yml`, `start-searxng`/`stop-searxng`, the
+same artifact/import/server three-stage systemd shape Pi-hole and
+llama.cpp use), unit-tested (`tests/test_searxng_deployment.py`) — see
+[searxng-deployment-assessment.md](docs/research/searxng-deployment-assessment.md)'s
+Addendum for the real-image verification (pinned digest, confirmed
+`SEARXNG_SECRET` env-var mechanism, no built-in healthcheck, real JSON
+response shape) this embedding was built from.
+
+`sovereign_conversation.py` gained the real confirmation pause/resume
+flow RFC-0004 specified but left unimplemented (`PendingTurnStore`,
+`resume_turn()`, building on `sovereign_capabilities.ConfirmationStore`'s
+already-implemented, already-tested `issue()`/`consume()`) — a
+`required`-confirmation proposal now halts its round and returns a
+`pending_confirmation` object with the literal disclosed arguments,
+resumed via `POST /message`'s new `confirmation: {token, approve}`
+field, single-use and audited either way. `web.fetch`'s SSRF policy
+resolves the destination address immediately before connecting (not a
+one-time hostname check a later DNS lookup could bypass) and pins the
+TCP connection to that validated address while preserving the original
+hostname for TLS SNI/certificate checks — verified live against real
+public HTTPS sites and against every one of this device's own real
+loopback ports during this session. `web.search` was verified live
+against a real SearXNG container too (real query, real trimmed
+results). `/data/sovereign/capabilities/policy.json`'s `external_enabled`
+gate is read fresh per request and fails safe to disabled when the file
+doesn't exist — reusing the same directory `sovereign-conversation.service`
+was already granted write access to for its audit log, rather than a new
+top-level file that would have needed its own systemd hardening grant
+(and a root-run bootstrap step this project has no existing mechanism
+for, having no `tmpfiles.d` usage anywhere — checked before implementing,
+not after). 30 new tests
+(`tests/test_websearch_capabilities.py`) plus extensions to
+`tests/test_conversation.py`/`test_conversation_service.py` (full
+HTTP-level pause/resume/policy round trips against the real registry).
+
+Console's Chat page now renders the approve/deny confirmation prompt too:
+a `.confirmation-card` discloses the literal capability name and
+arguments from `pending_confirmation`, resumes the turn via the
+`confirmation` request field on Approve/Deny, locks the composer while a
+decision is pending, and clears itself on sign-out — unit-tested
+(`tests/test_console.py`) and manually verified end-to-end against a
+stub backend. Fixed a real pre-existing UI bug in the process: chat
+receipts previously always said "stayed local" regardless of
+classification, which would have been actively wrong for these two
+capabilities.
+
+The settings toggle is done too: authenticated `GET`/
+`POST /api/v1/conversation/policy` (atomic `.tmp`-then-rename write,
+same convention `sovereign-pihole-password` uses) and a labeled switch
+on Chat (`#chat-policy-row`) that loads the real state on sign-in and
+persists a change immediately, reverting the visible toggle if the write
+fails. Manually verified end-to-end: toggling on and back off against a
+stub backend correctly gated whether a search proposal reached a
+confirmation prompt at all. `web_search_enabled` still defaults to
+`false` on a device that has never touched the toggle.
+
+**Real-hardware qualification is done** — see the
+[web.search/confirmation flow hardware qualification report](docs/research/web-search-and-confirmation-flow-hardware-qualification-report.md):
+real pinned digests pulled and run natively on the project's Raspberry
+Pi 5 (`sovereign.local`, still `0.1.0-proof.3`, the same device the
+llama-server deployment was qualified against), a real 2GB model
+download with a matching checksum, real inference, real SearXNG search,
+all five capabilities exercised through the real executor including a
+real SSRF test against the device's own actual running services, a real
+confirmation round trip, and a real browser-authenticated pass driven by
+the project owner (their Console password never seen by the assistant,
+matching this project's standing credential-handling convention). Found
+and fixed one real bug live: the policy toggle's `GET` request was
+missing its CSRF header and always failed against the real server (the
+`POST` path was unaffected) — a regression test now covers it. This was
+a manual smoke-test deployment, the same precedent the original
+llama-server qualification established, not a real signed release —
+the artifact/import systemd paths and `sovereign-conversation.service`'s
+real `DynamicUser` sandbox remain unexercised (that directory-creation
+question is still open, named in the report's own Limitations).
+
+**Release tooling is now wired for SearXNG — and a pre-existing llama.cpp
+gap it surfaced is fixed too.** `scripts/create-release-bundle.py` and
+`create-update-release.py` now handle SearXNG's env/OCI-tar/manifest
+component the same way they already handle Pi-hole and llama.cpp.
+Investigating this surfaced a real, pre-existing defect (see the
+[signed-release qualification assessment](docs/research/searxng-signed-release-qualification-assessment.md)):
+the installed `sovereign-update`'s manifest-schema validation and
+`activate_release` were still Pi-hole-only and hardcoded, so any real
+release manifest `create-update-release.py` has produced since llama.cpp
+was added (with a `components.llama` key) would have been rejected
+outright by the installed updater, and llama's own OCI image was never
+actually `docker load`ed on activation. Both are now a single data-driven
+`IMAGE_COMPONENTS` loop covering all three images uniformly
+(`RELEASE_FILES`, the manifest JSON Schema, `validate_release_payload`,
+`activate_release`), with the full update test suite (519 tests) updated
+and passing.
+
+**Still not done, and not achievable without the maintainer's direct
+involvement:** a real `rpi-image-gen` build/flash/signed-update
+qualification of everything in this milestone section, so the
+artifact/import systemd paths and `sovereign-conversation.service`'s real
+`DynamicUser` sandbox get their first genuine exercise. The assessment
+above found this is blocked by three independent, stacking reasons: new
+systemd units cannot reach an already-flashed device through the
+appliance-update mechanism at all (only a base-OS A/B update can, which
+means a full base-OS image build); a real base-OS image build is
+CI-only (native ARM64 GitHub Actions, up to 2 hours, `workflow_dispatch`);
+and signing is, by this project's unbroken precedent
+([ADR-0006](docs/adrs/0006-production-signing-key-custody.md)), a manual
+step the maintainer performs offline with a key the assistant never
+handles. Compose-template validation for llama.cpp's and SearXNG's own
+templates (the way Pi-hole's already is) also remains unextended — a
+smaller, separately scoped follow-up.
 
 **Conversation Service:** implemented — `sovereign_conversation.py`
 (RFC-0003/0004's bounded propose→execute→narrate loop: max 3 rounds per
@@ -481,13 +597,31 @@ open per ADR-0013's Required Follow-up (a realistic intermittent-use
 thermal pass; broader DNS-latency-during-generation coverage) but do
 not block moving on.
 
-**Remaining:** a real `rpi-image-gen` base-OS build exercising this
-deployment path end to end (this session's qualification reproduced the
-embedding step by hand with real tooling, not through the actual build
-pipeline), a Console frontend for the Conversation Service (nothing in
-`console/index.html`/`console.js` references it yet — today it's
-reachable only by hand-crafted, authenticated HTTP calls), and
-`web.search`/`web.fetch` (blocked on the SearXNG decision above).
+**Console Chat is now wired to the real Conversation Service.** The Chat
+nav page (`console/index.html`, `console/assets/console.js`/`console.css`)
+is no longer a static design preview: the composer posts to
+`/api/v1/conversation/message` with the caller's session cookie and CSRF
+token (reusing the same `csrfToken` console-auth's own sign-in flow
+already maintains), renders the returned text and `capability_events` as
+chat bubbles and receipts, and shows `/api/v1/conversation/health` in the
+trust strip. Sending is gated on a signed-in Console session — the
+composer stays disabled with a "Sign in to chat with Sovereign" prompt
+until then, matching the same session boundary the update-install flow
+uses. Client-side history sent back on each turn is capped at 20 messages
+to stay under `/message`'s 64KiB request-body ceiling. Home Assistant and
+Activity remain static design previews. Implemented and unit-tested
+(`tests/test_console.py`); **not yet hardware-qualified** — this has only
+been exercised against a local stub server, not the real device.
+
+**Remaining:** hardware qualification of the Chat wiring above; a real
+`rpi-image-gen` base-OS build exercising the llama-server deployment path
+end to end (this session's qualification reproduced the embedding step by
+hand with real tooling, not through the actual build pipeline);
+`web.search`/`web.fetch` — deployment, capability implementation, the
+confirmation/policy wiring, the Console approve/deny confirmation UI, and
+the settings toggle to set `external_enabled` are all done now (see
+above), still awaiting RFC-0017 project-owner review and hardware
+qualification.
 
 **Depends on:** Stable appliance update boundary
 
@@ -615,7 +749,11 @@ This milestone closes the remaining “flash once” gap.
 - ✅ Persistent restore automation, retention, and production signing operations
 - ✅ Update discovery and Sovereign Console update controls
 - ⏳ Local inference benchmark and conversation/capability RFCs
-- ⚪ SearXNG-backed web-search capability
+- 🟡 SearXNG-backed web-search capability — implemented, unit-tested,
+  fully wired into Console's Chat UI including the settings toggle, and
+  smoke-tested end-to-end on real Raspberry Pi 5 hardware (RFC-0017,
+  Draft); a real signed-release qualification (artifact/import systemd
+  paths, the real hardened sandbox) remains
 - ⚪ Home Assistant capability integration
 - ✅ A/B full base-OS updates (RFC-0016): every Acceptance Criteria item
   hardware-qualified, including a second base-OS update with no

@@ -60,23 +60,13 @@
     "components": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["appliance", "image_base", "pihole"],
+      "required": ["appliance", "image_base", "pihole", "llama", "searxng"],
       "properties": {
         "appliance": { "$ref": "#/$defs/sovereign_component" },
         "image_base": { "$ref": "#/$defs/sovereign_component" },
-        "pihole": {
-          "allOf": [
-            { "$ref": "#/$defs/external_component" },
-            {
-              "type": "object",
-              "required": ["repository", "digest"],
-              "properties": {
-                "repository": { "type": "string", "minLength": 1 },
-                "digest": { "$ref": "#/$defs/sha256_digest" }
-              }
-            }
-          ]
-        }
+        "pihole": { "$ref": "#/$defs/oci_component" },
+        "llama": { "$ref": "#/$defs/oci_component" },
+        "searxng": { "$ref": "#/$defs/oci_component" }
       }
     },
     "requirements": {
@@ -149,6 +139,19 @@
           "pattern": "^[0-9A-Za-z][0-9A-Za-z._+-]{0,127}$"
         }
       }
+    },
+    "oci_component": {
+      "allOf": [
+        { "$ref": "#/$defs/external_component" },
+        {
+          "type": "object",
+          "required": ["repository", "digest"],
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "digest": { "$ref": "#/$defs/sha256_digest" }
+          }
+        }
+      ]
     },
     "migration": {
       "type": "object",

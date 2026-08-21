@@ -728,6 +728,17 @@ class ConversationServiceGatingProvisioningTests(unittest.TestCase):
         self.assertIn("proxy_read_timeout 180s;", block)
         self.assertNotIn("auth_request", block)
 
+    def test_policy_route_is_proxied_and_self_checks_auth(self):
+        nginx = NGINX.read_text()
+        start = nginx.index("location = /api/v1/conversation/policy {")
+        block = nginx[start : nginx.index("}", start)]
+        self.assertIn("127.0.0.1:8092/api/v1/conversation/policy", block)
+        # Reads and writes alike are short, in-process operations -- the
+        # 5s bound every other short API location here uses, not
+        # /message's 180s.
+        self.assertIn("proxy_read_timeout 5s;", block)
+        self.assertNotIn("auth_request", block)
+
 
 if __name__ == "__main__":
     unittest.main()

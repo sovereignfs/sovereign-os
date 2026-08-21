@@ -1,0 +1,38 @@
+# Sovereign OS: overrides applied on top of SearXNG's own baked-in
+# defaults (use_default_settings: true), per RFC-0017's Proposal
+# (docs/rfcs/0017-web-search-and-fetch-capability-mapping.md). The real
+# per-device secret is injected via the SEARXNG_SECRET environment
+# variable at container start (searx/settings_defaults.py's own
+# supported override mechanism, confirmed against the real pinned image
+# -- see searxng-image.env) and is never written into this file.
+#
+# Copied once into persistent state by start-searxng, not overwritten on
+# every start, so a later manual edit to the persisted copy survives a
+# restart.
+
+use_default_settings: true
+
+server:
+  # RFC-0017: no Valkey dependency, no bot-defense needed for a private,
+  # single-user, loopback-only instance -- Sovereign's own per-capability
+  # invocation budgets (RFC-0003/RFC-0004) are the relevant control here.
+  # Already the upstream default; declared explicitly so this is a
+  # recorded decision, not an unexamined inheritance.
+  limiter: false
+  # RFC-0017: web.fetch returns extracted text, not embedded images --
+  # nothing in Sovereign's capabilities renders proxied image bytes, so
+  # proxying them through this instance would add real load for a
+  # capability that can't use the result.
+  image_proxy: false
+
+search:
+  # RFC-0017: web.search needs structured JSON to parse, not an HTML
+  # page to scrape. json is disabled by default upstream.
+  formats:
+    - html
+    - json
+  # RFC-0017: autocomplete fires on partial keystrokes, a second,
+  # undisclosed channel to an external engine -- disabled to match
+  # ADR-0004's "must not silently incorporate private household context"
+  # and the milestone's exact-query disclosure requirement.
+  autocomplete: ""

@@ -11,6 +11,9 @@ set -eu
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-llama-artifact.service
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-llama-import.service
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-llama-server.service
+"$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-searxng-artifact.service
+"$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-searxng-import.service
+"$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-searxng.service
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-conversation.service
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-console.service
 "$BDEBSTRAP_HOOKS/enable-units" "$1" sovereign-console-auth.service

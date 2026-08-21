@@ -2,7 +2,7 @@
 Description=Apply Raspberry Pi Imager provisioning
 Documentation=https://github.com/sovereignfs/sovereign-os
 After=local-fs.target
-Before=network-pre.target iwd.service ssh.service sovereign-pihole.service sovereign-llama-server.service
+Before=network-pre.target iwd.service ssh.service sovereign-pihole.service sovereign-llama-server.service sovereign-searxng.service
 Wants=network-pre.target
 RequiresMountsFor=/boot/firmware /data
 ConditionPathExists=/boot/firmware/rpi-preseed.toml

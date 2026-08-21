@@ -171,6 +171,8 @@ class UpdateCheckTests(unittest.TestCase):
                 "appliance": {"version": version},
                 "image_base": {"version": source_minimum},
                 "pihole": {"version": "2026.04.1", "repository": "docker.io/pihole/pihole", "digest": "sha256:" + "a" * 64},
+                "llama": {"version": "server", "repository": "ghcr.io/ggml-org/llama.cpp", "digest": "sha256:" + "b" * 64},
+                "searxng": {"version": "latest", "repository": "ghcr.io/searxng/searxng", "digest": "sha256:" + "c" * 64},
             },
             "requirements": {"free_bytes": 1, "reboot": False},
             "migrations": [],

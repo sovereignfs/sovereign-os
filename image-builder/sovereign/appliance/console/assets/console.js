@@ -186,6 +186,11 @@ function showSignedIn() {
   document.querySelector("#update-check-now").hidden = false;
   setAuthMessage("");
   refreshInstallButtonVisibility();
+  refreshComposerState();
+  updateChatSignInPrompt();
+  chatPolicyRow.hidden = false;
+  chatWebSearchToggle.disabled = false;
+  loadWebSearchPolicy();
 }
 
 function showSignedOut() {
@@ -198,6 +203,13 @@ function showSignedOut() {
   document.querySelector("#update-check-now").hidden = true;
   setAuthMessage("");
   refreshInstallButtonVisibility();
+  clearPendingConfirmation();
+  refreshComposerState();
+  updateChatSignInPrompt();
+  chatPolicyRow.hidden = true;
+  chatWebSearchToggle.disabled = true;
+  chatWebSearchToggle.checked = false;
+  setChatPolicyMessage("");
 }
 
 async function loadSession() {
@@ -544,6 +556,384 @@ async function loadBaseOsStatus() {
 }
 
 loadBaseOsStatus();
+
+const chatThread = document.querySelector("#chat-thread");
+const chatEmpty = document.querySelector("#chat-empty");
+const chatModelInfo = document.querySelector("#chat-model-info");
+const chatComposer = document.querySelector("#chat-composer");
+const chatInput = document.querySelector("#chat-input");
+const chatSend = document.querySelector("#chat-send");
+const chatMessage = document.querySelector("#chat-message");
+const chatPolicyRow = document.querySelector("#chat-policy-row");
+const chatWebSearchToggle = document.querySelector("#chat-web-search-toggle");
+const chatPolicyMessage = document.querySelector("#chat-policy-message");
+
+// RFC-0004's untrusted-forever boundary: this array only ever holds plain
+// {role, content} turns the UI itself rendered, never the raw tool-call/
+// tool-result bookkeeping /message returns in its own "messages" field --
+// the Conversation Service reconstructs that internally from what it's
+// given back, so the client doesn't need to round-trip it.
+let chatHistory = [];
+let chatSending = false;
+
+// RFC-0017: at most one confirmation-required proposal can be pending at
+// a time -- the server halts the whole turn the moment it hits one, so
+// there is never a second one to track concurrently. {token, capability,
+// arguments, card, denyButton, approveButton} while a card is showing,
+// null otherwise.
+let pendingConfirmation = null;
+
+// /message caps the whole request body at 64KiB; bounding how much history
+// this client resends keeps a long-running conversation from silently
+// starting to fail every turn once that ceiling is crossed.
+const MAX_CHAT_HISTORY_MESSAGES = 20;
+
+// RFC-0017: web.search/web.fetch are the only capabilities that ever
+// leave the device today. capability_events itself doesn't carry
+// side_effect/network classification (RFC-0003 keeps audit/event
+// payloads minimal) -- this is a client-side approximation of that
+// classification for receipt phrasing, not the source of truth the
+// executor itself enforces.
+const EXTERNAL_CAPABILITY_NAMES = new Set(["web.search", "web.fetch"]);
+
+const CHAT_CAPABILITY_OUTCOME_LABELS = {
+  executed: "ran",
+  unknown_capability: "not recognized",
+  budget_exceeded: "skipped — budget exceeded",
+  rejected: "refused",
+  denied: "declined",
+};
+
+function setChatMessage(text, isError) {
+  chatMessage.textContent = text;
+  chatMessage.classList.toggle("error", Boolean(isError));
+}
+
+// Only toggles the composer's enabled/disabled state -- deliberately never
+// touches #chat-message, so it's safe to call from sendChatMessage's own
+// finally block without wiping the success/error text that call just set.
+function refreshComposerState() {
+  const enabled = isSignedIn && !chatSending && !pendingConfirmation;
+  chatInput.disabled = !enabled;
+  chatSend.disabled = !enabled;
+}
+
+function updateChatSignInPrompt() {
+  setChatMessage(isSignedIn ? "" : "Sign in to chat with Sovereign.");
+}
+
+function setChatPolicyMessage(text, isError) {
+  chatPolicyMessage.textContent = text;
+  chatPolicyMessage.classList.toggle("error", Boolean(isError));
+}
+
+// RFC-0017: web.search/web.fetch stay structurally disabled at the
+// executor (CAPABILITY_DISABLED, before any confirmation prompt) until
+// this reads true -- loaded fresh every sign-in rather than cached, so a
+// change made from another session/tab is picked up on the next visit.
+async function loadWebSearchPolicy() {
+  try {
+    const response = await fetch("/api/v1/conversation/policy", {
+      cache: "no-store",
+      credentials: "same-origin",
+      // Real hardware qualification caught this: the server's
+      // verify-mutating check requires the CSRF header on every request
+      // it gates, GET included -- this endpoint is administrative
+      // configuration, not liveness info, so it's gated the same way
+      // POST is (see bin/sovereign-conversation's _handle_get_policy).
+      // Omitting it here always failed with CSRF_MISMATCH.
+      headers: csrfToken ? {"X-CSRF-Token": csrfToken} : {},
+    });
+    if (!response.ok) {
+      setChatPolicyMessage("Could not read this setting.", true);
+      return;
+    }
+    const data = await response.json();
+    chatWebSearchToggle.checked = Boolean(data.web_search_enabled);
+  } catch (error) {
+    setChatPolicyMessage("Could not reach the device.", true);
+  }
+}
+
+chatWebSearchToggle.addEventListener("change", async () => {
+  const desired = chatWebSearchToggle.checked;
+  chatWebSearchToggle.disabled = true;
+  setChatPolicyMessage("");
+  try {
+    const response = await fetch("/api/v1/conversation/policy", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+        ...(csrfToken ? {"X-CSRF-Token": csrfToken} : {}),
+      },
+      body: JSON.stringify({web_search_enabled: desired}),
+    });
+    const data = await response.json();
+    if (response.ok) {
+      chatWebSearchToggle.checked = Boolean(data.web_search_enabled);
+    } else {
+      chatWebSearchToggle.checked = !desired;
+      if (response.status === 401 || response.status === 403) {
+        showSignedOut();
+        setChatPolicyMessage("Your session expired. Sign in again.", true);
+      } else {
+        setChatPolicyMessage("Could not update this setting.", true);
+      }
+    }
+  } catch (error) {
+    chatWebSearchToggle.checked = !desired;
+    setChatPolicyMessage("Could not reach the device.", true);
+  } finally {
+    chatWebSearchToggle.disabled = !isSignedIn;
+  }
+});
+
+async function loadConversationHealth() {
+  try {
+    const response = await fetch("/api/v1/conversation/health", {cache: "no-store"});
+    const data = await response.json();
+    chatModelInfo.textContent = data.healthy ? "llama.cpp · ready" : "llama.cpp · unavailable";
+  } catch (error) {
+    chatModelInfo.textContent = "llama.cpp · unavailable";
+  }
+}
+
+function appendBubble(role, text) {
+  chatEmpty.hidden = true;
+  const bubble = document.createElement("div");
+  bubble.className = `bubble ${role}`;
+  bubble.textContent = text;
+  chatThread.append(bubble);
+  chatThread.scrollTop = chatThread.scrollHeight;
+  return bubble;
+}
+
+function appendReceipts(events) {
+  events.forEach((event) => {
+    const receipt = document.createElement("span");
+    receipt.className = "receipt";
+    receipt.append(pillIcon(event.outcome === "executed" ? "ok" : "bad"));
+    const fact = document.createElement("span");
+    fact.className = "machine-fact";
+    fact.textContent = event.name;
+    receipt.append(fact);
+    const label = document.createElement("span");
+    const left = event.outcome === "executed" && EXTERNAL_CAPABILITY_NAMES.has(event.name);
+    label.textContent = ` · ${CHAT_CAPABILITY_OUTCOME_LABELS[event.outcome] || event.outcome} · ${left ? "left the network" : "stayed local"}`;
+    receipt.append(label);
+    chatThread.append(receipt);
+  });
+}
+
+// RFC-0017/RFC-0004: the disclosed capability name and literal arguments
+// for a paused proposal, plus Approve/Deny controls. No custom icon --
+// this file's existing SVG icons are cloned from hidden markup templates
+// specifically to avoid needing this bundle's own safety check to see a
+// raw SVG XML namespace URL (see pillIcon's own comment); adding a third
+// icon just for this card isn't worth a new template.
+function buildConfirmationCard(pending) {
+  const card = document.createElement("div");
+  card.className = "confirmation-card";
+  card.setAttribute("role", "group");
+
+  const heading = document.createElement("p");
+  heading.className = "confirmation-heading";
+  const name = document.createElement("strong");
+  name.textContent = pending.capability;
+  heading.append("Sovereign wants to run ", name, " — this leaves your device.");
+  card.append(heading);
+
+  const argumentEntries = Object.entries(pending.arguments || {});
+  if (argumentEntries.length) {
+    const list = document.createElement("dl");
+    list.className = "confirmation-arguments";
+    argumentEntries.forEach(([key, value]) => {
+      const dt = document.createElement("dt");
+      dt.textContent = key;
+      const dd = document.createElement("dd");
+      dd.textContent = typeof value === "string" ? value : JSON.stringify(value);
+      list.append(dt, dd);
+    });
+    card.append(list);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "confirmation-actions";
+  const denyButton = document.createElement("button");
+  denyButton.type = "button";
+  denyButton.className = "btn secondary sm";
+  denyButton.textContent = "Deny";
+  const approveButton = document.createElement("button");
+  approveButton.type = "button";
+  approveButton.className = "btn primary sm";
+  approveButton.textContent = "Approve";
+  actions.append(denyButton, approveButton);
+  card.append(actions);
+
+  return {card, denyButton, approveButton};
+}
+
+// A signed-out session can never successfully resume a pending
+// confirmation (the resume request needs the same session/CSRF the
+// original turn did) -- clearing it here rather than leaving a
+// permanently stranded card with disabled Approve/Deny buttons.
+function clearPendingConfirmation() {
+  if (!pendingConfirmation) return;
+  pendingConfirmation.card.remove();
+  pendingConfirmation = null;
+}
+
+function showConfirmationPrompt(data, userText, bubble) {
+  if (data.text) {
+    bubble.textContent = data.text;
+  } else {
+    bubble.remove();
+  }
+  bubble.classList.remove("pending");
+
+  const {card, denyButton, approveButton} = buildConfirmationCard(data.pending_confirmation);
+  chatThread.append(card);
+  chatThread.scrollTop = chatThread.scrollHeight;
+
+  pendingConfirmation = {
+    token: data.pending_confirmation.token,
+    capability: data.pending_confirmation.capability,
+    arguments: data.pending_confirmation.arguments,
+    userText,
+    card,
+    denyButton,
+    approveButton,
+  };
+  denyButton.addEventListener("click", () => resolveConfirmation(false));
+  approveButton.addEventListener("click", () => resolveConfirmation(true));
+  refreshComposerState();
+  denyButton.focus();
+}
+
+async function resolveConfirmation(approve) {
+  const state = pendingConfirmation;
+  if (!state) return;
+  state.denyButton.disabled = true;
+  state.approveButton.disabled = true;
+  setChatMessage("");
+  try {
+    const response = await fetch("/api/v1/conversation/message", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+        ...(csrfToken ? {"X-CSRF-Token": csrfToken} : {}),
+      },
+      body: JSON.stringify({confirmation: {token: state.token, approve}}),
+    });
+    const data = await response.json();
+    if (response.ok) {
+      state.card.remove();
+      pendingConfirmation = null;
+      const bubble = appendBubble("assistant", "Thinking…");
+      bubble.classList.add("pending");
+      applyTurnResult(data, state.userText, bubble);
+    } else {
+      state.card.remove();
+      pendingConfirmation = null;
+      handleChatError(response.status, data);
+    }
+  } catch (error) {
+    // The server-side pending state may still be intact even though this
+    // request itself failed -- keep the card and let the user retry
+    // rather than losing a still-valid confirmation silently.
+    state.denyButton.disabled = false;
+    state.approveButton.disabled = false;
+    setChatMessage("Could not reach the device. Try again.", true);
+  } finally {
+    refreshComposerState();
+  }
+}
+
+function applyTurnResult(data, userText, bubble) {
+  if (data.pending_confirmation) {
+    showConfirmationPrompt(data, userText, bubble);
+    return;
+  }
+  bubble.textContent = data.text;
+  bubble.classList.remove("pending");
+  appendReceipts(data.capability_events || []);
+  chatHistory.push({role: "user", content: userText}, {role: "assistant", content: data.text});
+  chatHistory = chatHistory.slice(-MAX_CHAT_HISTORY_MESSAGES);
+}
+
+function handleChatError(status, data) {
+  const code = data && data.error && data.error.code;
+  if (status === 401 || status === 403) {
+    showSignedOut();
+    setChatMessage("Your session expired. Sign in again to chat.", true);
+    return;
+  }
+  if (code === "PROVIDER_UNAVAILABLE") {
+    setChatMessage("Sovereign's local assistant is unavailable right now.", true);
+    return;
+  }
+  if (code === "TURN_BUDGET_EXHAUSTED") {
+    setChatMessage("Sovereign couldn't finish answering that. Try rephrasing.", true);
+    return;
+  }
+  setChatMessage("Could not send that message.", true);
+}
+
+async function sendChatMessage(text) {
+  chatSending = true;
+  refreshComposerState();
+  appendBubble("user", text);
+  const pending = appendBubble("assistant", "Thinking…");
+  pending.classList.add("pending");
+  try {
+    const response = await fetch("/api/v1/conversation/message", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+        ...(csrfToken ? {"X-CSRF-Token": csrfToken} : {}),
+      },
+      body: JSON.stringify({message: text, messages: chatHistory}),
+    });
+    const data = await response.json();
+    if (response.ok) {
+      applyTurnResult(data, text, pending);
+    } else {
+      pending.remove();
+      handleChatError(response.status, data);
+    }
+  } catch (error) {
+    pending.remove();
+    setChatMessage("Could not reach the device.", true);
+  } finally {
+    chatSending = false;
+    refreshComposerState();
+  }
+}
+
+chatComposer.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const text = chatInput.value.trim();
+  if (!text || chatSending || !isSignedIn || pendingConfirmation) return;
+  chatInput.value = "";
+  sendChatMessage(text);
+});
+
+chatInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    chatComposer.requestSubmit();
+  }
+});
+
+refreshComposerState();
+updateChatSignInPrompt();
+loadConversationHealth();
 
 // Console is one static file behind several Nginx routes (/console/health/,
 // /console/chat/, /console/home/, /console/activity/); there is no

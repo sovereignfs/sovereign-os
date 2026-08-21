@@ -1,0 +1,19 @@
+services:
+  searxng:
+    image: @SEARXNG_IMAGE_REFERENCE@
+    container_name: sovereign-searxng
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8093:8080"
+    environment:
+      # SearXNG has no Docker-secrets _FILE convention (confirmed against
+      # the real image's searx/settings_defaults.py: SettingsValue reads
+      # os.environ directly, no _FILE suffix support) -- start-searxng
+      # exports this only for the single `docker compose up` invocation,
+      # never persists it into this file or a long-lived shell.
+      SEARXNG_SECRET: ${SEARXNG_SECRET}
+    volumes:
+      - /data/sovereign/apps/searxng/etc-searxng:/etc/searxng
+      - /data/sovereign/apps/searxng/cache-searxng:/var/cache/searxng
+    cap_drop:
+      - NET_RAW
