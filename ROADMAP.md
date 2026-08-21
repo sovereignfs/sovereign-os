@@ -643,10 +643,11 @@ Milestone 01.2 will deliver:
 
 ### 5. Home Automation Integration
 
-**Status:** 🟡 In progress — first (read-only) slice implemented, unit-tested,
-and manually verified in Console; second (allowlisted-action) slice
-accepted as RFC-0019, not yet implemented; real-hardware qualification of
-either slice blocked on an external dependency (see below)
+**Status:** 🟡 In progress — both slices implemented and unit-tested
+(read-only slice also manually verified in Console); real-hardware
+qualification of either slice blocked on an external dependency (see
+below); Console UI for the second (allowlisted-action) slice's control
+toggle/picker not yet built
 
 **Depends on:** Qualified capability executor (satisfied — see Milestone 4's
 real-hardware qualification of the confirmation/policy/audit machinery via
@@ -706,9 +707,19 @@ domain scope was claimed enforced at three points but only one
 domain re-checks, since Home Assistant's `climate` domain has real
 `turn_on`/`turn_off` services that wouldn't have failed safely by
 accident if a non-light/switch entity ever reached the service call.
-Not yet implemented; real-hardware qualification depends on the same
-unresolved external dependency (no Home Assistant instance yet) named
-above.
+
+**Implemented** (`sovereign_homeassistant.py`'s `set_entity_state`, the
+extended `home-assistant.json`/`POST /api/v1/conversation/home-assistant`
+config surface): idempotent no-ops (a proposal matching current state
+never contacts Home Assistant), and success verified against the real
+service-call response rather than trusting a 200 status alone. Extending
+the config endpoint's required fields would have silently broken
+Console's already-shipped read-only "Save connection" button — fixed by
+having it load, retain, and resend the two new control fields unchanged
+even though this pass builds no UI to edit them yet. Console's own
+settings UI for the control toggle/picker remains unbuilt, and
+real-hardware qualification depends on the same unresolved external
+dependency (no Home Assistant instance yet) named above.
 
 ### 6. Full Base-OS Updates
 
@@ -811,9 +822,9 @@ This milestone closes the remaining “flash once” gap.
   paths, the real hardened sandbox) remains
 - 🟡 Home Assistant capability integration — read-only entity/history
   mapping (RFC-0018) implemented and Console-wired; allowlisted-action
-  mapping (RFC-0019, `light`/`switch` only) accepted, not yet
-  implemented; real-hardware qualification of either blocked on no Home
-  Assistant instance existing on the household network yet
+  mapping (RFC-0019, `light`/`switch` only) implemented, Console UI for
+  it still unbuilt; real-hardware qualification of either blocked on no
+  Home Assistant instance existing on the household network yet
 - ✅ A/B full base-OS updates (RFC-0016): every Acceptance Criteria item
   hardware-qualified, including a second base-OS update with no
   reflash, the Console panel against a live transaction, and a genuine
