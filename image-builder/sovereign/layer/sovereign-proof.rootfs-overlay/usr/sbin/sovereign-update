@@ -143,10 +143,26 @@ APPLIANCE_FILES = {
     "appliance/nginx/sovereign.conf": 0o644,
     "appliance/pihole/compose.yaml.in": 0o644,
 }
+# One entry per container image this updater imports on activation: the
+# manifest component key, the release-payload env file it cross-checks
+# against that component, the release-payload OCI tar it `docker load`s,
+# and the three key names read out of that env file. Pi-hole, llama.cpp,
+# and SearXNG are all unconditionally embedded in every base image and
+# every release bundle (see image-builder/sovereign/*-image.env), so all
+# three are required components, not optional ones.
+IMAGE_COMPONENTS = (
+    ("pihole", "pihole-image.env", "pihole-arm64.oci.tar", "PIHOLE_IMAGE_REPOSITORY", "PIHOLE_IMAGE_DIGEST", "PIHOLE_IMAGE_PLATFORM"),
+    ("llama", "llama-image.env", "llama-arm64.oci.tar", "LLAMA_IMAGE_REPOSITORY", "LLAMA_IMAGE_DIGEST", "LLAMA_IMAGE_PLATFORM"),
+    ("searxng", "searxng-image.env", "searxng-arm64.oci.tar", "SEARXNG_IMAGE_REPOSITORY", "SEARXNG_IMAGE_DIGEST", "SEARXNG_IMAGE_PLATFORM"),
+)
 RELEASE_FILES = {
     **APPLIANCE_FILES,
     "pihole-arm64.oci.tar": 0o644,
     "pihole-image.env": 0o644,
+    "llama-arm64.oci.tar": 0o644,
+    "llama-image.env": 0o644,
+    "searxng-arm64.oci.tar": 0o644,
+    "searxng-image.env": 0o644,
     "sovereign-release": 0o644,
 }
 
@@ -392,16 +408,17 @@ def validate_manifest(manifest):
     fail(artifact["media_type"] == "application/vnd.sovereign.update.v1+tar+zstd", "INVALID_MANIFEST", "Invalid artifact media type")
 
     components = manifest["components"]
-    exact_keys(components, ["appliance", "image_base", "pihole"], "components")
+    exact_keys(components, ["appliance", "image_base"] + [key for key, *_ in IMAGE_COMPONENTS], "components")
     exact_keys(components["appliance"], ["version"], "appliance component")
     exact_keys(components["image_base"], ["version"], "image component")
     parse_version(components["appliance"]["version"])
     parse_version(components["image_base"]["version"])
-    pihole = components["pihole"]
-    exact_keys(pihole, ["version", "repository", "digest"], "Pi-hole component")
-    fail(isinstance(pihole["version"], str) and pihole["version"], "INVALID_MANIFEST", "Pi-hole version is required")
-    fail(isinstance(pihole["repository"], str) and pihole["repository"], "INVALID_MANIFEST", "Pi-hole repository is required")
-    fail(isinstance(pihole["digest"], str) and OCI_DIGEST.fullmatch(pihole["digest"]), "INVALID_MANIFEST", "Invalid Pi-hole digest")
+    for key, *_ in IMAGE_COMPONENTS:
+        component = components[key]
+        exact_keys(component, ["version", "repository", "digest"], f"{key} component")
+        fail(isinstance(component["version"], str) and component["version"], "INVALID_MANIFEST", f"{key} version is required")
+        fail(isinstance(component["repository"], str) and component["repository"], "INVALID_MANIFEST", f"{key} repository is required")
+        fail(isinstance(component["digest"], str) and OCI_DIGEST.fullmatch(component["digest"]), "INVALID_MANIFEST", f"Invalid {key} digest")
 
     requirements = manifest["requirements"]
     exact_keys(requirements, ["free_bytes", "reboot"], "requirements")
@@ -1376,14 +1393,15 @@ def validate_release_payload(release, manifest):
         "Release payload has an invalid file mode",
     )
     identity = read_key_values(release / "sovereign-release")
-    pihole = read_key_values(release / "pihole-image.env")
     fail(identity.get("VERSION") == manifest["release"]["version"], "VERSION_MISMATCH", "Release identity does not match")
     fail(identity.get("CHANNEL") == manifest["release"]["channel"], "WRONG_CHANNEL", "Release identity channel does not match")
-    target = manifest["components"]["pihole"]
-    fail(pihole.get("PIHOLE_IMAGE_REPOSITORY") == target["repository"], "COMPONENT_MISMATCH", "Pi-hole repository does not match")
-    fail(pihole.get("PIHOLE_IMAGE_DIGEST") == target["digest"], "COMPONENT_MISMATCH", "Pi-hole digest does not match")
-    fail(pihole.get("PIHOLE_IMAGE_PLATFORM") == "linux/arm64", "COMPONENT_MISMATCH", "Pi-hole platform does not match")
-    validate_appliance_configuration(release, target)
+    for key, env_file, _, repository_key, digest_key, platform_key in IMAGE_COMPONENTS:
+        image_env = read_key_values(release / env_file)
+        target = manifest["components"][key]
+        fail(image_env.get(repository_key) == target["repository"], "COMPONENT_MISMATCH", f"{key} repository does not match")
+        fail(image_env.get(digest_key) == target["digest"], "COMPONENT_MISMATCH", f"Invalid {key} digest")
+        fail(image_env.get(platform_key) == "linux/arm64", "COMPONENT_MISMATCH", f"{key} platform does not match")
+    validate_appliance_configuration(release, manifest["components"]["pihole"])
 
 
 def validate_appliance_configuration(release, pihole):
@@ -1542,9 +1560,10 @@ def stage_release(args):
             # UMask=0077, ever exercised it.
             install_candidate.mkdir(mode=0o755)
             os.chmod(install_candidate, 0o755)
+            oci_tars = {oci_file for _, _, oci_file, *_ in IMAGE_COMPONENTS}
             for source in sorted(candidate.rglob("*")):
                 relative = source.relative_to(candidate)
-                if relative.as_posix() == "pihole-arm64.oci.tar":
+                if relative.as_posix() in oci_tars:
                     continue
                 destination = install_candidate / relative
                 if source.is_dir():
@@ -1621,9 +1640,10 @@ def activate_release(args):
                 "target_release": target.name,
             },
         )
-        target_digest = manifest["components"]["pihole"]["digest"]
-        run_checked([DOCKER, "load", "--input", str(directory / "release-candidate/pihole-arm64.oci.tar")], "IMAGE_IMPORT_FAILED", "Target Pi-hole image could not be imported", timeout=900)
-        run_checked([DOCKER, "image", "inspect", target_digest], "IMAGE_DIGEST_MISMATCH", "Imported Pi-hole digest is unavailable")
+        for key, _, oci_file, *_ in IMAGE_COMPONENTS:
+            target_digest = manifest["components"][key]["digest"]
+            run_checked([DOCKER, "load", "--input", str(directory / "release-candidate" / oci_file)], "IMAGE_IMPORT_FAILED", f"Target {key} image could not be imported", timeout=900)
+            run_checked([DOCKER, "image", "inspect", target_digest], "IMAGE_DIGEST_MISMATCH", f"Imported {key} digest is unavailable")
         snapshot = transition(snapshot, "activating", "ACTIVATION_STARTED")
         qualification_interrupt("activating")
         try:

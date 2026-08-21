@@ -36,6 +36,11 @@ class ReleaseBundleTests(unittest.TestCase):
             "LLAMA_IMAGE_TAG=server\n"
             f"LLAMA_IMAGE_DIGEST=sha256:{'1' * 64}\n"
         )
+        (self.repo / "image-builder/sovereign/searxng-image.env").write_text(
+            "SEARXNG_IMAGE_REPOSITORY=ghcr.io/searxng/searxng\n"
+            "SEARXNG_IMAGE_TAG=latest\n"
+            f"SEARXNG_IMAGE_DIGEST=sha256:{'2' * 64}\n"
+        )
         (self.repo / "scripts").mkdir()
         (self.repo / "scripts/create-imager-manifest.py").write_text("# helper\n")
         (self.repo / "build/sovereign-image/evidence").mkdir(parents=True)
@@ -88,6 +93,10 @@ class ReleaseBundleTests(unittest.TestCase):
             manifest["components"]["llama"]["repository"], "ghcr.io/ggml-org/llama.cpp"
         )
         self.assertEqual(manifest["components"]["llama"]["digest"], f"sha256:{'1' * 64}")
+        self.assertEqual(
+            manifest["components"]["searxng"]["repository"], "ghcr.io/searxng/searxng"
+        )
+        self.assertEqual(manifest["components"]["searxng"]["digest"], f"sha256:{'2' * 64}")
         self.assertEqual(manifest["qualification"]["status"], "engineering-candidate")
         self.assertTrue((self.output / "sovereign-os-0.1.0-rpi5-arm64.img.zst").is_file())
         self.assertTrue((self.output / "create-imager-manifest.py").is_file())

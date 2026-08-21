@@ -40,7 +40,10 @@ class UpdateManifestTests(unittest.TestCase):
             self.assertTrue(artifact["url"].startswith("https://"))
             self.assertRegex(artifact["sha256"], r"^[0-9a-f]{64}$")
             self.assertGreater(artifact["size"], 0)
-        self.assertRegex(self.example["components"]["pihole"]["digest"], r"^sha256:[0-9a-f]{64}$")
+        for component in ("pihole", "llama", "searxng"):
+            self.assertRegex(
+                self.example["components"][component]["digest"], r"^sha256:[0-9a-f]{64}$"
+            )
 
     def test_example_requires_ed25519_and_blocks_downgrade(self):
         self.assertEqual(self.example["signing"]["algorithm"], "Ed25519")
