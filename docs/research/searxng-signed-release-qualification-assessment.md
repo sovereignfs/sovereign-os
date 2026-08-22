@@ -140,7 +140,7 @@ pass tests real gaps, not ones already known and fixable from a desk.
 
 ## Limitations
 
-- Compose-template rendering and `nginx -t`-style deep validation
+- ~~Compose-template rendering and `nginx -t`-style deep validation
   (`validate_appliance_configuration`'s existing behavior for Pi-hole) was
   **not** extended to llama.cpp's or SearXNG's own compose templates —
   only the image-import/digest-matching half of activation was
@@ -149,7 +149,14 @@ pass tests real gaps, not ones already known and fixable from a desk.
   `validate_release_payload` and only fail later, at Compose-up time. This
   is a smaller, contained follow-up, not attempted here to keep this
   change's scope to what the image-import generalization actually
-  required.
+  required.~~ **Closed 2026-08-22**: `validate_appliance_configuration`
+  now renders and runs `docker compose config --quiet` against all three
+  templates (`COMPOSE_TEMPLATES`, generalizing the same loop shape
+  `IMAGE_COMPONENTS` already established), not just Pi-hole's. Verified
+  against real `docker` (not the fake stub the rest of this test suite
+  uses elsewhere) that all three real templates pass, and that a
+  structurally invalid one is rejected — see
+  `tests/test_appliance_compose_validation.py`.
 - Finding 1 (systemd units require a base-OS update, not an appliance
   update) remains completely open — nothing in this change set attempts a
   base-OS update mechanism change, since none is needed: the mechanism
@@ -183,10 +190,10 @@ logic that the fake-tool unit-test harness can't surface.
 
 ## Unresolved Questions
 
-- Should `validate_appliance_configuration` be extended to render and
+- ~~Should `validate_appliance_configuration` be extended to render and
   validate llama.cpp's and SearXNG's own Compose templates the way it
-  already does for Pi-hole's? (Flagged above as a Limitation, not decided
-  here.)
+  already does for Pi-hole's?~~ **Resolved 2026-08-22: yes, done** — see
+  the Limitations entry above.
 - Does a three-image sequential `docker load` (each up to 900s) fit
   comfortably inside whatever end-to-end time budget a real update
   transaction is expected to complete in? Untested.
