@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -324,6 +325,31 @@ class UpdateReleaseTests(unittest.TestCase):
             "build/update-release/",
             workflow[image_upload:update_upload],
         )
+
+    def test_workflow_passes_every_image_component_flag_to_create_update_release(self):
+        # create-update-release.py's --searxng-env/--searxng-oci are
+        # required=True (see test_creates_and_signs_installable_release_inputs),
+        # but nothing enforced that build-image.yml's own invocation
+        # actually passed them -- SearXNG was wired into the script
+        # without the workflow step ever being updated to match, which
+        # would have failed workflow_dispatch outright the first time
+        # build_update_candidate=true was ever exercised for real. This
+        # asserts the workflow step and the script's required arguments
+        # can never drift apart silently again.
+        workflow = (ROOT / ".github/workflows/build-image.yml").read_text()
+        package_start = workflow.index("Package unsigned appliance update candidate")
+        package_end = workflow.index("\n\n      #", package_start)
+        package_step = workflow[package_start:package_end]
+
+        script = (ROOT / "scripts/create-update-release.py").read_text()
+        required_flags = re.findall(
+            r'parser\.add_argument\("(--[a-z-]+)", (?:type=pathlib\.Path, )?required=True\)',
+            script,
+        )
+        self.assertIn("--searxng-env", required_flags)
+        self.assertIn("--searxng-oci", required_flags)
+        for flag in required_flags:
+            self.assertIn(flag, package_step, f"{flag} is required but missing from build-image.yml")
 
     def test_workflow_builds_and_packages_base_os_candidate_before_upload(self):
         workflow = (ROOT / ".github/workflows/build-image.yml").read_text()
