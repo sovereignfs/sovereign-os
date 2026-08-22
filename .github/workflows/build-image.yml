@@ -123,6 +123,8 @@ jobs:
             --oci build/sovereign-image/evidence/oci/pihole-arm64.oci.tar \
             --llama-env image-builder/sovereign/llama-image.env \
             --llama-oci build/sovereign-image/evidence/oci/llama-arm64.oci.tar \
+            --searxng-env image-builder/sovereign/searxng-image.env \
+            --searxng-oci build/sovereign-image/evidence/oci/searxng-arm64.oci.tar \
             --output-dir build/update-release \
             --key-id "$UPDATE_KEY_ID" \
             --artifact-base-url "https://github.com/sovereignfs/sovereign-os/releases/download/v${RELEASE_VERSION}" \

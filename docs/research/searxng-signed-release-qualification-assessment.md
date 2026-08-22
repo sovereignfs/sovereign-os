@@ -172,6 +172,21 @@ pass tests real gaps, not ones already known and fixable from a desk.
   900-second per-image timeout, and real rollback behavior on a real
   failure mid-multi-image-import are all unverified.
 
+**Finding 5 (2026-08-22, found while preparing to actually trigger a real
+qualification build) — `build-image.yml` itself would have failed
+`build_update_candidate=true` outright.** `create-update-release.py`'s
+`--searxng-env`/`--searxng-oci` are `required=True` (added alongside
+Finding 4's fix), but the workflow's "Package unsigned appliance update
+candidate" step was never updated to pass them — it still only passed
+`--pihole-env`/`--oci`/`--llama-env`/`--llama-oci`. A real
+`workflow_dispatch` run would have hit an `argparse` error and failed
+before producing anything. Fixed by adding the two missing flags to the
+workflow step; guarded against recurring with
+`test_workflow_passes_every_image_component_flag_to_create_update_release`,
+which diffs the script's actual required arguments against the
+workflow's invocation rather than hardcoding a fixed flag list (so a
+future fourth component gets the same protection automatically).
+
 ## Recommendation
 
 Treat this as sufficient prep work for now; do not attempt the CI
