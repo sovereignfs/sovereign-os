@@ -474,9 +474,21 @@ CI-only (native ARM64 GitHub Actions, up to 2 hours, `workflow_dispatch`);
 and signing is, by this project's unbroken precedent
 ([ADR-0006](docs/adrs/0006-production-signing-key-custody.md)), a manual
 step the maintainer performs offline with a key the assistant never
-handles. Compose-template validation for llama.cpp's and SearXNG's own
-templates (the way Pi-hole's already is) also remains unextended — a
-smaller, separately scoped follow-up.
+handles.
+
+**Compose-template validation is now extended to all three images.**
+`validate_appliance_configuration` previously rendered and ran `docker
+compose config --quiet` against Pi-hole's Compose template only; a
+malformed `llama/compose.yaml.in` or `searxng/compose.yaml.in` would have
+passed release validation silently and only failed later, at real
+Compose-up time on a device. Generalized into the same `COMPOSE_TEMPLATES`
+data-driven loop shape `IMAGE_COMPONENTS` already established, handling
+llama's second (`@LLAMA_MODEL_FILENAME@`, substituted at deploy time, not
+release-validation time) placeholder and SearXNG's `SEARXNG_SECRET`
+env-var reference along the way. Verified against real `docker` (not the
+fake stub the rest of this suite uses) that all three real templates pass
+and a structurally broken one is rejected
+(`tests/test_appliance_compose_validation.py`).
 
 **Conversation Service:** implemented — `sovereign_conversation.py`
 (RFC-0003/0004's bounded propose→execute→narrate loop: max 3 rounds per

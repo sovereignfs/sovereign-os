@@ -155,6 +155,12 @@ IMAGE_COMPONENTS = (
     ("llama", "llama-image.env", "llama-arm64.oci.tar", "LLAMA_IMAGE_REPOSITORY", "LLAMA_IMAGE_DIGEST", "LLAMA_IMAGE_PLATFORM"),
     ("searxng", "searxng-image.env", "searxng-arm64.oci.tar", "SEARXNG_IMAGE_REPOSITORY", "SEARXNG_IMAGE_DIGEST", "SEARXNG_IMAGE_PLATFORM"),
 )
+# key, Compose template path (relative to appliance/), image placeholder token
+COMPOSE_TEMPLATES = (
+    ("pihole", "pihole/compose.yaml.in", "PIHOLE_IMAGE_REFERENCE"),
+    ("llama", "llama/compose.yaml.in", "LLAMA_IMAGE_REFERENCE"),
+    ("searxng", "searxng/compose.yaml.in", "SEARXNG_IMAGE_REFERENCE"),
+)
 RELEASE_FILES = {
     **APPLIANCE_FILES,
     "pihole-arm64.oci.tar": 0o644,
@@ -1086,7 +1092,7 @@ def prepare_update(args):
         return snapshot["transaction_id"]
 
 
-def run_checked(command, code, message, timeout=120):
+def run_checked(command, code, message, timeout=120, env=None):
     try:
         subprocess.run(
             command,
@@ -1094,6 +1100,7 @@ def run_checked(command, code, message, timeout=120):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             timeout=timeout,
+            env=env,
         )
     except (OSError, subprocess.SubprocessError) as error:
         raise UpdateError(code, message) from error
@@ -1401,10 +1408,34 @@ def validate_release_payload(release, manifest):
         fail(image_env.get(repository_key) == target["repository"], "COMPONENT_MISMATCH", f"{key} repository does not match")
         fail(image_env.get(digest_key) == target["digest"], "COMPONENT_MISMATCH", f"Invalid {key} digest")
         fail(image_env.get(platform_key) == "linux/arm64", "COMPONENT_MISMATCH", f"{key} platform does not match")
-    validate_appliance_configuration(release, manifest["components"]["pihole"])
+    validate_appliance_configuration(release, manifest["components"])
 
 
-def validate_appliance_configuration(release, pihole):
+def render_compose_template(key, template, placeholder, image_reference):
+    fail(
+        template.count(f"@{placeholder}@") == 1,
+        "INVALID_COMPOSE_TEMPLATE",
+        f"{key} Compose template has an invalid image placeholder",
+    )
+    rendered = template.replace(f"@{placeholder}@", image_reference)
+    if key == "llama":
+        # @LLAMA_MODEL_FILENAME@ is substituted by start-llama-server at
+        # deploy time, not at release validation time -- a real filename
+        # here would tie this check to ADR-0013's specific model choice,
+        # so a syntactically valid stand-in is substituted instead to
+        # validate the template's real rendered shape.
+        fail(
+            rendered.count("@LLAMA_MODEL_FILENAME@") == 1,
+            "INVALID_COMPOSE_TEMPLATE",
+            "llama Compose template has an invalid model placeholder",
+        )
+        rendered = rendered.replace(
+            "@LLAMA_MODEL_FILENAME@", "validation-placeholder.gguf"
+        )
+    return rendered
+
+
+def validate_appliance_configuration(release, components):
     appliance = release / "appliance"
     for script in sorted((appliance / "bin").iterdir()):
         # Classify by shebang, not a hardcoded name set: this updater is
@@ -1470,37 +1501,39 @@ def validate_appliance_configuration(release, pihole):
         "Console release identity does not match the target release",
     )
 
-    image_reference = (
-        f"{pihole['repository'].removeprefix('docker.io/')}@{pihole['digest']}"
-    )
     with tempfile.TemporaryDirectory(
         prefix="appliance-validation-", dir=release.parent
     ) as temporary_directory:
         temporary = pathlib.Path(temporary_directory)
-        compose = temporary / "compose.yaml"
-        try:
-            template = (appliance / "pihole/compose.yaml.in").read_text(
-                encoding="utf-8"
+        for key, template_path, placeholder in COMPOSE_TEMPLATES:
+            image_reference = (
+                f"{components[key]['repository'].removeprefix('docker.io/')}"
+                f"@{components[key]['digest']}"
             )
-            fail(
-                template.count("@PIHOLE_IMAGE_REFERENCE@") == 1,
+            try:
+                template = (appliance / template_path).read_text(encoding="utf-8")
+                rendered = render_compose_template(key, template, placeholder, image_reference)
+            except (OSError, UnicodeError) as error:
+                raise UpdateError(
+                    "INVALID_COMPOSE_TEMPLATE",
+                    f"{key} Compose template could not be rendered",
+                ) from error
+            compose = temporary / f"{key}-compose.yaml"
+            compose.write_text(rendered, encoding="utf-8")
+            env = None
+            if key == "searxng":
+                # SEARXNG_SECRET is only ever exported for the single real
+                # `docker compose up` invocation (start-searxng), never
+                # persisted -- a dummy value here exists only so `compose
+                # config` doesn't warn about an unset variable, the same
+                # shape start-searxng itself provides at deploy time.
+                env = {**os.environ, "SEARXNG_SECRET": "0" * 64}
+            run_checked(
+                [DOCKER, "compose", "--file", str(compose), "config", "--quiet"],
                 "INVALID_COMPOSE_TEMPLATE",
-                "Pi-hole Compose template has an invalid image placeholder",
+                f"{key} Compose template failed validation",
+                env=env,
             )
-            compose.write_text(
-                template.replace("@PIHOLE_IMAGE_REFERENCE@", image_reference),
-                encoding="utf-8",
-            )
-        except (OSError, UnicodeError) as error:
-            raise UpdateError(
-                "INVALID_COMPOSE_TEMPLATE",
-                "Pi-hole Compose template could not be rendered",
-            ) from error
-        run_checked(
-            [DOCKER, "compose", "--file", str(compose), "config", "--quiet"],
-            "INVALID_COMPOSE_TEMPLATE",
-            "Pi-hole Compose template failed validation",
-        )
 
         nginx_include = str(appliance / "nginx/sovereign.conf").replace(
             "\\", "\\\\"
